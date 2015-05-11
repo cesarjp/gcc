@@ -1345,6 +1345,8 @@ convert_nonlocal_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	case OMP_CLAUSE_FINALIZE:
 	  break;
 
+	  /* OpenACC nohost clause is not yet handled here.  */
+	case OMP_CLAUSE_NOHOST:
 	  /* The following clause belongs to the OpenACC cache directive, which
 	     is discarded during gimplification.  */
 	case OMP_CLAUSE__CACHE_:
@@ -2036,6 +2038,8 @@ convert_local_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	case OMP_CLAUSE_FINALIZE:
 	  break;
 
+	  /* OpenACC nohost clauses is not yet handled here.  */
+	case OMP_CLAUSE_NOHOST:
 	  /* The following clause belongs to the OpenACC cache directive, which
 	     is discarded during gimplification.  */
 	case OMP_CLAUSE__CACHE_:

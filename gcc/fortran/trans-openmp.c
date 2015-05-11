@@ -1290,8 +1290,12 @@ gfc_add_omp_offload_attributes (symbol_attribute sym_attr, tree list)
     list = tree_cons (get_identifier ("omp declare target link"),
 		      NULL_TREE, list);
   else if (sym_attr.omp_declare_target)
-    list = tree_cons (get_identifier ("omp declare target"),
-		      NULL_TREE, list);
+    {
+      tree c = NULL_TREE;
+      if (sym_attr.oacc_function_nohost)
+	c = build_omp_clause (UNKNOWN_LOCATION, OMP_CLAUSE_NOHOST);
+      list = tree_cons (get_identifier ("omp declare target"), c, list);
+    }
 
   if (sym_attr.oacc_function != OACC_FUNCTION_NONE)
     {
@@ -3052,6 +3056,13 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 	    : integer_minus_one_node;
 	  OMP_CLAUSE_GANG_STATIC_EXPR (c) = arg;
 	}
+    }
+  if (clauses->nohost)
+    {
+      c = build_omp_clause (where.lb->location, OMP_CLAUSE_NOHOST);
+      omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+      //TODO
+      gcc_unreachable();
     }
 
   return nreverse (omp_clauses);

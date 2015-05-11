@@ -913,6 +913,7 @@ typedef struct
 
   /* This is an OpenACC acclerator function at level N - 1  */
   ENUM_BITFIELD (oacc_function) oacc_function:3;
+  unsigned oacc_function_nohost:1;
 
   /* Attributes set by compiler extensions (!GCC$ ATTRIBUTES).  */
   unsigned ext_attr:EXT_ATTR_NUM;
@@ -1354,7 +1355,7 @@ typedef struct gfc_omp_clauses
   gfc_expr_list *tile_list;
   unsigned async:1, gang:1, worker:1, vector:1, seq:1, independent:1;
   unsigned wait:1, par_auto:1, gang_static:1;
-  unsigned if_present:1, finalize:1;
+  unsigned if_present:1, finalize:1, nohost;
   locus loc;
 
 }

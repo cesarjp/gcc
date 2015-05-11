@@ -811,6 +811,7 @@ enum omp_mask2
   OMP_CLAUSE_TILE,
   OMP_CLAUSE_IF_PRESENT,
   OMP_CLAUSE_FINALIZE,
+  OMP_CLAUSE_NOHOST,
   /* This must come last.  */
   OMP_MASK2_LAST
 };
@@ -1439,6 +1440,13 @@ gfc_match_omp_clauses (gfc_omp_clauses **cp, const omp_mask mask,
 	      c->nogroup = needs_space = true;
 	      continue;
 	    }
+	  if ((mask & OMP_CLAUSE_NOHOST)
+	      && !c->nohost
+	      && gfc_match ("nohost") == MATCH_YES)
+	    {
+	      c->nohost = true;
+	      continue;
+	    }
 	  if ((mask & OMP_CLAUSE_NOTINBRANCH)
 	      && !c->notinbranch
 	      && !c->inbranch
@@ -1971,7 +1979,8 @@ gfc_match_omp_clauses (gfc_omp_clauses **cp, const omp_mask mask,
   omp_mask (OMP_CLAUSE_ASYNC)
 #define OACC_ROUTINE_CLAUSES \
   (omp_mask (OMP_CLAUSE_GANG) | OMP_CLAUSE_WORKER | OMP_CLAUSE_VECTOR	      \
-   | OMP_CLAUSE_SEQ)
+   | OMP_CLAUSE_SEQ							      \
+   | OMP_CLAUSE_NOHOST)
 
 
 static match
@@ -2348,22 +2357,12 @@ gfc_match_oacc_routine (void)
 	  != MATCH_YES))
     return MATCH_ERROR;
 
-  /* Scan for invalid routine geometry.  */
   dims = gfc_oacc_routine_dims (c);
   if (dims == OACC_FUNCTION_NONE)
     {
-      gfc_error ("Multiple loop axes specified in !$ACC ROUTINE at %L",
-		 &old_loc);
-
-      /* Don't abort early, because it's important to let the user
-	 know of any potential duplicate routine directives.  */
-      seen_error = true;
-    }
-  else if (dims == OACC_FUNCTION_AUTO)
-    {
-      gfc_warning (0, "Expected one of %<gang%>, %<worker%>, %<vector%> or "
-		   "%<seq%> clauses in !$ACC ROUTINE at %L", &old_loc);
-      dims = OACC_FUNCTION_SEQ;
+      gfc_error ("Multiple loop axes specified for routine %C");
+      gfc_current_locus = old_loc;
+      return MATCH_ERROR;
     }
 
   if (sym != NULL)
@@ -2406,6 +2405,8 @@ gfc_match_oacc_routine (void)
 	goto cleanup;
 
       gfc_current_ns->proc_name->attr.oacc_function = dims;
+      gfc_current_ns->proc_name->attr.oacc_function_nohost
+	= c ? c->nohost : false;
 
       if (seen_error)
 	goto cleanup;
