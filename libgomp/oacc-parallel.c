@@ -231,8 +231,13 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
 
   devaddrs = gomp_alloca (sizeof (void *) * mapnum);
   for (i = 0; i < mapnum; i++)
-    devaddrs[i] = (void *) (tgt->list[i].key->tgt->tgt_start
-			    + tgt->list[i].key->tgt_offset);
+    {
+      if (tgt->list[i].key != NULL)
+	devaddrs[i] = (void *) (tgt->list[i].key->tgt->tgt_start
+				+ tgt->list[i].key->tgt_offset);
+      else
+	devaddrs[i] = NULL;
+    }
 
   acc_dev->openacc.exec_func (tgt_fn, mapnum, hostaddrs, devaddrs,
 			      async, dims, tgt);
@@ -298,6 +303,8 @@ GOACC_data_start (int device, size_t mapnum,
 
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
+
+  handle_ftn_pointers (mapnum, hostaddrs, sizes, kinds);
 
   /* Host fallback or 'do nothing'.  */
   if ((acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
