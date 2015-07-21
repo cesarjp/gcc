@@ -1003,7 +1003,6 @@ extern struct target_mem_desc *gomp_map_vars (struct gomp_device_descr *,
 					      enum gomp_map_vars_kind);
 extern void gomp_unmap_vars (struct target_mem_desc *, bool);
 extern void gomp_init_device (struct gomp_device_descr *);
-extern void gomp_free_memmap (struct splay_tree_s *);
 extern void gomp_unload_device (struct gomp_device_descr *);
 extern bool gomp_remove_var (struct gomp_device_descr *, splay_tree_key);
 
