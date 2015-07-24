@@ -1152,9 +1152,11 @@ input_overwrite_node (struct lto_file_decl_data *file_data,
   node->resolution = bp_unpack_enum (bp, ld_plugin_symbol_resolution,
 				     LDPR_NUM_KNOWN);
   node->split_part = bp_unpack_value (bp, 1);
-  gcc_assert (flag_ltrans
-	      || (!node->in_other_partition
-		  && !node->used_from_other_partition));
+
+  int success = flag_ltrans || (!node->in_other_partition
+				&& !node->used_from_other_partition);
+  if (!success)
+    error ("Missing %<%s%>", node->name ());
 }
 
 /* Return string alias is alias of.  */
@@ -1363,9 +1365,11 @@ input_varpool_node (struct lto_file_decl_data *file_data,
     node->set_section_for_node (section);
   node->resolution = streamer_read_enum (ib, ld_plugin_symbol_resolution,
 					        LDPR_NUM_KNOWN);
-  gcc_assert (flag_ltrans
-	      || (!node->in_other_partition
-		  && !node->used_from_other_partition));
+
+  int success = flag_ltrans || (!node->in_other_partition
+				&& !node->used_from_other_partition);
+  if (!success)
+    error ("Missing %<%s%>", node->name ());
 
   return node;
 }
