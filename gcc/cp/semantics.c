@@ -5793,6 +5793,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
   bool branch_seen = false;
   bool copyprivate_seen = false;
   bool ordered_seen = false;
+  bool allow_fields = (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+    || ort == C_ORT_ACC;
 
   bitmap_obstack_initialize (NULL);
   bitmap_initialize (&generic_head, &bitmap_default_obstack);
@@ -5814,7 +5816,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
       switch (OMP_CLAUSE_CODE (c))
 	{
 	case OMP_CLAUSE_SHARED:
-	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
+	  field_ok = allow_fields;
 	  goto check_dup_generic;
 	case OMP_CLAUSE_PRIVATE:
 	  if (ort == C_ORT_ACC)
@@ -5824,19 +5826,18 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    }
 	  else
 	    {
-	      field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
+	      field_ok = allow_fields;
 	      goto check_dup_generic;
 	    }
 	case OMP_CLAUSE_REDUCTION:
 	  if (ort == C_ORT_ACC)
 	      reduction = true;
 	  else
-	      field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
+	      field_ok = allow_fields;
 	  t = OMP_CLAUSE_DECL (c);
 	  if (TREE_CODE (t) == TREE_LIST)
 	    {
-	      if (handle_omp_array_sections (c, ((ort & C_ORT_OMP_DECLARE_SIMD)
-						 == C_ORT_OMP)))
+	      if (handle_omp_array_sections (c, allow_fields && ort != C_ORT_ACC))
 		{
 		  remove = true;
 		  break;
@@ -5870,12 +5871,12 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    goto check_dup_generic;
 	case OMP_CLAUSE_COPYPRIVATE:
 	  copyprivate_seen = true;
-	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
+	  field_ok = allow_fields;
 	  goto check_dup_generic;
 	case OMP_CLAUSE_COPYIN:
 	  goto check_dup_generic;
 	case OMP_CLAUSE_LINEAR:
-	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
+	  field_ok = allow_fields;
 	  t = OMP_CLAUSE_DECL (c);
 	  if (ort != C_ORT_OMP_DECLARE_SIMD
 	      && OMP_CLAUSE_LINEAR_KIND (c) != OMP_CLAUSE_LINEAR_DEFAULT)
@@ -6148,8 +6149,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      break;
 	    }
 	  if (!VAR_P (t) && TREE_CODE (t) != PARM_DECL
-	      && ((ort & C_ORT_OMP_DECLARE_SIMD) != C_ORT_OMP
-		  || TREE_CODE (t) != FIELD_DECL))
+	      && (!allow_fields || TREE_CODE (t) != FIELD_DECL))
 	    {
 	      if (processing_template_decl)
 		break;
@@ -6188,8 +6188,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      break;
 	    }
 	  if (!VAR_P (t) && TREE_CODE (t) != PARM_DECL
-	      && ((ort & C_ORT_OMP_DECLARE_SIMD) != C_ORT_OMP
-		  || TREE_CODE (t) != FIELD_DECL))
+	      && (!allow_fields || TREE_CODE (t) != FIELD_DECL))
 	    {
 	      if (processing_template_decl)
 		break;
@@ -6615,8 +6614,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    }
 	  if (TREE_CODE (t) == TREE_LIST)
 	    {
-	      if (handle_omp_array_sections (c, ((ort & C_ORT_OMP_DECLARE_SIMD)
-						 == C_ORT_OMP)))
+	      if (handle_omp_array_sections (c, allow_fields && ort != C_ORT_ACC))
 		remove = true;
 	      break;
 	    }
@@ -6650,8 +6648,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  t = OMP_CLAUSE_DECL (c);
 	  if (TREE_CODE (t) == TREE_LIST)
 	    {
-	      if (handle_omp_array_sections (c, ((ort & C_ORT_OMP_DECLARE_SIMD)
-						 == C_ORT_OMP)))
+	      if (handle_omp_array_sections (c, allow_fields && ort != C_ORT_ACC))
 		remove = true;
 	      else
 		{
@@ -6847,7 +6844,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	handle_map_references:
 	  if (!remove
 	      && !processing_template_decl
-	      && (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+	      && allow_fields
 	      && TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c))) == REFERENCE_TYPE)
 	    {
 	      t = OMP_CLAUSE_DECL (c);
@@ -7041,7 +7038,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 
 	case OMP_CLAUSE_IS_DEVICE_PTR:
 	case OMP_CLAUSE_USE_DEVICE_PTR:
-	  field_ok = (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP;
+	  field_ok = allow_fields;
 	  t = OMP_CLAUSE_DECL (c);
 	  if (!type_dependent_expression_p (t))
 	    {
