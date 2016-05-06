@@ -3684,7 +3684,7 @@ gfc_filter_oacc_combined_clauses (gfc_omp_clauses **orig_clauses,
   (*loop_clauses)->tile_list = (*orig_clauses)->tile_list;
   (*orig_clauses)->tile_list = NULL;
   (*loop_clauses)->lists[OMP_LIST_REDUCTION]
-    = (*orig_clauses)->lists[OMP_LIST_REDUCTION];
+    = gfc_copy_omp_namelist ((*orig_clauses)->lists[OMP_LIST_REDUCTION]);
   if (construct_code == OACC_KERNELS)
     (*orig_clauses)->lists[OMP_LIST_REDUCTION] = NULL;
 #if 0
