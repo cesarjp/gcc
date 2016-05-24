@@ -1,3 +1,29 @@
+2016-05-09  Cesar Philippidis  <cesar@codesourcery.com>
+
+	Backport trunk r235651:
+	2016-04-29  Cesar Philippidis  <cesar@codesourcery.com>
+
+	PR middle-end/70626
+	* c-common.h (c_oacc_split_loop_clauses): Add boolean argument.
+	* c-omp.c (c_oacc_split_loop_clauses): Use it to duplicate
+	reduction clauses in acc parallel loops.
+
+2016-05-09  Cesar Philippidis  <cesar@codesourcery.com>
+
+	Backport from trunk r235780:
+	2016-05-02  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-common.h (enum c_omp_region_type): Define.
+
+2016-05-09  Cesar Philippidis  <cesar@codesourcery.com>
+
+	Backport trunk r235290:
+	2016-04-20  Ilya Verbin  <ilya.verbin@intel.com>
+
+	PR c++/69363
+	* c-cilkplus.c (c_finish_cilk_clauses): Remove function.
+	* c-common.h (c_finish_cilk_clauses): Remove declaration.
+
 2016-01-05  Nathan Sidwell  <nathan@acm.org>
 
 	* c.opt (fopenacc-dim=): New option.
