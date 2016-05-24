@@ -1,3 +1,5 @@
+/* Test 'acc enter/exit data' regions.  */
+
 /* { dg-do run } */
 
 #include <stdlib.h>
