@@ -12500,7 +12500,6 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 {
   bitmap_head generic_head, firstprivate_head, lastprivate_head;
   bitmap_head aligned_head, map_head, map_field_head, oacc_reduction_head;
-  bitmap_head oacc_data_head;
   tree c, t, type, *pc;
   tree simdlen = NULL_TREE, safelen = NULL_TREE;
   bool branch_seen = false;
@@ -12518,15 +12517,12 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
   bitmap_initialize (&map_head, &bitmap_default_obstack);
   bitmap_initialize (&map_field_head, &bitmap_default_obstack);
   bitmap_initialize (&oacc_reduction_head, &bitmap_default_obstack);
-  bitmap_initialize (&oacc_data_head, &bitmap_default_obstack);
 
   for (pc = &clauses, c = clauses; c ; c = *pc)
     {
       bool remove = false;
       bool need_complete = false;
       bool need_implicitly_determined = false;
-      bool oacc_data = false;
-      bool reduction = false;
 
       switch (OMP_CLAUSE_CODE (c))
 	{
@@ -12536,16 +12532,11 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 
 	case OMP_CLAUSE_PRIVATE:
 	  need_complete = true;
-	  oacc_data = true;
 	  need_implicitly_determined = true;
-	  if (ort == C_ORT_ACC)
-	    goto check_dup_oacc;
-	  else
-	    goto check_dup_generic;
+	  goto check_dup_generic;
 
 	case OMP_CLAUSE_REDUCTION:
-	  need_implicitly_determined = ort != C_ORT_ACC;
-	  reduction = true;
+	  need_implicitly_determined = true;
 	  t = OMP_CLAUSE_DECL (c);
 	  if (TREE_CODE (t) == TREE_LIST)
 	    {
@@ -12751,10 +12742,7 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      if (TREE_CODE (t) == ADDR_EXPR)
 		t = TREE_OPERAND (t, 0);
 	    }
-	  if (ort == C_ORT_ACC)
-	    goto check_dup_oacc_t;
-	  else
-	    goto check_dup_generic_t;
+	  goto check_dup_generic_t;
 
 	case OMP_CLAUSE_COPYPRIVATE:
 	  copyprivate_seen = true;
@@ -12898,52 +12886,6 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    bitmap_set_bit (&generic_head, DECL_UID (t));
 	  break;
 
-	check_dup_oacc:
-	  t = OMP_CLAUSE_DECL (c);
-	check_dup_oacc_t:
-	  if (TREE_CODE (t) != VAR_DECL && TREE_CODE (t) != PARM_DECL)
-	    {
-	      error_at (OMP_CLAUSE_LOCATION (c),
-			"%qE is not a variable in clause %qs", t,
-			omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
-	      remove = true;
-	    }
-	  if (oacc_data)
-	    {
-	      if (bitmap_bit_p (&oacc_data_head, DECL_UID (t)))
-		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%qE appears more than once in data clauses", t);
-		  remove = true;
-		}
-	      else
-		bitmap_set_bit (&oacc_data_head, DECL_UID (t));
-	    }
-	  else if (reduction)
-	    {
-	      if (ort == C_ORT_ACC
-		  && bitmap_bit_p (&oacc_reduction_head, DECL_UID (t)))
-		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%qE appears in multiple reduction clauses", t);
-		  remove = true;
-		}
-	      else
-		bitmap_set_bit (&oacc_reduction_head, DECL_UID (t));
-	    }
-	  else
-	    {
-	      if (bitmap_bit_p (&generic_head, DECL_UID (t)))
-		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%qE appears more than one non-data clause", t);
-		  remove = true;
-		}
-	      else
-		bitmap_set_bit (&generic_head, DECL_UID (t));
-	    }
-	  break;
-
 	case OMP_CLAUSE_FIRSTPRIVATE:
 	  t = OMP_CLAUSE_DECL (c);
 	  need_complete = true;
@@ -12954,16 +12896,12 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 			"%qE is not a variable in clause %<firstprivate%>", t);
 	      remove = true;
 	    }
-	  else if (ort == C_ORT_ACC)
+	  else if (bitmap_bit_p (&generic_head, DECL_UID (t))
+		   || bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
 	    {
-	      if (bitmap_bit_p (&oacc_data_head, DECL_UID (t)))
-		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%qE appears more than once in data clauses", t);
-		  remove = true;
-		}
-	      else
-		bitmap_set_bit (&oacc_data_head, DECL_UID (t));
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qE appears more than once in data clauses", t);
+	      remove = true;
 	    }
 	  else if (bitmap_bit_p (&map_head, DECL_UID (t)))
 	    {
@@ -12974,17 +12912,7 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      remove = true;
 	    }
 	  else
-	    {
-	      if (bitmap_bit_p (&generic_head, DECL_UID (t))
-		  || bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
-		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%qE appears more than once in data clauses", t);
-		  remove = true;
-		}
-	      else
-		bitmap_set_bit (&firstprivate_head, DECL_UID (t));
-	    }
+	    bitmap_set_bit (&firstprivate_head, DECL_UID (t));
 	  break;
 
 	case OMP_CLAUSE_LASTPRIVATE:
@@ -13236,8 +13164,7 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      else
 		bitmap_set_bit (&generic_head, DECL_UID (t));
 	    }
-	  else if ((ort == C_ORT_ACC && bitmap_bit_p (&oacc_data_head, DECL_UID (t)))
-		   || bitmap_bit_p (&map_head, DECL_UID (t)))
+	  else if (bitmap_bit_p (&map_head, DECL_UID (t)))
 	    {
 	      if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
 		error ("%qD appears more than once in motion clauses", t);
@@ -13247,8 +13174,6 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		error ("%qD appears more than once in map clauses", t);
 	      remove = true;
 	    }
-	  else if (ort == C_ORT_ACC)
-	    bitmap_set_bit (&oacc_data_head, DECL_UID (t));
 	  else if (bitmap_bit_p (&generic_head, DECL_UID (t))
 		   || bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
 	    {

@@ -5787,14 +5787,11 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 {
   bitmap_head generic_head, firstprivate_head, lastprivate_head;
   bitmap_head aligned_head, map_head, map_field_head, oacc_reduction_head;
-  bitmap_head oacc_data_head;
   tree c, t, *pc;
   tree safelen = NULL_TREE;
   bool branch_seen = false;
   bool copyprivate_seen = false;
   bool ordered_seen = false;
-  bool allow_fields = (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
-    || ort == C_ORT_ACC;
 
   bitmap_obstack_initialize (NULL);
   bitmap_initialize (&generic_head, &bitmap_default_obstack);
@@ -5804,36 +5801,22 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
   bitmap_initialize (&map_head, &bitmap_default_obstack);
   bitmap_initialize (&map_field_head, &bitmap_default_obstack);
   bitmap_initialize (&oacc_reduction_head, &bitmap_default_obstack);
-  bitmap_initialize (&oacc_data_head, &bitmap_default_obstack);
 
   for (pc = &clauses, c = clauses; c ; c = *pc)
     {
       bool remove = false;
       bool field_ok = false;
-      bool oacc_data = false;
-      bool reduction = false;
 
       switch (OMP_CLAUSE_CODE (c))
 	{
 	case OMP_CLAUSE_SHARED:
-	  field_ok = allow_fields;
+	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
 	  goto check_dup_generic;
 	case OMP_CLAUSE_PRIVATE:
-	  if (ort == C_ORT_ACC)
-	    {
-	      oacc_data = true;
-	      goto check_dup_oacc;
-	    }
-	  else
-	    {
-	      field_ok = allow_fields;
-	      goto check_dup_generic;
-	    }
+	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
+	  goto check_dup_generic;
 	case OMP_CLAUSE_REDUCTION:
-	  if (ort == C_ORT_ACC)
-	      reduction = true;
-	  else
-	      field_ok = allow_fields;
+	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
 	  t = OMP_CLAUSE_DECL (c);
 	  if (TREE_CODE (t) == TREE_LIST)
 	    {
@@ -5860,23 +5843,17 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      tree n = omp_clause_decl_field (t);
 	      if (n)
 		t = n;
-	      if (ort == C_ORT_ACC)
-		goto check_dup_oacc_t;
-	      else
-		goto check_dup_generic_t;
+	      goto check_dup_generic_t;
 	    }
-	  if (ort == C_ORT_ACC)
-	    goto check_dup_oacc;
-	  else
-	    goto check_dup_generic;
+	  goto check_dup_generic;
 	case OMP_CLAUSE_COPYPRIVATE:
 	  copyprivate_seen = true;
-	  field_ok = allow_fields;
+	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
 	  goto check_dup_generic;
 	case OMP_CLAUSE_COPYIN:
 	  goto check_dup_generic;
 	case OMP_CLAUSE_LINEAR:
-	  field_ok = allow_fields;
+	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
 	  t = OMP_CLAUSE_DECL (c);
 	  if (ort != C_ORT_OMP_DECLARE_SIMD
 	      && OMP_CLAUSE_LINEAR_KIND (c) != OMP_CLAUSE_LINEAR_DEFAULT)
@@ -6097,57 +6074,6 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		remove = true;
 	    }
 	  break;
-	check_dup_oacc:
-	  t = OMP_CLAUSE_DECL (c);
-	check_dup_oacc_t:
-	  if (!VAR_P (t) && TREE_CODE (t) != PARM_DECL)
-	    {
-	      if (processing_template_decl)
-		break;
-	      if (DECL_P (t))
-		error ("%qD is not a variable in clause %qs", t,
-		       omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
-	      else
-		error ("%qE is not a variable in clause %qs", t,
-		       omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
-	      remove = true;
-	    }
-	  else if (oacc_data)
-	    {
-	      if (bitmap_bit_p (&oacc_data_head, DECL_UID (t)))
-		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%qE appears more than once in data clauses", t);
-		  remove = true;
-		}
-	      else
-		bitmap_set_bit (&oacc_data_head, DECL_UID (t));
-	    }
-	  else if (reduction)
-	    {
-	      if (ort == C_ORT_ACC
-		  && bitmap_bit_p (&oacc_reduction_head, DECL_UID (t)))
-		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%qE appears in multiple reduction clauses", t);
-		  remove = true;
-		}
-	      else
-		bitmap_set_bit (&oacc_reduction_head, DECL_UID (t));
-	    }
-	  else
-	    {
-	      if (bitmap_bit_p (&generic_head, DECL_UID (t)))
-		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%qE appears more than once in data clauses", t);
-		  remove = true;
-		}
-	      else
-		bitmap_set_bit (&generic_head, DECL_UID (t));
-	    }
-	  break;
-
 
 	case OMP_CLAUSE_FIRSTPRIVATE:
 	  t = omp_clause_decl_field (OMP_CLAUSE_DECL (c));
@@ -6155,8 +6081,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    omp_note_field_privatization (t, OMP_CLAUSE_DECL (c));
 	  else
 	    t = OMP_CLAUSE_DECL (c);
-	  if (ort != C_ORT_ACC
-	      && t == current_class_ptr)
+	  if (ort != C_ORT_ACC && t == current_class_ptr)
 	    {
 	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
 		     " clauses");
@@ -6164,7 +6089,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      break;
 	    }
 	  if (!VAR_P (t) && TREE_CODE (t) != PARM_DECL
-	      && (!allow_fields || TREE_CODE (t) != FIELD_DECL))
+	      && ((ort & C_ORT_OMP_DECLARE_SIMD) != C_ORT_OMP
+		  || TREE_CODE (t) != FIELD_DECL))
 	    {
 	      if (processing_template_decl)
 		break;
@@ -6182,7 +6108,10 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    }
 	  else if (bitmap_bit_p (&map_head, DECL_UID (t)))
 	    {
-	      error ("%qD appears both in data and map clauses", t);
+	      if (ort == C_ORT_ACC)
+		error ("%qD appears more than once in data clauses", t);
+	      else
+		error ("%qD appears both in data and map clauses", t);
 	      remove = true;
 	    }
 	  else
@@ -6195,7 +6124,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    omp_note_field_privatization (t, OMP_CLAUSE_DECL (c));
 	  else
 	    t = OMP_CLAUSE_DECL (c);
-	  if (ort != C_ORT_ACC && t == current_class_ptr)
+	  if (t == current_class_ptr)
 	    {
 	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
 		     " clauses");
@@ -6203,7 +6132,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      break;
 	    }
 	  if (!VAR_P (t) && TREE_CODE (t) != PARM_DECL
-	      && (!allow_fields || TREE_CODE (t) != FIELD_DECL))
+	      && ((ort & C_ORT_OMP_DECLARE_SIMD) != C_ORT_OMP
+		  || TREE_CODE (t) != FIELD_DECL))
 	    {
 	      if (processing_template_decl)
 		break;
@@ -6721,7 +6651,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      OMP_CLAUSE_DECL (c) = t;
 	    }
 	  if (TREE_CODE (t) == COMPONENT_REF
-	      && allow_fields
+	      && (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
 	      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE__CACHE_)
 	    {
 	      if (type_dependent_expression_p (t))
@@ -6826,10 +6756,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      if (bitmap_bit_p (&generic_head, DECL_UID (t))
 		  || bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
 		{
-		  if (ort == C_ORT_ACC)
-		    error ("%qD appears more than once in data clauses", t);
-		  else
-		    error ("%qD appears both in data and map clauses", t);
+		  error ("%qD appears more than once in data clauses", t);
 		  remove = true;
 		}
 	      else if (bitmap_bit_p (&map_head, DECL_UID (t)))
@@ -6847,8 +6774,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    {
 	      if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
 		error ("%qD appears more than once in motion clauses", t);
-	      else if (ort == C_ORT_ACC)
-		error ("%qD appears more than once in data clauses",t);
+	      if (ort == C_ORT_ACC)
+		error ("%qD appears more than once in data clauses", t);
 	      else
 		error ("%qD appears more than once in map clauses", t);
 	      remove = true;
@@ -6872,7 +6799,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	handle_map_references:
 	  if (!remove
 	      && !processing_template_decl
-	      && allow_fields
+	      && (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
 	      && TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c))) == REFERENCE_TYPE)
 	    {
 	      t = OMP_CLAUSE_DECL (c);
@@ -7066,7 +6993,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 
 	case OMP_CLAUSE_IS_DEVICE_PTR:
 	case OMP_CLAUSE_USE_DEVICE_PTR:
-	  field_ok = allow_fields;
+	  field_ok = (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP;
 	  t = OMP_CLAUSE_DECL (c);
 	  if (!type_dependent_expression_p (t))
 	    {
