@@ -706,7 +706,6 @@ gfc_match_omp_clauses (gfc_omp_clauses **cp, uint64_t mask,
 	case 'b':
 	  if ((mask && OMP_CLAUSE_BIND) && c->routine_bind == NULL
 	      && gfc_match ("bind ( %s )", &c->routine_bind) == MATCH_YES)
-	      
 	    {
 	      c->bind = 1;
 	      continue;
