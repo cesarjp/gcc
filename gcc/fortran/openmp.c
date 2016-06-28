@@ -664,40 +664,41 @@ gfc_match_omp_clauses (gfc_omp_clauses **cp, uint64_t mask,
       needs_space = false;
       first = false;
       gfc_gobble_whitespace ();
+      old_loc = gfc_current_locus;
       if ((mask & OMP_CLAUSE_ASYNC) && !c->async)
 	if (gfc_match ("async") == MATCH_YES)
 	  {
-	      c->async = true;
-	      match m = gfc_match (" ( %e )", &c->async_expr);
-	      if (m == MATCH_ERROR)
-		{
-		  gfc_current_locus = old_loc;
-		  break;
-		}
-	      else if (m == MATCH_NO)
-		{
-		  c->async_expr
-		    = gfc_get_constant_expr (BT_INTEGER,
-					     gfc_default_integer_kind,
-					     &gfc_current_locus);
-		  mpz_set_si (c->async_expr->value.integer, GOMP_ASYNC_NOVAL);
-		  needs_space = true;
-		}
-	      continue;
+	    c->async = true;
+	    match m = gfc_match (" ( %e )", &c->async_expr);
+	    if (m == MATCH_ERROR)
+	      {
+		gfc_current_locus = old_loc;
+		break;
+	      }
+	    else if (m == MATCH_NO)
+	      {
+		c->async_expr
+		  = gfc_get_constant_expr (BT_INTEGER,
+					   gfc_default_integer_kind,
+					   &gfc_current_locus);
+		mpz_set_si (c->async_expr->value.integer, GOMP_ASYNC_NOVAL);
+		needs_space = true;
+	      }
+	    continue;
 	  }
       if ((mask & OMP_CLAUSE_GANG) && !c->gang)
 	if (gfc_match ("gang") == MATCH_YES)
 	  {
-	      c->gang = true;
-	      match m = match_oacc_clause_gwv (c, GOMP_DIM_GANG);
-	      if (m == MATCH_ERROR)
-		{
-		  gfc_current_locus = old_loc;
-		  break;
-		}
-	      else if (m == MATCH_NO)
-		needs_space = true;
-	      continue;
+	    c->gang = true;
+	    match m = match_oacc_clause_gwv (c, GOMP_DIM_GANG);
+	    if (m == MATCH_ERROR)
+	      {
+		gfc_current_locus = old_loc;
+		break;
+	      }
+	    else if (m == MATCH_NO)
+	      needs_space = true;
+	    continue;
 	  }
       if ((mask & OMP_CLAUSE_WORKER) && !c->worker)
 	if (gfc_match ("worker") == MATCH_YES)
@@ -934,7 +935,6 @@ gfc_match_omp_clauses (gfc_omp_clauses **cp, uint64_t mask,
 	    needs_space = true;
 	  continue;
 	}
-      old_loc = gfc_current_locus;
       if ((mask & OMP_CLAUSE_REDUCTION)
 	  && gfc_match ("reduction ( ") == MATCH_YES)
 	{
