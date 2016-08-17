@@ -12601,12 +12601,12 @@ c_parser_oacc_single_int_clause (c_parser *parser, omp_clause_code code,
 */
 
 static tree
-c_parser_oacc_shape_clause (c_parser *parser, omp_clause_code kind,
+c_parser_oacc_shape_clause (c_parser *parser, location_t loc,
+			    omp_clause_code kind,
 			    const char *str, tree list)
 {
   const char *id = "num";
   tree ops[2] = { NULL_TREE, NULL_TREE }, c;
-  location_t loc = c_parser_peek_token (parser)->location;
 
   if (kind == OMP_CLAUSE_VECTOR)
     id = "length";
@@ -12738,12 +12738,12 @@ c_parser_oacc_shape_clause (c_parser *parser, omp_clause_code kind,
    seq */
 
 static tree
-c_parser_oacc_simple_clause (c_parser *parser, enum omp_clause_code code,
-			     tree list)
+c_parser_oacc_simple_clause (c_parser * /* parser */, location_t loc,
+			     enum omp_clause_code code, tree list)
 {
   check_no_duplicate_clause (list, code, omp_clause_code_name[code]);
 
-  tree c = build_omp_clause (c_parser_peek_token (parser)->location, code);
+  tree c = build_omp_clause (loc, code);
   OMP_CLAUSE_CHAIN (c) = list;
 
   return c;
@@ -14045,8 +14045,8 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "async";
 	  break;
 	case PRAGMA_OACC_CLAUSE_AUTO:
-	  clauses = c_parser_oacc_simple_clause (parser, OMP_CLAUSE_AUTO,
-						clauses);
+	  clauses = c_parser_oacc_simple_clause (parser, here, OMP_CLAUSE_AUTO,
+						 clauses);
 	  c_name = "auto";
 	  break;
 	case PRAGMA_OACC_CLAUSE_COLLAPSE:
@@ -14090,8 +14090,8 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "device_resident";
 	  break;
 	case PRAGMA_OACC_CLAUSE_FINALIZE:
-	  clauses = c_parser_oacc_simple_clause (parser, OMP_CLAUSE_FINALIZE,
-						 clauses);
+	  clauses = c_parser_oacc_simple_clause (parser, here,
+						 OMP_CLAUSE_FINALIZE, clauses);
 	  c_name = "finalize";
 	  break;
 	case PRAGMA_OACC_CLAUSE_FIRSTPRIVATE:
@@ -14100,7 +14100,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OACC_CLAUSE_GANG:
 	  c_name = "gang";
-	  clauses = c_parser_oacc_shape_clause (parser, OMP_CLAUSE_GANG,
+	  clauses = c_parser_oacc_shape_clause (parser, here, OMP_CLAUSE_GANG,
 						c_name, clauses);
 	  break;
 	case PRAGMA_OACC_CLAUSE_HOST:
@@ -14112,13 +14112,15 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "if";
 	  break;
 	case PRAGMA_OACC_CLAUSE_IF_PRESENT:
-	  clauses = c_parser_oacc_simple_clause (parser, OMP_CLAUSE_IF_PRESENT,
+	  clauses = c_parser_oacc_simple_clause (parser, here,
+						 OMP_CLAUSE_IF_PRESENT,
 						 clauses);
 	  c_name = "if_present";
 	  break;
 	case PRAGMA_OACC_CLAUSE_INDEPENDENT:
-	  clauses = c_parser_oacc_simple_clause (parser, OMP_CLAUSE_INDEPENDENT,
-						clauses);
+	  clauses = c_parser_oacc_simple_clause (parser, here,
+						 OMP_CLAUSE_INDEPENDENT,
+						 clauses);
 	  c_name = "independent";
 	  break;
 	case PRAGMA_OACC_CLAUSE_LINK:
@@ -14150,7 +14152,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "reduction";
 	  break;
 	case PRAGMA_OACC_CLAUSE_SEQ:
-	  clauses = c_parser_oacc_simple_clause (parser, OMP_CLAUSE_SEQ,
+	  clauses = c_parser_oacc_simple_clause (parser, here, OMP_CLAUSE_SEQ,
 						clauses);
 	  c_name = "seq";
 	  break;
@@ -14164,7 +14166,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OACC_CLAUSE_VECTOR:
 	  c_name = "vector";
-	  clauses = c_parser_oacc_shape_clause (parser, OMP_CLAUSE_VECTOR,
+	  clauses = c_parser_oacc_shape_clause (parser, here, OMP_CLAUSE_VECTOR,
 						c_name,	clauses);
 	  break;
 	case PRAGMA_OACC_CLAUSE_VECTOR_LENGTH:
@@ -14179,7 +14181,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OACC_CLAUSE_WORKER:
 	  c_name = "worker";
-	  clauses = c_parser_oacc_shape_clause (parser, OMP_CLAUSE_WORKER,
+	  clauses = c_parser_oacc_shape_clause (parser, here, OMP_CLAUSE_WORKER,
 						c_name, clauses);
 	  break;
 	default:
