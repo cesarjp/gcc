@@ -150,13 +150,13 @@ void f_static_assert();
 
 #pragma acc routine seq
 __extension__ extern void ex1();
-#pragma acc routine (ex1) /* { dg-error ".#pragma acc routine. already applied to .\[void \]*ex1" } */
+#pragma acc routine (ex1) worker /* { dg-error "has already been marked as an accelerator routine" } */
 
 #pragma acc routine seq
 __extension__ __extension__ __extension__ __extension__ __extension__ void ex2()
 {
 }
-#pragma acc routine (ex2) /* { dg-error ".#pragma acc routine. already applied to .\[void \]*ex2" } */
+#pragma acc routine (ex2) worker /* { dg-error "has already been marked as an accelerator routine" } */
 
 #pragma acc routine seq /* { dg-error ".#pragma acc routine. not immediately followed by function declaration or definition" } */
 __extension__ int ex3;

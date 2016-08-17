@@ -20,10 +20,18 @@ void seq (void)
 {
 }
 
-#pragma acc routine nohost
+#pragma acc routine \
+  nohost
 void nohost (void)
 {
 }
+
+#pragma acc routine \
+  nohost
+extern void nohost (void);
+
+#pragma acc routine (nohost) \
+  nohost
 
 int main ()
 {
