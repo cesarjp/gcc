@@ -3166,6 +3166,8 @@ void gfc_resolve_oacc_directive (gfc_code *, gfc_namespace *);
 void gfc_resolve_oacc_declare (gfc_namespace *);
 void gfc_resolve_oacc_parallel_loop_blocks (gfc_code *, gfc_namespace *);
 void gfc_resolve_oacc_blocks (gfc_code *, gfc_namespace *);
+void gfc_resolve_oacc_routine_call (gfc_symbol *, locus *);                     
+void gfc_resolve_oacc_routines (gfc_namespace *);
 
 /* expr.c */
 void gfc_free_actual_arglist (gfc_actual_arglist *);
