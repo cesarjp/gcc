@@ -24,23 +24,23 @@ subroutine parloop
      end do
   end do 
 
-  !$acc parallel loop tile ! { dg-error "" }
+  !$acc parallel loop tile ! { dg-error "Unclassifiable" }
   do i = 1, n
   end do
 
-  !$acc parallel loop tile() ! { dg-error "" }
+  !$acc parallel loop tile() ! { dg-error "Syntax error" }
   do i = 1, n
   end do
 
-  !$acc parallel loop tile(,1) ! { dg-error "" }
+  !$acc parallel loop tile(,1) ! { dg-error "Syntax error" }
   do i = 1, n
   end do
 
-  !$acc parallel loop tile(,,) ! { dg-error "" }
+  !$acc parallel loop tile(,,) ! { dg-error "Syntax error" }
   do i = 1, n
   end do
 
-  !$acc parallel loop tile(1.1) ! { dg-error "" }
+  !$acc parallel loop tile(1.1) ! { dg-error "requires a scalar INTEGER" }
   do i = 1, n
   end do
 
@@ -62,19 +62,19 @@ subroutine parloop
      end do
   end do 
 
-  !$acc parallel loop tile(10, .true.) ! { dg-error "" }
+  !$acc parallel loop tile(10, .true.) ! { dg-error "requires a scalar" }
   do i = 1, n
      do j = 1, n
      end do
   end do
 
-  !$acc parallel loop tile(1, a) ! { dg-error "" }
+  !$acc parallel loop tile(1, a) ! { dg-error "constant expression" }
   do i = 1, n
      do j = 1, n
      end do
   end do
 
-  !$acc parallel loop tile(a, 1) ! { dg-error "" }
+  !$acc parallel loop tile(a, 1) ! { dg-error "constant expression" }
   do i = 1, n
      do j = 1, n
      end do
@@ -86,11 +86,11 @@ subroutine par
   integer i, j, k
 
   !$acc parallel
-  !$acc loop tile ! { dg-error "" }
+  !$acc loop tile ! { dg-error "Unclassifiable" }
   do i = 1, n
   end do
 
-  !$acc loop tile() ! { dg-error "" }
+  !$acc loop tile() ! { dg-error "Syntax error" }
   do i = 1, n
   end do
 
@@ -108,11 +108,11 @@ subroutine par
      end do
   end do
 
-  !$acc loop tile(-2) ! { dg-error "" }
+  !$acc loop tile(-2) ! { dg-error "must be positive" }
   do i = 1, n
   end do
 
-  !$acc loop tile(i) ! { dg-error "" }
+  !$acc loop tile(i) ! { dg-error "constant expression" }
   do i = 1, n
   end do
 
@@ -126,7 +126,7 @@ subroutine par
 
   !$acc parallel loop tile(2, 2)
   do i = 1, n
-     do j = i+1, n, j ! { dg-error "" }
+     do j = i+1, n, j ! { dg-error "rectangular iteration space" }
      end do
   end do
 
@@ -161,11 +161,11 @@ subroutine kern
   integer i, j, k
 
   !$acc kernels
-  !$acc loop tile  ! { dg-error "" }
+  !$acc loop tile  ! { dg-error "Unclassifiable" }
   do i = 1, n
   end do
 
-  !$acc loop tile() ! { dg-error "" }
+  !$acc loop tile() ! { dg-error "Syntax error" }
   do i = 1, n
   end do
 
@@ -183,11 +183,11 @@ subroutine kern
      end do
   end do
 
-  !$acc loop tile(-2) ! { dg-error "" }
+  !$acc loop tile(-2) ! { dg-error "must be positive" }
   do i = 1, n
   end do
 
-  !$acc loop tile(i) ! { dg-error "" }
+  !$acc loop tile(i) ! { dg-error "constant expression" }
   do i = 1, n
   end do
 
@@ -257,37 +257,37 @@ subroutine kernsloop
      end do
   end do 
 
-  !$acc kernels loop tile ! { dg-error "" }
+  !$acc kernels loop tile ! { dg-error "Unclassifiable" }
   do i = 1, n
   end do
 
-  !$acc kernels loop tile() ! { dg-error "" }
+  !$acc kernels loop tile() ! { dg-error "Syntax error" }
   do i = 1, n
   end do
 
-  !$acc kernels loop tile(,1) ! { dg-error "" }
+  !$acc kernels loop tile(,1) ! { dg-error "Syntax error" }
   do i = 1, n
   end do
 
-  !$acc kernels loop tile(,,) ! { dg-error "" }
+  !$acc kernels loop tile(,,) ! { dg-error "Syntax error" }
   do i = 1, n
   end do
 
-  !$acc kernels loop tile(1.1) ! { dg-error "" }
+  !$acc kernels loop tile(1.1) ! { dg-error "requires a scalar INTEGER" }
   do i = 1, n
   end do
 
-  !$acc kernels loop tile(-3) ! { dg-error "" }
+  !$acc kernels loop tile(-3) ! { dg-error "must be positive" }
   do i = 1, n
   end do
 
-  !$acc kernels loop tile(10, -3) ! { dg-error "" }
+  !$acc kernels loop tile(10, -3) ! { dg-error "must be positive" }
   do i = 1, n
      do j = 1, n
      end do
   end do
 
-  !$acc kernels loop tile(-100, 10, 5) ! { dg-error "" }
+  !$acc kernels loop tile(-100, 10, 5) ! { dg-error "must be positive" }
   do i = 1, n
      do j = 1, n
         do k = 1, n
@@ -295,19 +295,19 @@ subroutine kernsloop
      end do
   end do 
 
-  !$acc kernels loop tile(10, .true.) ! { dg-error "" }
+  !$acc kernels loop tile(10, .true.) ! { dg-error "requires a scalar" }
   do i = 1, n
      do j = 1, n
      end do
   end do
 
-  !$acc kernels loop tile(1, a) ! { dg-error "" }
+  !$acc kernels loop tile(1, a) ! { dg-error "constant expression" }
   do i = 1, n
      do j = 1, n
      end do
   end do
 
-  !$acc kernels loop tile(a, 1) ! { dg-error "" }
+  !$acc kernels loop tile(a, 1) ! { dg-error "constant expression" }
   do i = 1, n
      do j = 1, n
      end do
