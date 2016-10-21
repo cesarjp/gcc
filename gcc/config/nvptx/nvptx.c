@@ -3507,11 +3507,66 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
   /* Insert the vector test inside the worker test.  */
   unsigned mode;
   rtx_insn *before = tail;
+  rtx wvpred = NULL_RTX;
+  bool skip_vector = false;
+
+  /* Create a single predicate for loops containing both worker and
+     vectors.  */
+  if (cond_branch
+      && (GOMP_DIM_MASK (GOMP_DIM_WORKER) & mask)
+      && (GOMP_DIM_MASK (GOMP_DIM_VECTOR) & mask))
+    {
+//      rtx regx = cfun->machine->axis_predicate[GOMP_DIM_VECTOR-1];
+//      rtx regy = cfun->machine->axis_predicate[GOMP_DIM_WORKER-1];
+
+      rtx regx = gen_reg_rtx (SImode);
+      rtx regy = gen_reg_rtx (SImode);
+      rtx tmp = gen_reg_rtx (SImode);
+      wvpred = gen_reg_rtx (BImode);
+
+      emit_insn_before (gen_oacc_dim_pos (regx, const1_rtx), head);
+      emit_insn_before (gen_oacc_dim_pos (regy, const2_rtx), head);
+      emit_insn_before (gen_rtx_SET (tmp, gen_rtx_IOR (SImode, regx, regy)),
+			head);
+      emit_insn_before (gen_rtx_SET (wvpred, gen_rtx_NE (BImode, tmp,
+							 const0_rtx)),
+			head);
+      
+//      emit_insn_before (gen_rtx_SET (wvpred, gen_rtx_fmt_e (TRUNCATE, BImode,
+//							    tmp)),
+//			head);
+
+//      rtx regx = gen_reg_rtx (SImode);
+//      rtx regy = gen_reg_rtx (SImode);
+//      rtx regt1 = gen_reg_rtx (SImode);
+//      rtx regt2 = gen_reg_rtx (SImode);
+//      rtx res;
+//      
+//
+////      rtx z1 = gen_rtx_IOR (BImode, regx, regy);
+////      rtx z2 = gen_rtx_EQ (BImode, z1, const0_rtx);
+////      rtx z3 = gen_rtx_SET (wvpred, gen_rtx_NEG (BImode, z2));
+//
+//      start_sequence ();
+//      emit_insn (gen_oacc_dim_pos (regx, const1_rtx));
+//      emit_insn (gen_oacc_dim_pos (regy, const2_rtx));
+//      emit_insn (gen_rtx_SET (regt1, gen_rtx_IOR (SImode, regx, regy)));
+//      emit_insn (gen_rtx_SET (regt2, gen_rtx_NE (SImode, regt1, const0_rtx)));
+//      emit_insn (gen_rtx_SET (wvpred, gen_rtx_NEG (SImode, regt2)));
+//      res = get_insns ();
+//      end_sequence ();
+//      emit_insn_before (res, head);
+
+      skip_mask &= ~(GOMP_DIM_MASK (GOMP_DIM_VECTOR));
+      skip_vector = true;
+    }
+  
   for (mode = GOMP_DIM_WORKER; mode <= GOMP_DIM_VECTOR; mode++)
     if (GOMP_DIM_MASK (mode) & skip_mask)
       {
 	rtx_code_label *label = gen_label_rtx ();
-	rtx pred = cfun->machine->axis_predicate[mode - GOMP_DIM_WORKER];
+	rtx pred = skip_vector ? wvpred
+	  : cfun->machine->axis_predicate[mode - GOMP_DIM_WORKER];
 
 	if (!pred)
 	  {
@@ -3708,7 +3763,7 @@ nvptx_neuter_pars (parallel *par, unsigned modes, unsigned outer)
 		 & (GOMP_DIM_MASK (GOMP_DIM_WORKER)
 		    | GOMP_DIM_MASK (GOMP_DIM_VECTOR)));
   unsigned  skip_mask = 0, neuter_mask = 0;
-  
+
   if (par->inner)
     nvptx_neuter_pars (par->inner, modes, outer | me);
 
