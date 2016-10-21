@@ -3516,9 +3516,6 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
       && (GOMP_DIM_MASK (GOMP_DIM_WORKER) & mask)
       && (GOMP_DIM_MASK (GOMP_DIM_VECTOR) & mask))
     {
-//      rtx regx = cfun->machine->axis_predicate[GOMP_DIM_VECTOR-1];
-//      rtx regy = cfun->machine->axis_predicate[GOMP_DIM_WORKER-1];
-
       rtx regx = gen_reg_rtx (SImode);
       rtx regy = gen_reg_rtx (SImode);
       rtx tmp = gen_reg_rtx (SImode);
@@ -3531,31 +3528,6 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
       emit_insn_before (gen_rtx_SET (wvpred, gen_rtx_NE (BImode, tmp,
 							 const0_rtx)),
 			head);
-      
-//      emit_insn_before (gen_rtx_SET (wvpred, gen_rtx_fmt_e (TRUNCATE, BImode,
-//							    tmp)),
-//			head);
-
-//      rtx regx = gen_reg_rtx (SImode);
-//      rtx regy = gen_reg_rtx (SImode);
-//      rtx regt1 = gen_reg_rtx (SImode);
-//      rtx regt2 = gen_reg_rtx (SImode);
-//      rtx res;
-//      
-//
-////      rtx z1 = gen_rtx_IOR (BImode, regx, regy);
-////      rtx z2 = gen_rtx_EQ (BImode, z1, const0_rtx);
-////      rtx z3 = gen_rtx_SET (wvpred, gen_rtx_NEG (BImode, z2));
-//
-//      start_sequence ();
-//      emit_insn (gen_oacc_dim_pos (regx, const1_rtx));
-//      emit_insn (gen_oacc_dim_pos (regy, const2_rtx));
-//      emit_insn (gen_rtx_SET (regt1, gen_rtx_IOR (SImode, regx, regy)));
-//      emit_insn (gen_rtx_SET (regt2, gen_rtx_NE (SImode, regt1, const0_rtx)));
-//      emit_insn (gen_rtx_SET (wvpred, gen_rtx_NEG (SImode, regt2)));
-//      res = get_insns ();
-//      end_sequence ();
-//      emit_insn_before (res, head);
 
       skip_mask &= ~(GOMP_DIM_MASK (GOMP_DIM_VECTOR));
       skip_vector = true;
