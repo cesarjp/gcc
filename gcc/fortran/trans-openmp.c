@@ -1938,7 +1938,40 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 	      tree decl = gfc_get_symbol_decl (n->sym);
 	      if (DECL_P (decl))
 		TREE_ADDRESSABLE (decl) = 1;
-	      if (n->expr == NULL || n->expr->ref->u.ar.type == AR_FULL)
+	      /* Handle derived-typed members for OpenACC Update.  */
+	      if (n->sym->ts.type == BT_DERIVED
+		  && n->expr != NULL
+		  && n->expr->ref->next == NULL)
+		{
+		  gfc_ref *ref = n->expr->ref;
+		  tree orig_decl = decl;
+		  gfc_component *c = ref->u.c.component;
+		  tree field;
+		  tree context;
+		  tree tmp;
+		  tree type;
+		  tree scratch;
+
+		  if (c->backend_decl == NULL_TREE
+		      && ref->u.c.sym != NULL)
+		    gfc_get_derived_type (ref->u.c.sym);
+
+		  field = c->backend_decl;
+		  gcc_assert (field && TREE_CODE (field) == FIELD_DECL);
+		  context = DECL_FIELD_CONTEXT (field);
+		  tmp = fold_build3_loc (input_location, COMPONENT_REF,
+					 TREE_TYPE (field), decl, field,
+					 NULL_TREE);
+		  type = TREE_TYPE (tmp);
+
+		  scratch = gfc_create_var (build_pointer_type (void_type_node),
+					    NULL);
+		  gfc_add_modify (block, scratch, build_fold_addr_expr(tmp));
+		  tmp = build_fold_indirect_ref (scratch);
+		  OMP_CLAUSE_DECL (node) = tmp;
+		  OMP_CLAUSE_SIZE (node) = TYPE_SIZE_UNIT (type);
+		}
+	      else if (n->expr == NULL || n->expr->ref->u.ar.type == AR_FULL)
 		{
 		  if (POINTER_TYPE_P (TREE_TYPE (decl))
 		      && (gfc_omp_privatize_by_reference (decl)
