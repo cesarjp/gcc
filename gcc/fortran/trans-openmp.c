@@ -1940,8 +1940,7 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 		TREE_ADDRESSABLE (decl) = 1;
 	      /* Handle derived-typed members for OpenACC Update.  */
 	      if (n->sym->ts.type == BT_DERIVED
-		  && n->expr != NULL
-		  && n->expr->ref->next == NULL)
+		  && n->expr != NULL)
 		{
 		  gfc_ref *ref = n->expr->ref;
 		  tree orig_decl = decl;
