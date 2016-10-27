@@ -1947,7 +1947,7 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 		  gfc_component *c = ref->u.c.component;
 		  tree field;
 		  tree context;
-		  tree tmp;
+		  tree ptr;
 		  tree type;
 		  tree scratch;
 
@@ -1977,7 +1977,6 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 		  if (ref->next && ref->next->type == REF_ARRAY
 		      && ref->next->u.ar.type == AR_SECTION)
 		    {
-		      tree ptr;
 		      gfc_init_se (&se, NULL);
 		      gfc_conv_expr_descriptor (&se, n->expr);
 		      ptr = gfc_conv_array_data (se.expr);
@@ -1998,18 +1997,18 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 		    }
 		  else
 		    {
-		      tmp = fold_build3_loc (input_location, COMPONENT_REF,
+		      ptr = fold_build3_loc (input_location, COMPONENT_REF,
 					     TREE_TYPE (field), decl, field,
 					     NULL_TREE);
-		      type = TREE_TYPE (tmp);
+		      type = TREE_TYPE (ptr);
 
 		      scratch = gfc_create_var (build_pointer_type
 						(void_type_node),
 						NULL);
 		      gfc_add_modify (block, scratch,
-				      build_fold_addr_expr(tmp));
-		      tmp = build_fold_indirect_ref (scratch);
-		      OMP_CLAUSE_DECL (node) = tmp;
+				      build_fold_addr_expr(ptr));
+		      ptr = build_fold_indirect_ref (scratch);
+		      OMP_CLAUSE_DECL (node) = ptr;
 		      OMP_CLAUSE_SIZE (node) = TYPE_SIZE_UNIT (type);
 		    }
 		}
