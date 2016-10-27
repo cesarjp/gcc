@@ -31,7 +31,7 @@ program derived_acc
 
   !$acc update host(var%a)
 
-  if (var%a .ne. var%b) call abort
+  if (var%a /= var%b) call abort
 
   var%b = 100
 
@@ -43,7 +43,7 @@ program derived_acc
 
   !$acc update host(var%a)
 
-  if (var%a .ne. var%b) call abort
+  if (var%a /= var%b) call abort
 
   !$acc parallel loop present (var)
   do i = 1, n
@@ -56,7 +56,7 @@ program derived_acc
   var%a = -1
 
   do i = 1, n
-     if (var%c(i) .ne. i) call abort
+     if (var%c(i) /= i) call abort
      var%c(i) = var%a
   end do
 
@@ -67,10 +67,27 @@ program derived_acc
 
   !$acc parallel loop present(var) reduction(+:res)
   do i = 1, n
-     if (var%c(i) .ne. var%a) res = res + 1
+     if (var%c(i) /= var%a) res = res + 1
   end do
 
-  if (res .ne. 0) call abort
+  if (res /= 0) call abort
+
+  var%c(:) = 0
+
+  !$acc update device(var%c)
+
+  !$acc parallel loop present(var)
+  do i = 5, 5
+     var%c = 1
+  end do
+  !$acc end parallel loop
+
+  !$acc update host(var%c(5:1))
+
+  do i = 1, n
+     if (i /= 5 .and. var%c(i) /= 0) call abort
+     if (i == 5 .and. var%c(i) /= 0) call abort
+  end do
 
   !$acc exit data delete(var)
 end program derived_acc

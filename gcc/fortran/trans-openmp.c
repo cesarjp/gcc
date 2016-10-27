@@ -1958,17 +1958,60 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 		  field = c->backend_decl;
 		  gcc_assert (field && TREE_CODE (field) == FIELD_DECL);
 		  context = DECL_FIELD_CONTEXT (field);
-		  tmp = fold_build3_loc (input_location, COMPONENT_REF,
-					 TREE_TYPE (field), decl, field,
-					 NULL_TREE);
-		  type = TREE_TYPE (tmp);
 
-		  scratch = gfc_create_var (build_pointer_type (void_type_node),
-					    NULL);
-		  gfc_add_modify (block, scratch, build_fold_addr_expr(tmp));
-		  tmp = build_fold_indirect_ref (scratch);
-		  OMP_CLAUSE_DECL (node) = tmp;
-		  OMP_CLAUSE_SIZE (node) = TYPE_SIZE_UNIT (type);
+		  if (context != TREE_TYPE (decl))
+		    {
+		      tree f2 = c->norestrict_decl;
+		      if (!f2 || DECL_FIELD_CONTEXT (f2) != TREE_TYPE (decl))
+			for (f2 = TYPE_FIELDS (TREE_TYPE (decl)); f2;
+			     f2 = DECL_CHAIN (f2))
+			  if (TREE_CODE (f2) == FIELD_DECL
+			      && DECL_NAME (f2) == DECL_NAME (field))
+			    break;
+		      gcc_assert (f2);
+		      c->norestrict_decl = f2;
+		      field = f2;
+		    }
+
+		  /* Handle subarrays.  */
+		  if (ref->next && ref->next->type == REF_ARRAY
+		      && ref->next->u.ar.type == AR_SECTION)
+		    {
+		      tree ptr;
+		      gfc_init_se (&se, NULL);
+		      gfc_conv_expr_descriptor (&se, n->expr);
+		      ptr = gfc_conv_array_data (se.expr);
+		      tree type = TREE_TYPE (se.expr);
+		      gfc_add_block_to_block (block, &se.pre);
+		      OMP_CLAUSE_SIZE (node)
+			= gfc_full_array_size (block, se.expr,
+					       GFC_TYPE_ARRAY_RANK (type));
+		      tree elemsz
+			= TYPE_SIZE_UNIT (gfc_get_element_type (type));
+		      elemsz = fold_convert (gfc_array_index_type, elemsz);
+		      OMP_CLAUSE_SIZE (node)
+			= fold_build2 (MULT_EXPR, gfc_array_index_type,
+				       OMP_CLAUSE_SIZE (node), elemsz);
+
+		      gfc_add_block_to_block (block, &se.post);
+		      OMP_CLAUSE_DECL (node) = build_fold_indirect_ref (ptr);
+		    }
+		  else
+		    {
+		      tmp = fold_build3_loc (input_location, COMPONENT_REF,
+					     TREE_TYPE (field), decl, field,
+					     NULL_TREE);
+		      type = TREE_TYPE (tmp);
+
+		      scratch = gfc_create_var (build_pointer_type
+						(void_type_node),
+						NULL);
+		      gfc_add_modify (block, scratch,
+				      build_fold_addr_expr(tmp));
+		      tmp = build_fold_indirect_ref (scratch);
+		      OMP_CLAUSE_DECL (node) = tmp;
+		      OMP_CLAUSE_SIZE (node) = TYPE_SIZE_UNIT (type);
+		    }
 		}
 	      else if (n->expr == NULL || n->expr->ref->u.ar.type == AR_FULL)
 		{
