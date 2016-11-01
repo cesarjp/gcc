@@ -5,8 +5,12 @@
 
 module dt
   integer, parameter :: n = 10
+  type inner
+     integer :: d(n)
+  end type inner
   type mytype
      integer(8) :: a, b, c(n)
+     type(inner) :: in
   end type mytype
 end module dt
 
@@ -20,12 +24,17 @@ program derived_acc
   var%a = 0
   var%b = 1
   var%c(:) = 10
+  var%in%d(:) = 100
+
+  var%c(:) = 10
 
   !$acc enter data copyin(var)
 
-  !$acc parallel present(var) num_gangs(1) num_workers(1)
-  var%a = var%b
-  !$acc end parallel
+  !$acc parallel loop present(var)
+  do i = 1, 1
+     var%a = var%b
+  end do
+  !$acc end parallel loop
 
   !$acc update host(var%a)
 
@@ -35,9 +44,11 @@ program derived_acc
 
   !$acc update device(var%b)
 
-  !$acc parallel present(var) num_gangs(1) num_workers(1)
-  var%a = var%b
-  !$acc end parallel
+  !$acc parallel loop present(var)
+  do i = 1, 1
+     var%a = var%b
+  end do
+  !$acc end parallel loop
 
   !$acc update host(var%a)
 
@@ -76,15 +87,47 @@ program derived_acc
 
   !$acc parallel loop present(var)
   do i = 5, 5
-     var%c = 1
+     var%c(i) = 1
   end do
   !$acc end parallel loop
 
-  !$acc update host(var%c(5:1))
+  !$acc update host(var%c(5:6))
 
   do i = 1, n
      if (i /= 5 .and. var%c(i) /= 0) call abort
-     if (i == 5 .and. var%c(i) /= 0) call abort
+     if (i == 5 .and. var%c(i) /= 1) call abort
+  end do
+
+  !$acc parallel loop present(var)
+  do i = 1, n
+     var%in%d = var%a
+  end do
+  !$acc end parallel loop
+
+  !$acc update host(var%in%d)
+
+  do i = 1, n
+     if (var%in%d(i) /= var%a) call abort
+  end do
+
+  var%c(:) = 0
+
+  !$acc update device(var%c)
+
+  var%in%d(:) = 0
+  !$acc update device(var%in%d)
+
+  !$acc parallel loop present(var)
+  do i = 5, 5
+     var%in%d(i) = 1
+  end do
+  !$acc end parallel loop
+
+  !$acc update host(var%in%d(5:6))
+
+  do i = 1, n
+     if (i /= 5 .and. var%in%d(i) /= 0) call abort
+     if (i == 5 .and. var%in%d(i) /= 1) call abort
   end do
 
   !$acc exit data delete(var)
@@ -102,12 +145,17 @@ subroutine derived_acc_subroutine(var)
   var%a = 0
   var%b = 1
   var%c(:) = 10
+  var%in%d(:) = 100
+
+  var%c(:) = 10
 
   !$acc enter data copyin(var)
 
-  !$acc parallel present(var) num_gangs(1) num_workers(1)
-  var%a = var%b
-  !$acc end parallel
+  !$acc parallel loop present(var)
+  do i = 1, 1
+     var%a = var%b
+  end do
+  !$acc end parallel loop
 
   !$acc update host(var%a)
 
@@ -117,9 +165,11 @@ subroutine derived_acc_subroutine(var)
 
   !$acc update device(var%b)
 
-  !$acc parallel present(var) num_gangs(1) num_workers(1)
-  var%a = var%b
-  !$acc end parallel
+  !$acc parallel loop present(var)
+  do i = 1, 1
+     var%a = var%b
+  end do
+  !$acc end parallel loop
 
   !$acc update host(var%a)
 
@@ -158,15 +208,47 @@ subroutine derived_acc_subroutine(var)
 
   !$acc parallel loop present(var)
   do i = 5, 5
-     var%c = 1
+     var%c(i) = 1
   end do
   !$acc end parallel loop
 
-  !$acc update host(var%c(5:1))
+  !$acc update host(var%c(5:6))
 
   do i = 1, n
      if (i /= 5 .and. var%c(i) /= 0) call abort
-     if (i == 5 .and. var%c(i) /= 0) call abort
+     if (i == 5 .and. var%c(i) /= 1) call abort
+  end do
+
+  !$acc parallel loop present(var)
+  do i = 1, n
+     var%in%d = var%a
+  end do
+  !$acc end parallel loop
+
+  !$acc update host(var%in%d)
+
+  do i = 1, n
+     if (var%in%d(i) /= var%a) call abort
+  end do
+
+  var%c(:) = 0
+
+  !$acc update device(var%c)
+
+  var%in%d(:) = 0
+  !$acc update device(var%in%d)
+
+  !$acc parallel loop present(var)
+  do i = 5, 5
+     var%in%d(i) = 1
+  end do
+  !$acc end parallel loop
+
+  !$acc update host(var%in%d(5:6))
+
+  do i = 1, n
+     if (i /= 5 .and. var%in%d(i) /= 0) call abort
+     if (i == 5 .and. var%in%d(i) /= 1) call abort
   end do
 
   !$acc exit data delete(var)

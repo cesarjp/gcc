@@ -1941,7 +1941,10 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 	      /* Handle derived-typed members for OpenACC Update.  */
 	      if (n->sym->ts.type == BT_DERIVED
 		  && n->expr != NULL && n->expr->ref != NULL
-		  && n->expr->ref->next == NULL)
+		  && (n->expr->ref->next == NULL
+		      || (n->expr->ref->next != NULL
+			  && n->expr->ref->next->type == REF_ARRAY
+			  && n->expr->ref->next->u.ar.type == AR_FULL)))
 		{
 		  gfc_ref *ref = n->expr->ref;
 		  tree orig_decl = decl;
@@ -1992,7 +1995,9 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 		  OMP_CLAUSE_SIZE (node) = TYPE_SIZE_UNIT (type);
 		  OMP_CLAUSE_DECL (node) = build_fold_indirect_ref (ptr);
 		}
-	      else if (n->expr == NULL || n->expr->ref->u.ar.type == AR_FULL)
+	      else if ((n->sym->ts.type == BT_DERIVED && n->expr == NULL)
+		       || (n->expr == NULL
+			   || n->expr->ref->u.ar.type == AR_FULL))
 		{
 		  if (POINTER_TYPE_P (TREE_TYPE (decl))
 		      && (gfc_omp_privatize_by_reference (decl)
@@ -2092,7 +2097,8 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 		{
 		  tree ptr, ptr2;
 		  gfc_init_se (&se, NULL);
-		  if (n->expr->ref->u.ar.type == AR_ELEMENT)
+		  if (n->sym->ts.type != BT_DERIVED
+		      && n->expr->ref->u.ar.type == AR_ELEMENT)
 		    {
 		      gfc_conv_expr_reference (&se, n->expr);
 		      gfc_add_block_to_block (block, &se.pre);
