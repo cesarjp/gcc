@@ -2097,14 +2097,26 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 		{
 		  tree ptr, ptr2;
 		  gfc_init_se (&se, NULL);
-		  if (n->sym->ts.type != BT_DERIVED
-		      && n->expr->ref->u.ar.type == AR_ELEMENT)
+		  if ((n->sym->ts.type == BT_DERIVED
+		       && n->expr->rank == 0)
+		      || (n->sym->ts.type != BT_DERIVED
+			  && n->expr->ref->u.ar.type == AR_ELEMENT))
 		    {
 		      gfc_conv_expr_reference (&se, n->expr);
 		      gfc_add_block_to_block (block, &se.pre);
 		      ptr = se.expr;
+		      tree type = TREE_TYPE (ptr);
+		      if (n->sym->ts.type == BT_DERIVED)
+			{
+			  tree t = gfc_create_var (build_pointer_type
+						   (void_type_node),
+						   NULL);
+			  gfc_add_modify (block, t, ptr);
+			  ptr = t;
+			  type = TREE_TYPE (type);
+			}
 		      OMP_CLAUSE_SIZE (node)
-			= TYPE_SIZE_UNIT (TREE_TYPE (ptr));
+			= TYPE_SIZE_UNIT (type);
 		    }
 		  else
 		    {
