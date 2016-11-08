@@ -91,7 +91,7 @@ program derived_acc
   end do
   !$acc end parallel loop
 
-  !$acc update host(var%c(5:6))
+  !$acc update host(var%c(5))
 
   do i = 1, n
      if (i /= 5 .and. var%c(i) /= 0) call abort
@@ -114,6 +114,21 @@ program derived_acc
 
   !$acc update device(var%c)
 
+  var%c(:) = -1
+
+  !$acc parallel loop present(var)
+  do i = n/2, n
+     var%c(i) = i
+  end do
+  !$acc end parallel loop
+
+  !$acc update host(var%c(n/2:n))
+
+  do i = 1,n
+     if (i < n/2 .and. var%c(i) /= -1) call abort
+     if (i >= n/2 .and. var%c(i) /= i) call abort
+  end do
+
   var%in%d(:) = 0
   !$acc update device(var%in%d)
 
@@ -123,7 +138,7 @@ program derived_acc
   end do
   !$acc end parallel loop
 
-  !$acc update host(var%in%d(5:6))
+  !$acc update host(var%in%d(5))
 
   do i = 1, n
      if (i /= 5 .and. var%in%d(i) /= 0) call abort
@@ -212,7 +227,7 @@ subroutine derived_acc_subroutine(var)
   end do
   !$acc end parallel loop
 
-  !$acc update host(var%c(5:6))
+  !$acc update host(var%c(5))
 
   do i = 1, n
      if (i /= 5 .and. var%c(i) /= 0) call abort
@@ -235,6 +250,21 @@ subroutine derived_acc_subroutine(var)
 
   !$acc update device(var%c)
 
+  var%c(:) = -1
+
+  !$acc parallel loop present(var)
+  do i = n/2, n
+     var%c(i) = i
+  end do
+  !$acc end parallel loop
+
+  !$acc update host(var%c(n/2:n))
+
+  do i = 1,n
+     if (i < n/2 .and. var%c(i) /= -1) call abort
+     if (i >= n/2 .and. var%c(i) /= i) call abort
+  end do
+
   var%in%d(:) = 0
   !$acc update device(var%in%d)
 
@@ -244,7 +274,7 @@ subroutine derived_acc_subroutine(var)
   end do
   !$acc end parallel loop
 
-  !$acc update host(var%in%d(5:6))
+  !$acc update host(var%in%d(5))
 
   do i = 1, n
      if (i /= 5 .and. var%in%d(i) /= 0) call abort
