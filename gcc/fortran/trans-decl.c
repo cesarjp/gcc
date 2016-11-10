@@ -46,6 +46,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "trans-stmt.h"
 #include "gomp-constants.h"
 #include "gimplify.h"
+#include "omp-low.h"
 
 #define MAX_LABEL_VALUE 99999
 
@@ -1380,19 +1381,38 @@ add_attributes_to_decl (symbol_attribute sym_attr, tree list)
     list = tree_cons (get_identifier ("omp declare target link"),
 		      NULL_TREE, list);
   else if (sym_attr.omp_declare_target)
-    list = tree_cons (get_identifier ("omp declare target"),
-		      NULL_TREE, list);
-
-  if (sym_attr.oacc_function)
     {
-      tree dims = NULL_TREE;
-      int ix;
-      int level = sym_attr.oacc_function - 1;
+      tree c = NULL_TREE;
+      if (sym_attr.oacc_function_nohost)
+	c = build_omp_clause (/* TODO */ input_location,
+			      OMP_CLAUSE_NOHOST);
+      list = tree_cons (get_identifier ("omp declare target"), c, list);
+    }
+  if (sym_attr.oacc_function)
 
-      for (ix = GOMP_DIM_MAX; ix--;)
-	dims = tree_cons (build_int_cst (boolean_type_node, ix >= level),
-			  integer_zero_node, dims);
+  if (sym_attr.oacc_function != OACC_FUNCTION_NONE)
+    {
+      omp_clause_code code = OMP_CLAUSE_ERROR;
+      tree clause, dims;
+      
+      switch (sym_attr.oacc_function)
+	{
+	case OACC_FUNCTION_GANG:
+	  code = OMP_CLAUSE_GANG;
+	  break;
+	case OACC_FUNCTION_WORKER:
+	  code = OMP_CLAUSE_WORKER;
+	  break;
+	case OACC_FUNCTION_VECTOR:
+	  code = OMP_CLAUSE_VECTOR;
+	  break;
+	case OACC_FUNCTION_SEQ:
+	default:
+	  code = OMP_CLAUSE_SEQ;
+	}
 
+      clause = build_omp_clause (UNKNOWN_LOCATION, code);
+      dims = build_oacc_routine_dims (clause);
       list = tree_cons (get_identifier ("oacc function"),
 			dims, list);
     }
