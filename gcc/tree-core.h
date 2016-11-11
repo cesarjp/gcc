@@ -460,18 +460,18 @@ enum omp_clause_code {
   /* OpenACC clause: vector_length (integer-expression).  */
   OMP_CLAUSE_VECTOR_LENGTH,
 
-  /* OpenACC clause: bind (string).  */
-  OMP_CLAUSE_BIND,
-
-  /* OpenACC clause: nohost.  */
-  OMP_CLAUSE_NOHOST,
-
   /* OpenACC clause: tile ( size-expr-list ).  */
   OMP_CLAUSE_TILE,
 
   /* OpenMP internal-only clause to specify grid dimensions of a gridified
      kernel.  */
-  OMP_CLAUSE__GRIDDIM_
+  OMP_CLAUSE__GRIDDIM_,
+
+  /* OpenACC clause: bind (string).  */
+  OMP_CLAUSE_BIND,
+
+  /* OpenACC clause: nohost.  */
+  OMP_CLAUSE_NOHOST
 };
 
 #undef DEFTREESTRUCT

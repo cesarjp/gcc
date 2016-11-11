@@ -10408,6 +10408,10 @@ c_parser_omp_clause_name (c_parser *parser)
 	  else if (!strcmp ("async", p))
 	    result = PRAGMA_OACC_CLAUSE_ASYNC;
 	  break;
+	case 'b':
+	  if (!strcmp ("bind", p))
+	    result = PRAGMA_OACC_CLAUSE_BIND;
+	  break;
 	case 'c':
 	  if (!strcmp ("collapse", p))
 	    result = PRAGMA_OMP_CLAUSE_COLLAPSE;
@@ -10489,6 +10493,8 @@ c_parser_omp_clause_name (c_parser *parser)
 	    result = PRAGMA_OMP_CLAUSE_NOTINBRANCH;
 	  else if (!strcmp ("nowait", p))
 	    result = PRAGMA_OMP_CLAUSE_NOWAIT;
+	  else if (!strcmp ("nohost", p))
+	    result = PRAGMA_OACC_CLAUSE_NOHOST;
 	  else if (!strcmp ("num_gangs", p))
 	    result = PRAGMA_OACC_CLAUSE_NUM_GANGS;
 	  else if (!strcmp ("num_tasks", p))
@@ -11676,12 +11682,12 @@ c_parser_omp_clause_num_workers (c_parser *parser, tree list)
 */
 
 static tree
-c_parser_oacc_shape_clause (c_parser *parser, omp_clause_code kind,
+c_parser_oacc_shape_clause (c_parser *parser, location_t loc,
+			    omp_clause_code kind,
 			    const char *str, tree list)
 {
   const char *id = "num";
   tree ops[2] = { NULL_TREE, NULL_TREE }, c;
-  location_t loc = c_parser_peek_token (parser)->location;
 
   if (kind == OMP_CLAUSE_VECTOR)
     id = "length";
@@ -11746,12 +11752,11 @@ c_parser_oacc_shape_clause (c_parser *parser, omp_clause_code kind,
 	    }
 
 	  location_t expr_loc = c_parser_peek_token (parser)->location;
-	  c_expr cexpr = c_parser_expr_no_commas (parser, NULL);
-	  cexpr = convert_lvalue_to_rvalue (expr_loc, cexpr, false, true);
-	  tree expr = cexpr.value;
+	  tree expr = c_parser_expr_no_commas (parser, NULL).value;
 	  if (expr == error_mark_node)
 	    goto cleanup_error;
 
+	  mark_exp_read (expr);
 	  expr = c_fully_fold (expr, false, NULL);
 
 	  /* Attempt to statically determine when the number isn't a
@@ -11812,12 +11817,12 @@ c_parser_oacc_shape_clause (c_parser *parser, omp_clause_code kind,
    seq */
 
 static tree
-c_parser_oacc_simple_clause (c_parser *parser, enum omp_clause_code code,
-			     tree list)
+c_parser_oacc_simple_clause (c_parser * /* parser */, location_t loc,
+			     enum omp_clause_code code, tree list)
 {
   check_no_duplicate_clause (list, code, omp_clause_code_name[code]);
 
-  tree c = build_omp_clause (c_parser_peek_token (parser)->location, code);
+  tree c = build_omp_clause (loc, code);
   OMP_CLAUSE_CHAIN (c) = list;
 
   return c;
@@ -11855,6 +11860,63 @@ c_parser_oacc_clause_async (c_parser *parser, tree list)
   OMP_CLAUSE_CHAIN (c) = list;
   list = c;
 
+  return list;
+}
+
+/* OpenACC 2.0:
+   bind ( identifier )
+   bind ( string-literal ) */
+
+static tree
+c_parser_oacc_clause_bind (c_parser *parser, tree list)
+{
+  check_no_duplicate_clause (list, OMP_CLAUSE_BIND, "bind");
+
+  location_t loc = c_parser_peek_token (parser)->location;
+
+  parser->lex_untranslated_string = true;
+  if (!c_parser_require (parser, CPP_OPEN_PAREN, "expected %<(%>"))
+    {
+      parser->lex_untranslated_string = false;
+      return list;
+    }
+  tree name = error_mark_node;
+  c_token *token = c_parser_peek_token (parser);
+  if (c_parser_next_token_is (parser, CPP_NAME))
+    {
+      tree decl = lookup_name (token->value);
+      if (!decl)
+	error_at (token->location, "%qE has not been declared",
+		  token->value);
+      else if (TREE_CODE (decl) != FUNCTION_DECL)
+	error_at (token->location, "%qE does not refer to a function",
+		  token->value);
+      else
+	{
+	  //TODO? TREE_USED (decl) = 1;
+	  tree name_id = DECL_NAME (decl);
+	  name = build_string (IDENTIFIER_LENGTH (name_id),
+			       IDENTIFIER_POINTER (name_id));
+	}
+      c_parser_consume_token (parser);
+    }
+  else if (c_parser_next_token_is (parser, CPP_STRING))
+    {
+      name = token->value;
+      c_parser_consume_token (parser);
+    }
+  else
+    c_parser_error (parser,
+		    "expected identifier or character string literal");
+  parser->lex_untranslated_string = false;
+  c_parser_require (parser, CPP_CLOSE_PAREN, "expected %<)%>");
+  if (name != error_mark_node)
+    {
+      tree c = build_omp_clause (loc, OMP_CLAUSE_BIND);
+      OMP_CLAUSE_BIND_NAME (c) = name;
+      OMP_CLAUSE_CHAIN (c) = list;
+      list = c;
+    }
   return list;
 }
 
@@ -13160,9 +13222,13 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "async";
 	  break;
 	case PRAGMA_OACC_CLAUSE_AUTO:
-	  clauses = c_parser_oacc_simple_clause (parser, OMP_CLAUSE_AUTO,
+	  clauses = c_parser_oacc_simple_clause (parser, here, OMP_CLAUSE_AUTO,
 						clauses);
 	  c_name = "auto";
+	  break;
+	case PRAGMA_OACC_CLAUSE_BIND:
+	  clauses = c_parser_oacc_clause_bind (parser, clauses);
+	  c_name = "bind";
 	  break;
 	case PRAGMA_OACC_CLAUSE_COLLAPSE:
 	  clauses = c_parser_omp_clause_collapse (parser, clauses);
@@ -13210,7 +13276,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OACC_CLAUSE_GANG:
 	  c_name = "gang";
-	  clauses = c_parser_oacc_shape_clause (parser, OMP_CLAUSE_GANG,
+	  clauses = c_parser_oacc_shape_clause (parser, here, OMP_CLAUSE_GANG,
 						c_name, clauses);
 	  break;
 	case PRAGMA_OACC_CLAUSE_HOST:
@@ -13222,13 +13288,19 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "if";
 	  break;
 	case PRAGMA_OACC_CLAUSE_INDEPENDENT:
-	  clauses = c_parser_oacc_simple_clause (parser, OMP_CLAUSE_INDEPENDENT,
-						clauses);
+	  clauses = c_parser_oacc_simple_clause (parser, here,
+						 OMP_CLAUSE_INDEPENDENT,
+						 clauses);
 	  c_name = "independent";
 	  break;
 	case PRAGMA_OACC_CLAUSE_LINK:
 	  clauses = c_parser_oacc_data_clause (parser, c_kind, clauses);
 	  c_name = "link";
+	  break;
+	case PRAGMA_OACC_CLAUSE_NOHOST:
+	  clauses = c_parser_oacc_simple_clause (parser, here,
+						 OMP_CLAUSE_NOHOST, clauses);
+	  c_name = "nohost";
 	  break;
 	case PRAGMA_OACC_CLAUSE_NUM_GANGS:
 	  clauses = c_parser_omp_clause_num_gangs (parser, clauses);
@@ -13271,7 +13343,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "self";
 	  break;
 	case PRAGMA_OACC_CLAUSE_SEQ:
-	  clauses = c_parser_oacc_simple_clause (parser, OMP_CLAUSE_SEQ,
+	  clauses = c_parser_oacc_simple_clause (parser, here, OMP_CLAUSE_SEQ,
 						clauses);
 	  c_name = "seq";
 	  break;
@@ -13285,7 +13357,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OACC_CLAUSE_VECTOR:
 	  c_name = "vector";
-	  clauses = c_parser_oacc_shape_clause (parser, OMP_CLAUSE_VECTOR,
+	  clauses = c_parser_oacc_shape_clause (parser, here, OMP_CLAUSE_VECTOR,
 						c_name,	clauses);
 	  break;
 	case PRAGMA_OACC_CLAUSE_VECTOR_LENGTH:
@@ -13298,7 +13370,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OACC_CLAUSE_WORKER:
 	  c_name = "worker";
-	  clauses = c_parser_oacc_shape_clause (parser, OMP_CLAUSE_WORKER,
+	  clauses = c_parser_oacc_shape_clause (parser, here, OMP_CLAUSE_WORKER,
 						c_name, clauses);
 	  break;
 	default:
@@ -14092,7 +14164,9 @@ c_parser_oacc_kernels_parallel (location_t loc, c_parser *parser,
 	( (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_GANG)		\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_WORKER)		\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_VECTOR)		\
-	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_SEQ) )
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_SEQ)			\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_BIND)		\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_NOHOST))
 
 /* Parse an OpenACC routine directive.  For named directives, we apply
    immediately to the named function.  For unnamed ones we then parse
@@ -14142,6 +14216,9 @@ c_parser_oacc_routine (c_parser *parser, enum pragma_context context)
       data.clauses
 	= c_parser_oacc_all_clauses (parser, OACC_ROUTINE_CLAUSE_MASK,
 				     "#pragma acc routine");
+      /* The clauses are in reverse order; fix that to make later diagnostic
+	 emission easier.  */
+      data.clauses = nreverse (data.clauses);
 
       if (TREE_CODE (decl) != FUNCTION_DECL)
 	{
@@ -14156,6 +14233,9 @@ c_parser_oacc_routine (c_parser *parser, enum pragma_context context)
       data.clauses
 	= c_parser_oacc_all_clauses (parser, OACC_ROUTINE_CLAUSE_MASK,
 				     "#pragma acc routine");
+      /* The clauses are in reverse order; fix that to make later diagnostic
+	 emission easier.  */
+      data.clauses = nreverse (data.clauses);
 
       /* Emit a helpful diagnostic if there's another pragma following this
 	 one.  Also don't allow a static assertion declaration, as in the
@@ -14219,31 +14299,37 @@ c_finish_oacc_routine (struct oacc_routine_data *data, tree fndecl,
       return;
     }
 
-  if (get_oacc_fn_attrib (fndecl))
+  int compatible
+    = verify_oacc_routine_clauses (fndecl, &data->clauses, data->loc,
+				   "#pragma acc routine");
+  if (compatible < 0)
     {
-      error_at (data->loc,
-		"%<#pragma acc routine%> already applied to %qD", fndecl);
       data->error_seen = true;
       return;
     }
-
-  if (TREE_USED (fndecl) || (!is_defn && DECL_SAVED_TREE (fndecl)))
+  if (compatible > 0)
     {
-      error_at (data->loc,
-		"%<#pragma acc routine%> must be applied before %s",
-		TREE_USED (fndecl) ? "use" : "definition");
-      data->error_seen = true;
-      return;
     }
+  else
+    {
+      if (TREE_USED (fndecl) || (!is_defn && DECL_SAVED_TREE (fndecl)))
+	{
+	  error_at (data->loc,
+		    "%<#pragma acc routine%> must be applied before %s",
+		    TREE_USED (fndecl) ? "use" : "definition");
+	  data->error_seen = true;
+	  return;
+	}
 
-  /* Process the routine's dimension clauses.  */
-  tree dims = build_oacc_routine_dims (data->clauses);
-  replace_oacc_fn_attrib (fndecl, dims);
+      /* Set the routine's level of parallelism.  */
+      tree dims = build_oacc_routine_dims (data->clauses);
+      replace_oacc_fn_attrib (fndecl, dims);
 
-  /* Add an "omp declare target" attribute.  */
-  DECL_ATTRIBUTES (fndecl)
-    = tree_cons (get_identifier ("omp declare target"),
-		 NULL_TREE, DECL_ATTRIBUTES (fndecl));
+      /* Add an "omp declare target" attribute.  */
+      DECL_ATTRIBUTES (fndecl)
+	= tree_cons (get_identifier ("omp declare target"),
+		     data->clauses, DECL_ATTRIBUTES (fndecl));
+    }
 
   /* Remember that we've used this "#pragma acc routine".  */
   data->fndecl_seen = true;

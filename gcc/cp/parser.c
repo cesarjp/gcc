@@ -30497,6 +30497,10 @@ cp_parser_omp_clause_name (cp_parser *parser)
 	  else if (!strcmp ("async", p))
 	    result = PRAGMA_OACC_CLAUSE_ASYNC;
 	  break;
+	case 'b':
+	  if (!strcmp ("bind", p))
+	    result = PRAGMA_OACC_CLAUSE_BIND;
+	  break;
 	case 'c':
 	  if (!strcmp ("collapse", p))
 	    result = PRAGMA_OMP_CLAUSE_COLLAPSE;
@@ -30576,6 +30580,8 @@ cp_parser_omp_clause_name (cp_parser *parser)
 	    result = PRAGMA_OMP_CLAUSE_NOTINBRANCH;
 	  else if (!strcmp ("nowait", p))
 	    result = PRAGMA_OMP_CLAUSE_NOWAIT;
+	  else if (!strcmp ("nohost", p))
+	    result = PRAGMA_OACC_CLAUSE_NOHOST;
 	  else if (flag_cilkplus && !strcmp ("nomask", p))
 	    result = PRAGMA_CILK_CLAUSE_NOMASK;
 	  else if (!strcmp ("num_gangs", p))
@@ -31052,13 +31058,13 @@ cp_parser_oacc_single_int_clause (cp_parser *parser, omp_clause_code code,
 */
 
 static tree
-cp_parser_oacc_shape_clause (cp_parser *parser, omp_clause_code kind,
+cp_parser_oacc_shape_clause (cp_parser *parser, location_t loc,
+			     omp_clause_code kind,
 			     const char *str, tree list)
 {
   const char *id = "num";
   cp_lexer *lexer = parser->lexer;
   tree ops[2] = { NULL_TREE, NULL_TREE }, c;
-  location_t loc = cp_lexer_peek_token (lexer)->location;
 
   if (kind == OMP_CLAUSE_VECTOR)
     id = "length";
@@ -32845,6 +32851,82 @@ cp_parser_oacc_clause_async (cp_parser *parser, tree list)
   return list;
 }
 
+/* OpenACC 2.0:
+   bind ( identifier )
+   bind ( string-literal ) */
+
+static tree
+cp_parser_oacc_clause_bind (cp_parser *parser, tree list)
+{
+  location_t loc = cp_lexer_peek_token (parser->lexer)->location;
+
+  check_no_duplicate_clause (list, OMP_CLAUSE_BIND, "bind", loc);
+
+  bool save_translate_strings_p = parser->translate_strings_p;
+  parser->translate_strings_p = false;
+  if (!cp_parser_require (parser, CPP_OPEN_PAREN, RT_OPEN_PAREN))
+    {
+      parser->translate_strings_p = save_translate_strings_p;
+      return list;
+    }
+  tree name = error_mark_node;
+  cp_token *token = cp_lexer_peek_token (parser->lexer);
+  if (cp_lexer_next_token_is (parser->lexer, CPP_NAME))
+    {
+      tree id = cp_parser_id_expression (parser, /*template_p=*/false,
+					 /*check_dependency_p=*/true,
+					 /*template_p=*/NULL,
+					 /*declarator_p=*/false,
+					 /*optional_p=*/false);
+      tree decl = cp_parser_lookup_name_simple (parser, id, token->location);
+      if (id != error_mark_node && decl == error_mark_node)
+	cp_parser_name_lookup_error (parser, id, decl, NLE_NULL,
+				     token->location);
+      if (!decl || decl == error_mark_node)
+	error_at (token->location, "%qE has not been declared",
+		  token->u.value);
+      else if (is_overloaded_fn (decl)
+	       && (TREE_CODE (decl) != FUNCTION_DECL
+		   || DECL_FUNCTION_TEMPLATE_P (decl)))
+	error_at (token->location, "%qE names a set of overloads",
+		  token->u.value);
+      else if (TREE_CODE (decl) != FUNCTION_DECL)
+	error_at (token->location,
+		  "%qE does not refer to a function",
+		  token->u.value);
+      else
+	name = decl;
+    }
+  else if (cp_lexer_next_token_is (parser->lexer, CPP_STRING))
+    {
+      name = token->u.value;
+      cp_lexer_consume_token (parser->lexer);
+
+      /* This shouldn't be an empty string.  */
+      if (strcmp (TREE_STRING_POINTER (name), "\"\"") == 0)
+	error_at (token->location,
+		  "bind argument must not be an empty string");
+
+      parser->translate_strings_p = save_translate_strings_p;
+    }
+  else
+    {
+      cp_parser_error (parser,
+		       "expected identifier or character string literal");
+      cp_parser_skip_to_closing_parenthesis (parser, false, false, true);
+      return list;
+    }
+  cp_parser_require (parser, CPP_CLOSE_PAREN, RT_CLOSE_PAREN);
+  if (name != error_mark_node)
+    {
+      tree c = build_omp_clause (loc, OMP_CLAUSE_BIND);
+      OMP_CLAUSE_BIND_NAME (c) = name;
+      OMP_CLAUSE_CHAIN (c) = list;
+      list = c;
+    }
+  return list;
+}
+
 /* Parse all OpenACC clauses.  The set clauses allowed by the directive
    is a bitmask in MASK.  Return the list of clauses found.  */
 
@@ -32880,6 +32962,10 @@ cp_parser_oacc_all_clauses (cp_parser *parser, omp_clause_mask mask,
 	  clauses = cp_parser_oacc_simple_clause (parser, OMP_CLAUSE_AUTO,
 						 clauses, here);
 	  c_name = "auto";
+	  break;
+	case PRAGMA_OACC_CLAUSE_BIND:
+	  clauses = cp_parser_oacc_clause_bind (parser, clauses);
+	  c_name = "bind";
 	  break;
 	case PRAGMA_OACC_CLAUSE_COLLAPSE:
 	  clauses = cp_parser_omp_clause_collapse (parser, clauses, here);
@@ -32928,7 +33014,7 @@ cp_parser_oacc_all_clauses (cp_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OACC_CLAUSE_GANG:
 	  c_name = "gang";
-	  clauses = cp_parser_oacc_shape_clause (parser, OMP_CLAUSE_GANG,
+	  clauses = cp_parser_oacc_shape_clause (parser, here, OMP_CLAUSE_GANG,
 						 c_name, clauses);
 	  break;
 	case PRAGMA_OACC_CLAUSE_HOST:
@@ -32948,6 +33034,11 @@ cp_parser_oacc_all_clauses (cp_parser *parser, omp_clause_mask mask,
 	case PRAGMA_OACC_CLAUSE_LINK:
 	  clauses = cp_parser_oacc_data_clause (parser, c_kind, clauses);
 	  c_name = "link";
+	  break;
+	case PRAGMA_OACC_CLAUSE_NOHOST:
+	  clauses = cp_parser_oacc_simple_clause (parser, OMP_CLAUSE_NOHOST,
+						  clauses, here);
+	  c_name = "nohost";
 	  break;
 	case PRAGMA_OACC_CLAUSE_NUM_GANGS:
 	  code = OMP_CLAUSE_NUM_GANGS;
@@ -33010,7 +33101,8 @@ cp_parser_oacc_all_clauses (cp_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OACC_CLAUSE_VECTOR:
 	  c_name = "vector";
-	  clauses = cp_parser_oacc_shape_clause (parser, OMP_CLAUSE_VECTOR,
+	  clauses = cp_parser_oacc_shape_clause (parser, here,
+						 OMP_CLAUSE_VECTOR,
 						 c_name, clauses);
 	  break;
 	case PRAGMA_OACC_CLAUSE_VECTOR_LENGTH:
@@ -33025,7 +33117,8 @@ cp_parser_oacc_all_clauses (cp_parser *parser, omp_clause_mask mask,
 	  break;
 	case PRAGMA_OACC_CLAUSE_WORKER:
 	  c_name = "worker";
-	  clauses = cp_parser_oacc_shape_clause (parser, OMP_CLAUSE_WORKER,
+	  clauses = cp_parser_oacc_shape_clause (parser, here,
+						 OMP_CLAUSE_WORKER,
 						 c_name, clauses);
 	  break;
 	default:
@@ -37266,7 +37359,10 @@ cp_parser_omp_taskloop (cp_parser *parser, cp_token *pragma_tok,
 	( (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_GANG)		\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_WORKER)		\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_VECTOR)		\
-	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_SEQ))
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_SEQ)			\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_BIND)		\
+	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_NOHOST))
+
 
 
 /* Parse the OpenACC routine pragma.  This has an optional '( name )'
@@ -37325,6 +37421,9 @@ cp_parser_oacc_routine (cp_parser *parser, cp_token *pragma_tok,
 	= cp_parser_oacc_all_clauses (parser, OACC_ROUTINE_CLAUSE_MASK,
 				      "#pragma acc routine",
 				      cp_lexer_peek_token (parser->lexer));
+      /* The clauses are in reverse order; fix that to make later diagnostic
+	 emission easier.  */
+      data.clauses = nreverse (data.clauses);
 
       if (decl && is_overloaded_fn (decl)
 	  && (TREE_CODE (decl) != FUNCTION_DECL
@@ -37332,16 +37431,6 @@ cp_parser_oacc_routine (cp_parser *parser, cp_token *pragma_tok,
 	{
 	  error_at (name_loc,
 		    "%<#pragma acc routine%> names a set of overloads");
-	  parser->oacc_routine = NULL;
-	  return;
-	}
-
-      /* Perhaps we should use the same rule as declarations in different
-	 namespaces?  */
-      if (!DECL_NAMESPACE_SCOPE_P (decl))
-	{
-	  error_at (name_loc,
-		    "%qD does not refer to a namespace scope function", decl);
 	  parser->oacc_routine = NULL;
 	  return;
 	}
@@ -37421,6 +37510,9 @@ cp_parser_late_parsing_oacc_routine (cp_parser *parser, tree attrs)
   parser->oacc_routine->clauses
     = cp_parser_oacc_all_clauses (parser, OACC_ROUTINE_CLAUSE_MASK,
 				  "#pragma acc routine", pragma_tok);
+  /* The clauses are in reverse order; fix that to make later diagnostic
+     emission easier.  */
+  parser->oacc_routine->clauses = nreverse (parser->oacc_routine->clauses);
   cp_parser_pop_lexer (parser);
   /* Later, cp_finalize_oacc_routine will process the clauses, and then set
      fndecl_seen.  */
@@ -37455,31 +37547,70 @@ cp_finalize_oacc_routine (cp_parser *parser, tree fndecl, bool is_defn)
 	  return;
 	}
 
-      if (get_oacc_fn_attrib (fndecl))
+      /* Process the bind clause, if present.  */
+      for (tree c = parser->oacc_routine->clauses;
+	   c;
+	   c = OMP_CLAUSE_CHAIN (c))
 	{
-	  error_at (parser->oacc_routine->loc,
-		    "%<#pragma acc routine%> already applied to %qD", fndecl);
+	  if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_BIND)
+	    continue;
+
+	  tree bind_decl = OMP_CLAUSE_BIND_NAME (c);
+
+	  /* String arguments don't require any special treatment.  */
+	  if (TREE_CODE (bind_decl) != FUNCTION_DECL)
+	    break;
+
+	  if (!bind_decls_match (bind_decl, fndecl))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"bind identifier %qE is not compatible with "
+			"function %qE", bind_decl, fndecl);
+	      parser->oacc_routine = NULL;
+	      return;
+	    }
+
+	  tree name_id = decl_assembler_name (bind_decl);
+	  tree name = build_string (IDENTIFIER_LENGTH (name_id),
+				    IDENTIFIER_POINTER (name_id));
+	  OMP_CLAUSE_BIND_NAME (c) = name;
+
+	  break;
+	}
+
+      int compatible
+	= verify_oacc_routine_clauses (fndecl, &parser->oacc_routine->clauses,
+				       parser->oacc_routine->loc,
+				       "#pragma acc routine");
+      if (compatible < 0)
+	{
 	  parser->oacc_routine = NULL;
 	  return;
 	}
-
-      if (TREE_USED (fndecl) || (!is_defn && DECL_SAVED_TREE (fndecl)))
+      if (compatible > 0)
 	{
-	  error_at (parser->oacc_routine->loc,
-		    "%<#pragma acc routine%> must be applied before %s",
-		    TREE_USED (fndecl) ? "use" : "definition");
-	  parser->oacc_routine = NULL;
-	  return;
 	}
+      else
+	{
+	  if (TREE_USED (fndecl) || (!is_defn && DECL_SAVED_TREE (fndecl)))
+	    {
+	      error_at (parser->oacc_routine->loc,
+			"%<#pragma acc routine%> must be applied before %s",
+			TREE_USED (fndecl) ? "use" : "definition");
+	      parser->oacc_routine = NULL;
+	      return;
+	    }
 
-      /* Process the routine's dimension clauses.  */
-      tree dims = build_oacc_routine_dims (parser->oacc_routine->clauses);
-      replace_oacc_fn_attrib (fndecl, dims);
-      
-      /* Add an "omp declare target" attribute.  */
-      DECL_ATTRIBUTES (fndecl)
-	= tree_cons (get_identifier ("omp declare target"),
-		     NULL_TREE, DECL_ATTRIBUTES (fndecl));
+	  /* Set the routine's level of parallelism.  */
+	  tree dims = build_oacc_routine_dims (parser->oacc_routine->clauses);
+	  replace_oacc_fn_attrib (fndecl, dims);
+
+	  /* Add an "omp declare target" attribute.  */
+	  DECL_ATTRIBUTES (fndecl)
+	    = tree_cons (get_identifier ("omp declare target"),
+			 parser->oacc_routine->clauses,
+			 DECL_ATTRIBUTES (fndecl));
+	}
 
       /* Don't unset parser->oacc_routine here: we may still need it to
 	 diagnose wrong usage.  But, remember that we've used this "#pragma acc

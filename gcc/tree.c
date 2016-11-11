@@ -401,7 +401,7 @@ const char * const omp_clause_code_name[] =
   "num_workers",
   "vector_length",
   "tile",
-  "_griddim_"
+  "_griddim_",
   "bind",
   "nohost",
 };

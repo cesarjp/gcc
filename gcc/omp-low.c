@@ -2201,6 +2201,8 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 	    install_var_local (decl, ctx);
 	  break;
 
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
 	case OMP_CLAUSE_TILE:
 	case OMP_CLAUSE__CACHE_:
 	default:
@@ -2365,6 +2367,8 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 	case OMP_CLAUSE__GRIDDIM_:
 	  break;
 
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
 	case OMP_CLAUSE_TILE:
 	case OMP_CLAUSE__CACHE_:
 	default:
@@ -12684,9 +12688,192 @@ set_oacc_fn_attrib (tree fn, tree clauses, bool is_kernel, vec<tree> *args)
     }
 }
 
-/*  Process the routine's dimension clauess to generate an attribute
-    value.  Issue diagnostics as appropriate.  We default to SEQ
-    (OpenACC 2.5 clarifies this). All dimensions have a size of zero
+/* Verify OpenACC routine clauses.
+
+   Returns 0 if FNDECL should be marked as an accelerator routine, 1 if it has
+   already been marked in compatible way, and -1 if incompatible.  Upon
+   returning, the chain of clauses will contain exactly one clause specifying
+   the level of parallelism.  */
+
+int
+verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
+			     const char *routine_str)
+{
+  tree c_level = NULL_TREE;
+  tree c_bind = NULL_TREE;
+  tree c_nohost = NULL_TREE;
+  tree c_p = NULL_TREE;
+  for (tree c = *clauses; c; c_p = c, c = OMP_CLAUSE_CHAIN (c))
+    switch (OMP_CLAUSE_CODE (c))
+      {
+      case OMP_CLAUSE_GANG:
+      case OMP_CLAUSE_WORKER:
+      case OMP_CLAUSE_VECTOR:
+      case OMP_CLAUSE_SEQ:
+	if (c_level == NULL_TREE)
+	  c_level = c;
+	else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_CODE (c_level))
+	  {
+	    /* This has already been diagnosed in the front ends.  */
+	    /* Drop the duplicate clause.  */
+	    gcc_checking_assert (c_p != NULL_TREE);
+	    OMP_CLAUSE_CHAIN (c_p) = OMP_CLAUSE_CHAIN (c);
+	    c = c_p;
+	  }
+	else
+	  {
+	    error_at (OMP_CLAUSE_LOCATION (c),
+		      "%qs specifies a conflicting level of parallelism",
+		      omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	    inform (OMP_CLAUSE_LOCATION (c_level),
+		    "... to the previous %qs clause here",
+		    omp_clause_code_name[OMP_CLAUSE_CODE (c_level)]);
+	    /* Drop the conflicting clause.  */
+	    gcc_checking_assert (c_p != NULL_TREE);
+	    OMP_CLAUSE_CHAIN (c_p) = OMP_CLAUSE_CHAIN (c);
+	    c = c_p;
+	  }
+	break;
+      case OMP_CLAUSE_BIND:
+	/* Don't bother with duplicate clauses at this point.  */
+	c_bind = c;
+	break;
+      case OMP_CLAUSE_NOHOST:
+	/* Don't bother with duplicate clauses at this point.  */
+	c_nohost = c;
+	break;
+      default:
+	gcc_unreachable ();
+      }
+  if (c_level == NULL_TREE)
+    {
+      /* OpenACC 2.5 makes this an error; for the current OpenACC 2.0a
+	 implementation add an implicit "seq" clause.  */
+      c_level = build_omp_clause (loc, OMP_CLAUSE_SEQ);
+      OMP_CLAUSE_CHAIN (c_level) = *clauses;
+      *clauses = c_level;
+    }
+  /* In *clauses, we now have exactly one clause specifying the level of
+     parallelism.  */
+
+  /* Still got some work to do for Fortran...  */
+  if (fndecl == NULL_TREE)
+    return 0;
+
+  tree attr
+    = lookup_attribute ("omp declare target", DECL_ATTRIBUTES (fndecl));
+  if (attr != NULL_TREE)
+    {
+      /* If a "#pragma acc routine" has already been applied, just verify
+	 this one for compatibility.  */
+      /* Collect previous directive's clauses.  */
+      tree c_level_p = NULL_TREE;
+      tree c_bind_p = NULL_TREE;
+      tree c_nohost_p = NULL_TREE;
+      for (tree c = TREE_VALUE (attr); c; c = OMP_CLAUSE_CHAIN (c))
+	switch (OMP_CLAUSE_CODE (c))
+	  {
+	  case OMP_CLAUSE_GANG:
+	  case OMP_CLAUSE_WORKER:
+	  case OMP_CLAUSE_VECTOR:
+	  case OMP_CLAUSE_SEQ:
+	    gcc_checking_assert (c_level_p == NULL_TREE);
+	    c_level_p = c;
+	    break;
+	  case OMP_CLAUSE_BIND:
+	    /* Don't bother with duplicate clauses at this point.  */
+	    c_bind_p = c;
+	    break;
+	  case OMP_CLAUSE_NOHOST:
+	    /* Don't bother with duplicate clauses at this point.  */
+	    c_nohost_p = c;
+	    break;
+	  default:
+	    gcc_unreachable ();
+	  }
+      gcc_checking_assert (c_level_p != NULL_TREE);
+      /* ..., and compare to current directive's, which we've already collected
+	 above.  */
+      tree c_diag;
+      tree c_diag_p;
+      /* Matching level of parallelism?  */
+      if (OMP_CLAUSE_CODE (c_level) != OMP_CLAUSE_CODE (c_level_p))
+	{
+	  c_diag = c_level;
+	  c_diag_p = c_level_p;
+	  goto incompatible;
+	}
+      /* Matching bind clauses?  */
+      if ((c_bind == NULL_TREE) != (c_bind_p == NULL_TREE))
+	{
+	  c_diag = c_bind;
+	  c_diag_p = c_bind_p;
+	  goto incompatible;
+	}
+      /* Matching bind clauses' names?  */
+      if ((c_bind != NULL_TREE) && (c_bind_p != NULL_TREE))
+	{
+	  tree c_bind_name = OMP_CLAUSE_BIND_NAME (c_bind);
+	  tree c_bind_name_p = OMP_CLAUSE_BIND_NAME (c_bind_p);
+	  /* TODO: will/should actually be the trees/strings/string pointers be
+	     identical?  */
+	  if (strcmp (TREE_STRING_POINTER (c_bind_name),
+		      TREE_STRING_POINTER (c_bind_name_p)) != 0)
+	    {
+	      c_diag = c_bind;
+	      c_diag_p = c_bind_p;
+	      goto incompatible;
+	    }
+	}
+      /* Matching nohost clauses?  */
+      if ((c_nohost == NULL_TREE) != (c_nohost_p == NULL_TREE))
+	{
+	  c_diag = c_nohost;
+	  c_diag_p = c_nohost_p;
+	  goto incompatible;
+	}
+      /* Compatible.  */
+      return 1;
+
+    incompatible:
+      if (c_diag != NULL_TREE)
+	error_at (OMP_CLAUSE_LOCATION (c_diag),
+		  "incompatible %qs clause when applying"
+		  " %<%s%> to %qD, which has already been"
+		  " marked as an accelerator routine",
+		  omp_clause_code_name[OMP_CLAUSE_CODE (c_diag)],
+		  routine_str, fndecl);
+      else if (c_diag_p != NULL_TREE)
+	error_at (loc,
+		  "missing %qs clause when applying"
+		  " %<%s%> to %qD, which has already been"
+		  " marked as an accelerator routine",
+		  omp_clause_code_name[OMP_CLAUSE_CODE (c_diag_p)],
+		  routine_str, fndecl);
+      else
+	gcc_unreachable ();
+      if (c_diag_p != NULL_TREE)
+	inform (OMP_CLAUSE_LOCATION (c_diag_p),
+		"... with %qs clause here",
+		omp_clause_code_name[OMP_CLAUSE_CODE (c_diag_p)]);
+      else
+	{
+	  /* In the front ends, we don't preserve location information for the
+	     OpenACC routine directive itself.  However, that of c_level_p
+	     should be close.  */
+	  location_t loc_routine = OMP_CLAUSE_LOCATION (c_level_p);
+	  inform (loc_routine, "... without %qs clause near to here",
+		  omp_clause_code_name[OMP_CLAUSE_CODE (c_diag)]);
+	}
+      /* Incompatible.  */
+      return -1;
+    }
+
+  return 0;
+}
+
+/*  Process the OpenACC routine's clauses to generate an attribute
+    for the level of parallelism.  All dimensions have a size of zero
     (dynamic).  TREE_PURPOSE is set to indicate whether that dimension
     can have a loop partitioned on it.  non-zero indicates
     yes, zero indicates no.  By construction once a non-zero has been
@@ -19694,6 +19881,28 @@ default_goacc_reduction (gcall *call)
   gsi_replace_with_seq (&gsi, seq, true);
 }
 
+/* Determine whether DECL should be discarded in this offload
+   compilation.  */
+
+static bool
+maybe_discard_oacc_function (tree decl)
+{
+  tree attr = lookup_attribute ("omp declare target", DECL_ATTRIBUTES (decl));
+
+  if (!attr)
+    return false;
+
+  enum omp_clause_code kind = OMP_CLAUSE_NOHOST;
+  
+#ifdef ACCEL_COMPILER
+  kind = OMP_CLAUSE_BIND;
+#endif
+  if (find_omp_clause (TREE_VALUE (attr), kind))
+    return true;
+
+  return false;
+}
+
 /* Main entry point for oacc transformations which run on the device
    compiler after LTO, so we know what the target device is at this
    point (including the host fallback).  */
@@ -19706,6 +19915,14 @@ execute_oacc_device_lower ()
   if (!attrs)
     /* Not an offloaded function.  */
     return 0;
+
+  if (maybe_discard_oacc_function (current_function_decl))
+    {
+      if (dump_file)
+	fprintf (dump_file, "Discarding function\n");
+      TREE_ASM_WRITTEN (current_function_decl) = 1;
+      return TODO_discard_function;
+    }
 
   /* Parse the default dim argument exactly once.  */
   if ((const void *)flag_openacc_dims != &flag_openacc_dims)
