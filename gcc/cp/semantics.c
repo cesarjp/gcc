@@ -4541,7 +4541,8 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 		      omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	  return error_mark_node;
 	}
-      else if (TREE_CODE (t) == PARM_DECL
+      else if (ort == C_ORT_OMP
+	       && TREE_CODE (t) == PARM_DECL
 	       && DECL_ARTIFICIAL (t)
 	       && DECL_NAME (t) == this_identifier)
 	{
@@ -6841,7 +6842,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	handle_map_references:
 	  if (!remove
 	      && !processing_template_decl
-	      && (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+	      && ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+		  || ort == C_ORT_ACC)
 	      && TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c))) == REFERENCE_TYPE)
 	    {
 	      t = OMP_CLAUSE_DECL (c);
