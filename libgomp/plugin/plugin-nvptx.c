@@ -18,7 +18,7 @@
    more details.
 
    Under Section 7 of GPL version 3, you are granted additional
-   permissions described in the GCC Runtime Library Exception, version
+   permissions described in the GCC Runtime Library Excepion, version
    3.1, as published by the Free Software Foundation.
 
    You should have received a copy of the GNU General Public License and
@@ -102,12 +102,6 @@ struct ptx_stream
   bool multithreaded;
 
   CUdeviceptr d;
-  void *h;
-  void *h_begin;
-  void *h_end;
-  void *h_next;
-  void *h_prev;
-  void *h_tail;
 
   struct ptx_stream *next;
 };
@@ -119,103 +113,6 @@ struct nvptx_thread
   struct ptx_stream *current_stream;
   struct ptx_device *ptx_dev;
 };
-
-static bool
-map_init (struct ptx_stream *s)
-{
-  int size = getpagesize ();
-
-  assert (s);
-  assert (!s->d);
-  assert (!s->h);
-
-  CUDA_CALL (cuMemAllocHost, &s->h, size);
-  CUDA_CALL (cuMemHostGetDevicePointer, &s->d, s->h, 0);
-
-  assert (s->h);
-
-  s->h_begin = s->h;
-  s->h_end = s->h_begin + size;
-  s->h_next = s->h_prev = s->h_tail = s->h_begin;
-
-  assert (s->h_next);
-  assert (s->h_end);
-  return true;
-}
-
-static bool
-map_fini (struct ptx_stream *s)
-{
-  CUDA_CALL (cuMemFreeHost, s->h);
-  return true;
-}
-
-static void
-map_pop (struct ptx_stream *s)
-{
-  assert (s != NULL);
-  assert (s->h_next);
-  assert (s->h_prev);
-  assert (s->h_tail);
-
-  s->h_tail = s->h_next;
-
-  if (s->h_tail >= s->h_end)
-    s->h_tail = s->h_begin + (int) (s->h_tail - s->h_end);
-
-  if (s->h_next == s->h_tail)
-    s->h_prev = s->h_next;
-
-  assert (s->h_next >= s->h_begin);
-  assert (s->h_tail >= s->h_begin);
-  assert (s->h_prev >= s->h_begin);
-
-  assert (s->h_next <= s->h_end);
-  assert (s->h_tail <= s->h_end);
-  assert (s->h_prev <= s->h_end);
-}
-
-static void
-map_push (struct ptx_stream *s, size_t size, void **h, void **d)
-{
-  int left;
-  int offset;
-
-  assert (s != NULL);
-
-  left = s->h_end - s->h_next;
-
-  assert (s->h_prev);
-  assert (s->h_next);
-
-  if (size >= left)
-    {
-      assert (s->h_next == s->h_prev);
-      s->h_next = s->h_prev = s->h_tail = s->h_begin;
-    }
-
-  assert (s->h_next);
-
-  offset = s->h_next - s->h;
-
-  *d = (void *)(s->d + offset);
-  *h = (void *)(s->h + offset);
-
-  s->h_prev = s->h_next;
-  s->h_next += size;
-
-  assert (s->h_prev);
-  assert (s->h_next);
-
-  assert (s->h_next >= s->h_begin);
-  assert (s->h_tail >= s->h_begin);
-  assert (s->h_prev >= s->h_begin);
-  assert (s->h_next <= s->h_end);
-  assert (s->h_tail <= s->h_end);
-  assert (s->h_prev <= s->h_end);
-
-  return;
-}
 
 /* Target data function launch information.  */
 
@@ -336,9 +233,6 @@ init_streams_for_device (struct ptx_device *ptx_dev, int concurrency)
   null_stream->host_thread = pthread_self ();
   null_stream->multithreaded = true;
   null_stream->d = (CUdeviceptr) NULL;
-  null_stream->h = NULL;
-  if (!map_init (null_stream))
-    return false;
 
   ptx_dev->null_stream = null_stream;
   ptx_dev->active_streams = NULL;
@@ -371,18 +265,14 @@ fini_streams_for_device (struct ptx_device *ptx_dev)
       struct ptx_stream *s = ptx_dev->active_streams;
       ptx_dev->active_streams = ptx_dev->active_streams->next;
 
-      ret &= map_fini (s);
+      CUDA_CALL (cuStreamDestroy, s->stream);
 
-      CUresult r = cuStreamDestroy (s->stream);
-      if (r != CUDA_SUCCESS)
-	{
-	  GOMP_PLUGIN_error ("cuStreamDestroy error: %s", cuda_error (r));
-	  ret = false;
-	}
+      if (s->d)
+	CUDA_CALL (cuMemFree, s->d);
+
       free (s);
     }
 
-  ret &= map_fini (ptx_dev->null_stream);
   free (ptx_dev->null_stream);
   return ret;
 }
@@ -469,15 +359,6 @@ select_stream_for_async (int async, pthread_t thread, bool create,
 	     stream.  Associate it with the current host thread.  */
 	  s->host_thread = thread;
 	  s->multithreaded = false;
-
-	  s->d = (CUdeviceptr) NULL;
-	  s->h = NULL;
-	  if (!map_init (s))
-	    {
-	      pthread_mutex_unlock (&ptx_dev->stream_lock);
-	      GOMP_PLUGIN_fatal ("map_init fail");
-	    }
-
 	  s->next = ptx_dev->active_streams;
 	  ptx_dev->active_streams = s;
 	  ptx_dev->async_streams.arr[async] = s;
@@ -797,10 +678,7 @@ event_gc (bool memmap_lockable)
 	    {
 	    case PTX_EVT_MEM:
 	    case PTX_EVT_SYNC:
-	      break;
-
 	    case PTX_EVT_KNL:
-	      map_pop (e->addr);
 	      break;
 
 	    case PTX_EVT_ASYNC_CLEANUP:
@@ -996,20 +874,21 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	  dims[i] = default_dims[i];
     }
 
-  /* This reserves a chunk of a pre-allocated page of memory mapped on both
-     the host and the device. HP is a host pointer to the new chunk, and DP is
-     the corresponding device pointer.  */
-  map_push (dev_str, mapnum * sizeof (void *), &hp, &dp);
-
   GOMP_PLUGIN_debug (0, "  %s: prepare mappings\n", __FUNCTION__);
 
   /* Copy the array of arguments to the mapped page.  */
+  hp = alloca(sizeof(void *) * mapnum);
   for (i = 0; i < mapnum; i++)
     ((void **) hp)[i] = devaddrs[i];
 
+  if (dev_str->d == (CUdeviceptr) NULL)
+    CUDA_CALL_ASSERT (cuMemAlloc, &dev_str->d, getpagesize ());
+
+  dp = (void *) dev_str->d;
+
   /* Copy the (device) pointers to arguments to the device (dp and hp might in
      fact have the same value on a unified-memory system).  */
-  CUDA_CALL_ASSERT (cuMemcpy, (CUdeviceptr) dp, (CUdeviceptr) hp,
+  CUDA_CALL_ASSERT (cuMemcpyHtoD, (CUdeviceptr) dp, hp,
 		    mapnum * sizeof (void *));
   GOMP_PLUGIN_debug (0, "  %s: kernel %s: launch"
 		     " gangs=%u, workers=%u, vectors=%u\n",
@@ -1068,11 +947,6 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 
   GOMP_PLUGIN_debug (0, "  %s: kernel %s: finished\n", __FUNCTION__,
 		     targ_fn->launch->fn);
-
-#ifndef DISABLE_ASYNC
-  if (async < acc_async_noval)
-#endif
-    map_pop (dev_str);
 }
 
 void * openacc_get_current_cuda_context (void);
@@ -1474,9 +1348,6 @@ nvptx_set_cuda_stream (int async, void *stream)
 	}
 
       CUDA_CALL_ASSERT (cuStreamDestroy, oldstream->stream);
-
-      if (!map_fini (oldstream))
-	GOMP_PLUGIN_fatal ("error when freeing host memory");
 
       free (oldstream);
     }
