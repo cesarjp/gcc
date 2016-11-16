@@ -342,6 +342,7 @@ select_stream_for_async (int async, pthread_t thread, bool create,
 	  struct ptx_stream *s
 	    = GOMP_PLUGIN_malloc (sizeof (struct ptx_stream));
 
+	  s->d = (CUdeviceptr) NULL;
 	  if (existing)
 	    s->stream = existing;
 	  else
