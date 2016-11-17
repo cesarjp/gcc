@@ -95,14 +95,20 @@ cuda_error (CUresult r)
 static unsigned int instantiated_devices = 0;
 static pthread_mutex_t ptx_dev_lock = PTHREAD_MUTEX_INITIALIZER;
 
+struct cuda_map
+{
+  CUdeviceptr d;
+  size_t size;
+  bool active;
+  struct cuda_map *next;
+};
+
 struct ptx_stream
 {
   CUstream stream;
   pthread_t host_thread;
   bool multithreaded;
-
-  CUdeviceptr d;
-
+  struct cuda_map *map;
   struct ptx_stream *next;
 };
 
@@ -113,6 +119,112 @@ struct nvptx_thread
   struct ptx_stream *current_stream;
   struct ptx_device *ptx_dev;
 };
+
+static struct cuda_map *
+cuda_map_create (size_t size)
+{
+  struct cuda_map *map = GOMP_PLUGIN_malloc (sizeof (struct cuda_map));
+
+  assert (map);
+
+  map->next = NULL;
+  map->size = size;
+  map->active = false;
+
+  CUDA_CALL_ERET (NULL, cuMemAlloc, &map->d, size);
+  assert (map->d);
+
+  return map;
+}
+
+static void
+cuda_map_destroy (struct cuda_map *map)
+{
+  CUDA_CALL_ASSERT (cuMemFree, map->d);
+  free (map);
+}
+
+/* The following map_* routines manage the CUDA device memory that
+   contains the data mapping arguments for cuLaunchKernel.  Each
+   asynchronous PTX stream may have multiple pending kernel
+   invocations, which are launched in a FIFO order.  As such, the map
+   routines maintains a queue of cuLaunchKernel arguments.  In order
+   to minimize calls to cuMemAlloc for synchronous calls to
+   cuLaunchKernel, the map routines maintains at least page size block
+   of memory on the accelerator.  */
+
+static bool
+map_init (struct ptx_stream *s)
+{
+  int size = getpagesize ();
+
+  assert (s);
+
+  s->map = cuda_map_create (size);
+
+  return true;
+}
+
+static bool
+map_fini (struct ptx_stream *s)
+{
+  assert (s->map->next == NULL);
+  assert (!s->map->active);
+
+  cuda_map_destroy (s->map);
+
+  return true;
+}
+
+static void
+map_pop (struct ptx_stream *s)
+{
+  struct cuda_map *next;
+
+  assert (s != NULL);
+
+  if (s->map->next == NULL)
+    {
+      s->map->active = false;
+      return;
+    }
+
+  next = s->map->next;
+  cuda_map_destroy (s->map);
+  s->map = next;
+}
+
+static CUdeviceptr
+map_push (struct ptx_stream *s, size_t size)
+{
+  struct cuda_map *map = NULL;
+
+  assert (s);
+  assert (s->map);
+
+  if (size < getpagesize ())
+    size = getpagesize ();
+
+  /* Each PTX stream requires a separate data region to store the
+     launch arguments for cuLaunchKernel.  Allocate a new
+     cuda_map.  */
+  if (s->map->active)
+    {
+      map = cuda_map_create (size);
+      map->next = s->map;
+      s->map = map;
+    }
+  else if (s->map->size < size)
+    {
+      cuda_map_destroy (s->map);
+      map = cuda_map_create (size);
+      s->map = map;
+    }
+
+  s->map->active = true;
+
+  return s->map->d;
+}
 
 /* Target data function launch information.  */
 
@@ -232,7 +344,8 @@ init_streams_for_device (struct ptx_device *ptx_dev, int concurrency)
   null_stream->stream = NULL;
   null_stream->host_thread = pthread_self ();
   null_stream->multithreaded = true;
-  CUDA_CALL_ASSERT (cuMemAlloc, &null_stream->d, getpagesize ());
+  if (!map_init (null_stream))
+    return false;
 
   ptx_dev->null_stream = null_stream;
   ptx_dev->active_streams = NULL;
@@ -265,15 +378,18 @@ fini_streams_for_device (struct ptx_device *ptx_dev)
       struct ptx_stream *s = ptx_dev->active_streams;
       ptx_dev->active_streams = ptx_dev->active_streams->next;
 
-      CUDA_CALL (cuStreamDestroy, s->stream);
+      ret &= map_fini (s);
 
-      if (s->d)
-	CUDA_CALL (cuMemFree, s->d);
-
+      CUresult r = cuStreamDestroy (s->stream);
+      if (r != CUDA_SUCCESS)
+	{
+	  GOMP_PLUGIN_error ("cuStreamDestroy error: %s", cuda_error (r));
+	  ret = false;
+	}
       free (s);
     }
 
-  CUDA_CALL (cuMemFree, ptx_dev->null_stream->d);
+  ret &= map_fini (ptx_dev->null_stream);
   free (ptx_dev->null_stream);
   return ret;
 }
@@ -360,7 +476,13 @@ select_stream_for_async (int async, pthread_t thread, bool create,
 	     stream.  Associate it with the current host thread.  */
 	  s->host_thread = thread;
 	  s->multithreaded = false;
-	  CUDA_CALL_ASSERT (cuMemAlloc, &s->d, getpagesize ());
+
+	  if (!map_init (s))
+	    {
+	      pthread_mutex_unlock (&ptx_dev->stream_lock);
+	      GOMP_PLUGIN_fatal ("map_init fail");
+	    }
+
 	  s->next = ptx_dev->active_streams;
 	  ptx_dev->active_streams = s;
 	  ptx_dev->async_streams.arr[async] = s;
@@ -680,7 +802,10 @@ event_gc (bool memmap_lockable)
 	    {
 	    case PTX_EVT_MEM:
 	    case PTX_EVT_SYNC:
+	      break;
+
 	    case PTX_EVT_KNL:
+	      map_pop (e->addr);
 	      break;
 
 	    case PTX_EVT_ASYNC_CLEANUP:
@@ -769,7 +894,8 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
   int i;
   struct ptx_stream *dev_str;
   void *kargs[1];
-  void *hp, *dp;
+  void *hp;
+  CUdeviceptr dp;
   struct nvptx_thread *nvthd = nvptx_thread ();
   const char *maybe_abort_msg = "(perhaps abort was called)";
 
@@ -876,6 +1002,11 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	  dims[i] = default_dims[i];
     }
 
+  /* This reserves a chunk of a pre-allocated page of memory mapped on both
+     the host and the device. HP is a host pointer to the new chunk, and DP is
+     the corresponding device pointer.  */
+  dp = map_push (dev_str, mapnum * sizeof (void *));
+
   GOMP_PLUGIN_debug (0, "  %s: prepare mappings\n", __FUNCTION__);
 
   /* Copy the array of arguments to the mapped page.  */
@@ -883,11 +1014,9 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
   for (i = 0; i < mapnum; i++)
     ((void **) hp)[i] = devaddrs[i];
 
-  dp = (void *) dev_str->d;
-
   /* Copy the (device) pointers to arguments to the device (dp and hp might in
      fact have the same value on a unified-memory system).  */
-  CUDA_CALL_ASSERT (cuMemcpyHtoD, (CUdeviceptr) dp, hp,
+  CUDA_CALL_ASSERT (cuMemcpyHtoD, dp, hp,
 		    mapnum * sizeof (void *));
   GOMP_PLUGIN_debug (0, "  %s: kernel %s: launch"
 		     " gangs=%u, workers=%u, vectors=%u\n",
@@ -946,6 +1075,11 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 
   GOMP_PLUGIN_debug (0, "  %s: kernel %s: finished\n", __FUNCTION__,
 		     targ_fn->launch->fn);
+
+#ifndef DISABLE_ASYNC
+  if (async < acc_async_noval)
+#endif
+    map_pop (dev_str);
 }
 
 void * openacc_get_current_cuda_context (void);
@@ -1347,6 +1481,9 @@ nvptx_set_cuda_stream (int async, void *stream)
 	}
 
       CUDA_CALL_ASSERT (cuStreamDestroy, oldstream->stream);
+
+      if (!map_fini (oldstream))
+	GOMP_PLUGIN_fatal ("error when freeing host memory");
 
       free (oldstream);
     }
