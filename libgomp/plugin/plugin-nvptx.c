@@ -18,7 +18,7 @@
    more details.
 
    Under Section 7 of GPL version 3, you are granted additional
-   permissions described in the GCC Runtime Library Excepion, version
+   permissions described in the GCC Runtime Library Exception, version
    3.1, as published by the Free Software Foundation.
 
    You should have received a copy of the GNU General Public License and
@@ -232,7 +232,7 @@ init_streams_for_device (struct ptx_device *ptx_dev, int concurrency)
   null_stream->stream = NULL;
   null_stream->host_thread = pthread_self ();
   null_stream->multithreaded = true;
-  null_stream->d = (CUdeviceptr) NULL;
+  CUDA_CALL_ASSERT (cuMemAlloc, &null_stream->d, getpagesize ());
 
   ptx_dev->null_stream = null_stream;
   ptx_dev->active_streams = NULL;
@@ -273,6 +273,7 @@ fini_streams_for_device (struct ptx_device *ptx_dev)
       free (s);
     }
 
+  CUDA_CALL (cuMemFree, ptx_dev->null_stream->d);
   free (ptx_dev->null_stream);
   return ret;
 }
@@ -342,7 +343,6 @@ select_stream_for_async (int async, pthread_t thread, bool create,
 	  struct ptx_stream *s
 	    = GOMP_PLUGIN_malloc (sizeof (struct ptx_stream));
 
-	  s->d = (CUdeviceptr) NULL;
 	  if (existing)
 	    s->stream = existing;
 	  else
@@ -360,6 +360,7 @@ select_stream_for_async (int async, pthread_t thread, bool create,
 	     stream.  Associate it with the current host thread.  */
 	  s->host_thread = thread;
 	  s->multithreaded = false;
+	  CUDA_CALL_ASSERT (cuMemAlloc, &s->d, getpagesize ());
 	  s->next = ptx_dev->active_streams;
 	  ptx_dev->active_streams = s;
 	  ptx_dev->async_streams.arr[async] = s;
@@ -881,9 +882,6 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
   hp = alloca(sizeof(void *) * mapnum);
   for (i = 0; i < mapnum; i++)
     ((void **) hp)[i] = devaddrs[i];
-
-  if (dev_str->d == (CUdeviceptr) NULL)
-    CUDA_CALL_ASSERT (cuMemAlloc, &dev_str->d, getpagesize ());
 
   dp = (void *) dev_str->d;
 
