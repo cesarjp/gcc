@@ -151,7 +151,12 @@ cuda_map_destroy (struct cuda_map *map)
    routines maintains a queue of cuLaunchKernel arguments.  In order
    to minimize calls to cuMemAlloc for synchronous calls to
    cuLaunchKernel, the map routines maintains at least page size block
-   of memory on the accelerator.  */
+   of memory on the accelerator.
+
+   Calls to map_push and map_pop must be guarded by ptx_event_lock.
+   Likewise, calls to map_init and map_fini are guarded by
+   ptx_dev_lock inside GOMP_OFFLOAD_init_device and
+   GOMP_OFFLOAD_fini_device, respectively.  */
 
 static bool
 map_init (struct ptx_stream *s)
@@ -201,9 +206,6 @@ map_push (struct ptx_stream *s, size_t size)
 
   assert (s);
   assert (s->map);
-
-  if (size < getpagesize ())
-    size = getpagesize ();
 
   /* Each PTX stream requires a separate data region to store the
      launch arguments for cuLaunchKernel.  Allocate a new
@@ -1005,7 +1007,9 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
   /* This reserves a chunk of a pre-allocated page of memory mapped on both
      the host and the device. HP is a host pointer to the new chunk, and DP is
      the corresponding device pointer.  */
+  pthread_mutex_lock (&ptx_event_lock);
   dp = map_push (dev_str, mapnum * sizeof (void *));
+  pthread_mutex_unlock (&ptx_event_lock);
 
   GOMP_PLUGIN_debug (0, "  %s: prepare mappings\n", __FUNCTION__);
 
