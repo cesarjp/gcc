@@ -148,10 +148,7 @@ cuda_map_destroy (struct cuda_map *map)
    contains the data mapping arguments for cuLaunchKernel.  Each
    asynchronous PTX stream may have multiple pending kernel
    invocations, which are launched in a FIFO order.  As such, the map
-   routines maintains a queue of cuLaunchKernel arguments.  In order
-   to minimize calls to cuMemAlloc for synchronous calls to
-   cuLaunchKernel, the map routines maintains at least page size block
-   of memory on the accelerator.
+   routines maintains a queue of cuLaunchKernel arguments.
 
    Calls to map_push and map_pop must be guarded by ptx_event_lock.
    Likewise, calls to map_init and map_fini are guarded by
@@ -202,27 +199,32 @@ map_pop (struct ptx_stream *s)
 static CUdeviceptr
 map_push (struct ptx_stream *s, size_t size)
 {
-  struct cuda_map *map = NULL;
+  struct cuda_map *map = NULL, *t = NULL;
 
   assert (s);
   assert (s->map);
 
   /* Each PTX stream requires a separate data region to store the
      launch arguments for cuLaunchKernel.  Allocate a new
-     cuda_map.  */
+     cuda_map and push it to the end of the list.  */
   if (s->map->active)
     {
       map = cuda_map_create (size);
-      map->next = s->map;
-      s->map = map;
+
+      for (t = s->map; t->next != NULL; t = t->next)
+	;
+
+      t->next = map;
     }
   else if (s->map->size < size)
     {
       cuda_map_destroy (s->map);
       map = cuda_map_create (size);
-      s->map = map;
     }
+  else
+    map = s->map;
 
+  s->map = map;
   s->map->active = true;
 
   return s->map->d;
