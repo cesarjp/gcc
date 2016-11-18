@@ -12726,7 +12726,7 @@ verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
 		      "%qs specifies a conflicting level of parallelism",
 		      omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	    inform (OMP_CLAUSE_LOCATION (c_level),
-		    "... to the previous %qs clause here",
+		    "previous %qs clause",
 		    omp_clause_code_name[OMP_CLAUSE_CODE (c_level)]);
 	    /* Drop the conflicting clause.  */
 	    gcc_checking_assert (c_p != NULL_TREE);
@@ -12854,7 +12854,7 @@ verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
 	gcc_unreachable ();
       if (c_diag_p != NULL_TREE)
 	inform (OMP_CLAUSE_LOCATION (c_diag_p),
-		"... with %qs clause here",
+		"previous %qs clause",
 		omp_clause_code_name[OMP_CLAUSE_CODE (c_diag_p)]);
       else
 	{
@@ -12862,7 +12862,7 @@ verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
 	     OpenACC routine directive itself.  However, that of c_level_p
 	     should be close.  */
 	  location_t loc_routine = OMP_CLAUSE_LOCATION (c_level_p);
-	  inform (loc_routine, "... without %qs clause near to here",
+	  inform (loc_routine, "previous %qs clause near to here",
 		  omp_clause_code_name[OMP_CLAUSE_CODE (c_diag)]);
 	}
       /* Incompatible.  */
