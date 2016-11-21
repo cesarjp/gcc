@@ -11817,8 +11817,8 @@ c_parser_oacc_shape_clause (c_parser *parser, location_t loc,
    seq */
 
 static tree
-c_parser_oacc_simple_clause (c_parser * /* parser */, location_t loc,
-			     enum omp_clause_code code, tree list)
+c_parser_oacc_simple_clause (location_t loc, enum omp_clause_code code,
+			     tree list)
 {
   check_no_duplicate_clause (list, code, omp_clause_code_name[code]);
 
@@ -11893,7 +11893,6 @@ c_parser_oacc_clause_bind (c_parser *parser, tree list)
 		  token->value);
       else
 	{
-	  //TODO? TREE_USED (decl) = 1;
 	  tree name_id = DECL_NAME (decl);
 	  name = build_string (IDENTIFIER_LENGTH (name_id),
 			       IDENTIFIER_POINTER (name_id));
@@ -13222,7 +13221,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "async";
 	  break;
 	case PRAGMA_OACC_CLAUSE_AUTO:
-	  clauses = c_parser_oacc_simple_clause (parser, here, OMP_CLAUSE_AUTO,
+	  clauses = c_parser_oacc_simple_clause (here, OMP_CLAUSE_AUTO,
 						clauses);
 	  c_name = "auto";
 	  break;
@@ -13288,8 +13287,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "if";
 	  break;
 	case PRAGMA_OACC_CLAUSE_INDEPENDENT:
-	  clauses = c_parser_oacc_simple_clause (parser, here,
-						 OMP_CLAUSE_INDEPENDENT,
+	  clauses = c_parser_oacc_simple_clause (here, OMP_CLAUSE_INDEPENDENT,
 						 clauses);
 	  c_name = "independent";
 	  break;
@@ -13298,8 +13296,8 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "link";
 	  break;
 	case PRAGMA_OACC_CLAUSE_NOHOST:
-	  clauses = c_parser_oacc_simple_clause (parser, here,
-						 OMP_CLAUSE_NOHOST, clauses);
+	  clauses = c_parser_oacc_simple_clause (here, OMP_CLAUSE_NOHOST,
+						 clauses);
 	  c_name = "nohost";
 	  break;
 	case PRAGMA_OACC_CLAUSE_NUM_GANGS:
@@ -13343,8 +13341,7 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	  c_name = "self";
 	  break;
 	case PRAGMA_OACC_CLAUSE_SEQ:
-	  clauses = c_parser_oacc_simple_clause (parser, here, OMP_CLAUSE_SEQ,
-						clauses);
+	  clauses = c_parser_oacc_simple_clause (here, OMP_CLAUSE_SEQ, clauses);
 	  c_name = "seq";
 	  break;
 	case PRAGMA_OACC_CLAUSE_TILE:

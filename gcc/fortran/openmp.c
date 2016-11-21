@@ -2263,17 +2263,20 @@ gfc_oacc_routine_dims (gfc_omp_clauses *clauses)
 
       if (clauses->gang)
 	{
-	  level = GOMP_DIM_GANG, mask |= GOMP_DIM_MASK (level);
+	  level = GOMP_DIM_GANG;
+	  mask |= GOMP_DIM_MASK (level);
 	  ret = OACC_FUNCTION_GANG;
 	}
       if (clauses->worker)
 	{
-	  level = GOMP_DIM_WORKER, mask |= GOMP_DIM_MASK (level);
+	  level = GOMP_DIM_WORKER;
+	  mask |= GOMP_DIM_MASK (level);
 	  ret = OACC_FUNCTION_WORKER;
 	}
       if (clauses->vector)
 	{
-	  level = GOMP_DIM_VECTOR, mask |= GOMP_DIM_MASK (level);
+	  level = GOMP_DIM_VECTOR;
+	  mask |= GOMP_DIM_MASK (level);
 	  ret = OACC_FUNCTION_VECTOR;
 	}
       if (clauses->seq)
@@ -2323,7 +2326,8 @@ gfc_match_oacc_routine (void)
 	      && (isym = gfc_find_subroutine (buffer)) == NULL)
 	    {
 	      st = gfc_find_symtree (gfc_current_ns->sym_root, buffer);
-	      if (st == NULL && gfc_current_ns->proc_name->attr.contained
+	      if (st == NULL
+		  && gfc_current_ns->proc_name->attr.contained
 		  && gfc_current_ns->parent)
 		st = gfc_find_symtree (gfc_current_ns->parent->sym_root,
 				       buffer);
@@ -5956,22 +5960,22 @@ resolve_oacc_loop_blocks (gfc_code *code)
     {
       if (code->ext.omp_clauses->independent)
 	gfc_error ("Clause SEQ conflicts with INDEPENDENT at %L", &code->loc);
-      if (code->ext.omp_clauses->gang)
+      else if (code->ext.omp_clauses->gang)
 	gfc_error ("Clause SEQ conflicts with GANG at %L", &code->loc);
-      if (code->ext.omp_clauses->worker)
+      else if (code->ext.omp_clauses->worker)
 	gfc_error ("Clause SEQ conflicts with WORKER at %L", &code->loc);
-      if (code->ext.omp_clauses->vector)
+      else if (code->ext.omp_clauses->vector)
 	gfc_error ("Clause SEQ conflicts with VECTOR at %L", &code->loc);
-      if (code->ext.omp_clauses->par_auto)
+      else if (code->ext.omp_clauses->par_auto)
 	gfc_error ("Clause SEQ conflicts with AUTO at %L", &code->loc);
     }
   if (code->ext.omp_clauses->par_auto)
     {
       if (code->ext.omp_clauses->gang)
 	gfc_error ("Clause AUTO conflicts with GANG at %L", &code->loc);
-      if (code->ext.omp_clauses->worker)
+      else if (code->ext.omp_clauses->worker)
 	gfc_error ("Clause AUTO conflicts with WORKER at %L", &code->loc);
-      if (code->ext.omp_clauses->vector)
+      else if (code->ext.omp_clauses->vector)
 	gfc_error ("Clause AUTO conflicts with VECTOR at %L", &code->loc);
     }
   if (code->ext.omp_clauses->tile_list && code->ext.omp_clauses->gang
@@ -6036,11 +6040,11 @@ gfc_resolve_oacc_blocks (gfc_code *code, gfc_namespace *ns)
 
   if (code->ext.omp_clauses->gang)
     dims = OACC_FUNCTION_GANG;
-  if (code->ext.omp_clauses->worker)
+  else if (code->ext.omp_clauses->worker)
     dims = OACC_FUNCTION_WORKER;
-  if (code->ext.omp_clauses->vector)
+  else if (code->ext.omp_clauses->vector)
     dims = OACC_FUNCTION_VECTOR;
-  if (code->ext.omp_clauses->seq)
+  else if (code->ext.omp_clauses->seq)
     dims = OACC_FUNCTION_SEQ;
 
   if (dims == OACC_FUNCTION_NONE && ctx.previous != NULL

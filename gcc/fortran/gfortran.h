@@ -316,7 +316,8 @@ enum save_state
 
 /* Flags to keep track of ACC routine states.  */
 enum oacc_function
-{ OACC_FUNCTION_NONE = 0,
+{
+  OACC_FUNCTION_NONE = 0,
   OACC_FUNCTION_GANG,
   OACC_FUNCTION_WORKER,
   OACC_FUNCTION_VECTOR,
