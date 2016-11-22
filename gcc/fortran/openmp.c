@@ -5960,22 +5960,22 @@ resolve_oacc_loop_blocks (gfc_code *code)
     {
       if (code->ext.omp_clauses->independent)
 	gfc_error ("Clause SEQ conflicts with INDEPENDENT at %L", &code->loc);
-      else if (code->ext.omp_clauses->gang)
+      if (code->ext.omp_clauses->gang)
 	gfc_error ("Clause SEQ conflicts with GANG at %L", &code->loc);
-      else if (code->ext.omp_clauses->worker)
+      if (code->ext.omp_clauses->worker)
 	gfc_error ("Clause SEQ conflicts with WORKER at %L", &code->loc);
-      else if (code->ext.omp_clauses->vector)
+      if (code->ext.omp_clauses->vector)
 	gfc_error ("Clause SEQ conflicts with VECTOR at %L", &code->loc);
-      else if (code->ext.omp_clauses->par_auto)
+      if (code->ext.omp_clauses->par_auto)
 	gfc_error ("Clause SEQ conflicts with AUTO at %L", &code->loc);
     }
   if (code->ext.omp_clauses->par_auto)
     {
       if (code->ext.omp_clauses->gang)
 	gfc_error ("Clause AUTO conflicts with GANG at %L", &code->loc);
-      else if (code->ext.omp_clauses->worker)
+      if (code->ext.omp_clauses->worker)
 	gfc_error ("Clause AUTO conflicts with WORKER at %L", &code->loc);
-      else if (code->ext.omp_clauses->vector)
+      if (code->ext.omp_clauses->vector)
 	gfc_error ("Clause AUTO conflicts with VECTOR at %L", &code->loc);
     }
   if (code->ext.omp_clauses->tile_list && code->ext.omp_clauses->gang
