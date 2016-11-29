@@ -93,6 +93,9 @@ program test
       DO j = 1,10
       ENDDO
     ENDDO
+    !$acc loop tile(-1) ! { dg-warning "must be positive" }
+    do i = 1,10
+    enddo
     !$acc loop vector tile(*)
     DO i = 1,10
     ENDDO
@@ -126,6 +129,9 @@ program test
       DO j = 1,10
       ENDDO
     ENDDO
+    !$acc loop tile(-1) ! { dg-warning "must be positive" }
+    do i = 1,10
+    enddo
     !$acc loop vector tile(*)
     DO i = 1,10
     ENDDO
@@ -236,6 +242,9 @@ program test
     DO j = 1,10
     ENDDO
   ENDDO
+  !$acc kernels loop tile(-1) ! { dg-warning "must be positive" }
+  do i = 1,10
+  enddo
   !$acc kernels loop vector tile(*)
   DO i = 1,10
   ENDDO
@@ -324,6 +333,9 @@ program test
     DO j = 1,10
     ENDDO
   ENDDO
+  !$acc parallel loop tile(-1) ! { dg-warning "must be positive" }
+  do i = 1,10
+  enddo
   !$acc parallel loop vector tile(*)
   DO i = 1,10
   ENDDO

@@ -3726,8 +3726,8 @@ resolve_nonnegative_int_expr (gfc_expr *expr, const char *clause)
   if (expr->expr_type == EXPR_CONSTANT
       && expr->ts.type == BT_INTEGER
       && mpz_sgn (expr->value.integer) < 0)
-    gfc_error (0, "INTEGER expression of %s clause at %L must be "
-	       "non-negative", clause, &expr->where);
+    gfc_warning (0, "INTEGER expression of %s clause at %L must be "
+		 "non-negative", clause, &expr->where);
 }
 
 /* Emits error when symbol is pointer, cray pointer or cray pointee
@@ -5905,11 +5905,11 @@ resolve_oacc_loop_blocks (gfc_code *code)
 	  if (el->expr == NULL)
 	    {
 	      /* NULL expressions are used to represent '*' arguments.
-		 Convert those to a -1 expressions.  */
+		 Convert those to a 0 expressions.  */
 	      el->expr = gfc_get_constant_expr (BT_INTEGER,
 						gfc_default_integer_kind,
 						&code->loc);
-	      mpz_set_si (el->expr->value.integer, -1);
+	      mpz_set_si (el->expr->value.integer, 0);
 	    }
 	  else
 	    {
