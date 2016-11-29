@@ -3726,8 +3726,8 @@ resolve_nonnegative_int_expr (gfc_expr *expr, const char *clause)
   if (expr->expr_type == EXPR_CONSTANT
       && expr->ts.type == BT_INTEGER
       && mpz_sgn (expr->value.integer) < 0)
-    gfc_warning (0, "INTEGER expression of %s clause at %L must be "
-		 "non-negative", clause, &expr->where);
+    gfc_error (0, "INTEGER expression of %s clause at %L must be "
+	       "non-negative", clause, &expr->where);
 }
 
 /* Emits error when symbol is pointer, cray pointer or cray pointee
@@ -4757,6 +4757,8 @@ resolve_omp_clauses (gfc_code *code, gfc_omp_clauses *omp_clauses,
     if (omp_clauses->wait_list)
       for (el = omp_clauses->wait_list; el; el = el->next)
 	resolve_scalar_int_expr (el->expr, "WAIT");
+  if (omp_clauses->collapse && omp_clauses->tile_list)
+    gfc_error ("Incompatible use of TILE and COLLAPSE at %L", &code->loc);
   if (omp_clauses->depend_source && code->op != EXEC_OMP_ORDERED)
     gfc_error ("SOURCE dependence type only allowed "
 	       "on ORDERED directive at %L", &code->loc);
