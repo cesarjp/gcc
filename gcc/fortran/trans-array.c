@@ -5782,9 +5782,9 @@ gfc_trans_array_cobounds (tree type, stmtblock_t * pblock,
 /* Generate code to evaluate non-constant array bounds.  Sets *poffset and
    returns the size (in elements) of the array.  */
 
-tree
+static tree
 gfc_trans_array_bounds (tree type, gfc_symbol * sym, tree * poffset,
-                        stmtblock_t * pblock, bool init_vla)
+                        stmtblock_t * pblock)
 {
   gfc_array_spec *as;
   tree size;
@@ -5861,9 +5861,7 @@ gfc_trans_array_bounds (tree type, gfc_symbol * sym, tree * poffset,
     }
 
   gfc_trans_array_cobounds (type, pblock, sym);
-
-  if (init_vla)
-    gfc_trans_vla_type_sizes (sym, pblock);
+  gfc_trans_vla_type_sizes (sym, pblock);
 
   *poffset = offset;
   return size;
@@ -5927,7 +5925,7 @@ gfc_trans_auto_array_allocation (tree decl, gfc_symbol * sym,
       && !INTEGER_CST_P (sym->ts.u.cl->backend_decl))
     gfc_conv_string_length (sym->ts.u.cl, NULL, &init);
 
-  size = gfc_trans_array_bounds (type, sym, &offset, &init, true);
+  size = gfc_trans_array_bounds (type, sym, &offset, &init);
 
   /* Don't actually allocate space for Cray Pointees.  */
   if (sym->attr.cray_pointee)
@@ -6022,7 +6020,7 @@ gfc_trans_g77_array (gfc_symbol * sym, gfc_wrapped_block * block)
     gfc_conv_string_length (sym->ts.u.cl, NULL, &init);
 
   /* Evaluate the bounds of the array.  */
-  gfc_trans_array_bounds (type, sym, &offset, &init, true);
+  gfc_trans_array_bounds (type, sym, &offset, &init);
 
   /* Set the offset.  */
   if (TREE_CODE (GFC_TYPE_ARRAY_OFFSET (type)) == VAR_DECL)
