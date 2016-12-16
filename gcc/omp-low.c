@@ -16299,7 +16299,7 @@ convert_to_pointer (tree var, gimple_seq *gs)
   if (is_reference (var))
     {
       tmp = create_tmp_var (type);
-      gimplify_assign (tmp, var, gs);
+      gimplify_assign (tmp, build_simple_mem_ref (var), gs);
       var = tmp;
     }
 
@@ -16781,7 +16781,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 		    tree inner_type = is_reference (var)
 		      ? TREE_TYPE (type) : type;
 		    gcc_checking_assert (is_gimple_omp_oacc (ctx->stmt));
-		    if (TYPE_PRECISION (type) <= POINTER_SIZE)
+		    if (TYPE_PRECISION (inner_type) <= POINTER_SIZE)
 		      {
 			oacc_firstprivate_int = true;
 			if (is_gimple_reg (var)
