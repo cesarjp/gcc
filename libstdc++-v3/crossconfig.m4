@@ -156,7 +156,9 @@ case "${host}" in
     GLIBCXX_CHECK_STDLIB_SUPPORT
     AC_DEFINE(_GLIBCXX_USE_RANDOM_TR1)
     GCC_CHECK_TLS
-    AC_CHECK_FUNCS(__cxa_thread_atexit_impl)
+    AS_IF([test x"${enable___cxa_atexit}" = xyes], [
+      AC_CHECK_FUNCS(__cxa_thread_atexit_impl)
+    ])
     AM_ICONV
     ;;
   *-mingw32*)

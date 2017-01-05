@@ -883,6 +883,7 @@ with_python_dir
 enable_werror
 enable_vtable_verify
 enable_libstdcxx_time
+enable___cxa_atexit
 enable_tls
 enable_rpath
 with_libiconv_prefix
@@ -1577,6 +1578,7 @@ Optional Features:
   --enable-vtable-verify  enable vtable verify [default=no]
   --enable-libstdcxx-time[=KIND]
                           use KIND for check type [default=auto]
+  --enable-__cxa_atexit   enable __cxa_atexit for C++ (default)
   --enable-tls            Use thread-local storage [default=yes]
   --disable-rpath         do not hardcode runtime library paths
   --enable-linux-futex    use the Linux futex system call [default=default]
@@ -11596,7 +11598,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11599 "configure"
+#line 11601 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11702,7 +11704,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11705 "configure"
+#line 11707 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -15388,7 +15390,7 @@ $as_echo "$glibcxx_cv_atomic_long_long" >&6; }
   # Fake what AC_TRY_COMPILE does.
 
     cat > conftest.$ac_ext << EOF
-#line 15391 "configure"
+#line 15393 "configure"
 int main()
 {
   typedef bool atomic_type;
@@ -15423,7 +15425,7 @@ $as_echo "$glibcxx_cv_atomic_bool" >&6; }
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
-#line 15426 "configure"
+#line 15428 "configure"
 int main()
 {
   typedef short atomic_type;
@@ -15458,7 +15460,7 @@ $as_echo "$glibcxx_cv_atomic_short" >&6; }
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
-#line 15461 "configure"
+#line 15463 "configure"
 int main()
 {
   // NB: _Atomic_word not necessarily int.
@@ -15494,7 +15496,7 @@ $as_echo "$glibcxx_cv_atomic_int" >&6; }
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
-#line 15497 "configure"
+#line 15499 "configure"
 int main()
 {
   typedef long long atomic_type;
@@ -15575,7 +15577,7 @@ $as_echo "$as_me: WARNING: Performance of certain classes will degrade as a resu
   # unnecessary for this test.
 
     cat > conftest.$ac_ext << EOF
-#line 15578 "configure"
+#line 15580 "configure"
 int main()
 {
   _Decimal32 d1;
@@ -15617,7 +15619,7 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
   # unnecessary for this test.
 
     cat > conftest.$ac_ext << EOF
-#line 15620 "configure"
+#line 15622 "configure"
 template<typename T1, typename T2>
   struct same
   { typedef T2 type; };
@@ -15651,7 +15653,7 @@ $as_echo "$enable_int128" >&6; }
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
-#line 15654 "configure"
+#line 15656 "configure"
 template<typename T1, typename T2>
   struct same
   { typedef T2 type; };
@@ -21694,6 +21696,15 @@ _ACEOF
 fi
 
 done
+
+
+# Enable __cxa_atexit for C++.
+# Check whether --enable-__cxa_atexit was given.
+if test "${enable___cxa_atexit+set}" = set; then :
+  enableval=$enable___cxa_atexit;
+else
+  enable___cxa_atexit=yes
+fi
 
 
 # Only do link tests if native. Else, hardcode.
@@ -27968,7 +27979,11 @@ $as_echo "#define HAVE_TLS 1" >>confdefs.h
 
   fi
 
-  for ac_func in __cxa_thread_atexit_impl
+  # If __cxa_atexit is disabled, don't bother checking for
+  # __cxa_thread_atexit_impl.
+  if test x"${enable___cxa_atexit}" = xyes; then :
+
+    for ac_func in __cxa_thread_atexit_impl
 do :
   ac_fn_c_check_func "$LINENO" "__cxa_thread_atexit_impl" "ac_cv_func___cxa_thread_atexit_impl"
 if test "x$ac_cv_func___cxa_thread_atexit_impl" = x""yes; then :
@@ -27979,6 +27994,8 @@ _ACEOF
 fi
 done
 
+
+fi
 
   # For iconv support.
 
@@ -59737,7 +59754,9 @@ $as_echo "$gcc_cv_have_tls" >&6; }
 $as_echo "#define HAVE_TLS 1" >>confdefs.h
 
   fi
-    for ac_func in __cxa_thread_atexit_impl
+    if test x"${enable___cxa_atexit}" = xyes; then :
+
+      for ac_func in __cxa_thread_atexit_impl
 do :
   ac_fn_c_check_func "$LINENO" "__cxa_thread_atexit_impl" "ac_cv_func___cxa_thread_atexit_impl"
 if test "x$ac_cv_func___cxa_thread_atexit_impl" = x""yes; then :
@@ -59748,6 +59767,8 @@ _ACEOF
 fi
 done
 
+
+fi
 
 
 

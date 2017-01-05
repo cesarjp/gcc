@@ -239,6 +239,11 @@ strings.h sys/ipc.h sys/isa_defs.h sys/machine.h sys/param.h \
 sys/resource.h sys/sem.h sys/stat.h sys/time.h sys/types.h unistd.h \
 wchar.h wctype.h])
 
+# Enable __cxa_atexit for C++.
+AC_ARG_ENABLE(__cxa_atexit,
+[AS_HELP_STRING([--enable-__cxa_atexit], [enable __cxa_atexit for C++ (default)])],
+[], [enable___cxa_atexit=yes])
+
 # Only do link tests if native. Else, hardcode.
 if $GLIBCXX_IS_NATIVE; then
 
@@ -255,7 +260,11 @@ if $GLIBCXX_IS_NATIVE; then
   # For TLS support.
   GCC_CHECK_TLS
 
-  AC_CHECK_FUNCS(__cxa_thread_atexit_impl)
+  # If __cxa_atexit is disabled, don't bother checking for
+  # __cxa_thread_atexit_impl.
+  AS_IF([test x"${enable___cxa_atexit}" = xyes], [
+    AC_CHECK_FUNCS(__cxa_thread_atexit_impl)
+  ])
 
   # For iconv support.
   AM_ICONV
