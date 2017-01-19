@@ -16702,12 +16702,11 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	if (offloaded && !(OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 			   && OMP_CLAUSE_MAP_IN_REDUCTION (c)))
 	  {
-
-	    tree new_var = lookup_decl (var, ctx);
-	    tree type = TREE_TYPE (new_var);
-	    bool oacc_firstprivate_int = false;
-	    tree inner_type = is_reference (new_var) ? TREE_TYPE (type) : type;
 	    tree var_type = TREE_TYPE (var);
+	    tree new_var = lookup_decl (var, ctx);
+	    bool oacc_firstprivate_int = false;
+	    tree inner_type = is_reference (new_var) ? TREE_TYPE (var_type) : var_type;
+
 	    bool rcv_by_ref =
 	      (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 	       && GOMP_MAP_DYNAMIC_ARRAY_P (OMP_CLAUSE_MAP_KIND (c))
@@ -16717,7 +16716,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    x = build_receiver_ref (var, rcv_by_ref, ctx);
 
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE
-		&& TREE_CODE (type) != COMPLEX_TYPE
+		&& TREE_CODE (var_type) != COMPLEX_TYPE
 		&& TYPE_PRECISION (inner_type) <= POINTER_SIZE)
 	      oacc_firstprivate_int = true;
 
@@ -16726,7 +16725,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 		&& OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_POINTER
 		&& !OMP_CLAUSE_MAP_ZERO_BIAS_ARRAY_SECTION (c)
-		&& TREE_CODE (TREE_TYPE (var)) == ARRAY_TYPE
+		&& TREE_CODE (var_type) == ARRAY_TYPE
 		&& !oacc_firstprivate_int)
 	      x = build_simple_mem_ref (x);
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE)
@@ -16735,12 +16734,12 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 		if (oacc_firstprivate_int)
 		  x = convert_from_pointer (x, is_reference (var), &fplist);
 		else if (is_reference (new_var)
-		    && TREE_CODE (type) != POINTER_TYPE)
+		    && TREE_CODE (var_type) != POINTER_TYPE)
 		  {
 		    /* Create a local object to hold the instance
 		       value.  */
 		    const char *id = IDENTIFIER_POINTER (DECL_NAME (new_var));
-		    tree inst = create_tmp_var (TREE_TYPE (type), id);
+		    tree inst = create_tmp_var (TREE_TYPE (var_type), id);
 		    gimplify_assign (inst, fold_indirect_ref (x), &fplist);
 		    x = build_fold_addr_expr (inst);
 		  }
