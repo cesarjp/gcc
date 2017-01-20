@@ -16721,8 +16721,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 		&& maybe_lookup_decl_in_outer_ctx (var, ctx) == NULL)
 	      oacc_firstprivate_int = true;
 
-	    x = build_receiver_ref (var, true, ctx);
-
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 		&& OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_POINTER
 		&& !OMP_CLAUSE_MAP_ZERO_BIAS_ARRAY_SECTION (c)
