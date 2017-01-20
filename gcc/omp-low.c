@@ -4359,6 +4359,19 @@ maybe_lookup_decl_in_outer_ctx (tree decl, omp_context *ctx)
   return t ? t : decl;
 }
 
+/* Returns true if DECL is present inside a field that encloses CTX.  */
+
+static bool
+maybe_lookup_field_in_outer_ctx (tree decl, omp_context *ctx)
+{
+  omp_context *up;
+
+  for (up = ctx->outer; up; up = up->outer)
+    if (maybe_lookup_field (decl, up))
+      return true;;
+
+  return false;  
+}
 
 /* Construct the initialization value for reduction operation OP.  */
 
@@ -16718,7 +16731,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE
 		&& TREE_CODE (var_type) != COMPLEX_TYPE
 		&& TYPE_PRECISION (inner_type) <= POINTER_SIZE
-		&& maybe_lookup_decl_in_outer_ctx (var, ctx) == NULL)
+		&& !maybe_lookup_field_in_outer_ctx (var, ctx))
 	      oacc_firstprivate_int = true;
 
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
@@ -16993,7 +17006,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 		    gcc_checking_assert (is_gimple_omp_oacc (ctx->stmt));
 		    if (TREE_CODE (inner_type) != COMPLEX_TYPE
 			&& TYPE_PRECISION (inner_type) <= POINTER_SIZE
-			&& maybe_lookup_decl_in_outer_ctx (var, ctx) == NULL)
+			&& !maybe_lookup_field_in_outer_ctx (var, ctx))
 		      {
 			oacc_firstprivate_int = true;
 			if (is_gimple_reg (var)
