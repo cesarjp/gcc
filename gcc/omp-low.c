@@ -16705,8 +16705,8 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    tree var_type = TREE_TYPE (var);
 	    tree new_var = lookup_decl (var, ctx);
 	    bool oacc_firstprivate_int = false;
-	    tree inner_type = is_reference (new_var) ? TREE_TYPE (var_type) : var_type;
-
+	    tree inner_type = is_reference (new_var)
+	      ? TREE_TYPE (var_type) : var_type;
 	    bool rcv_by_ref =
 	      (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 	       && GOMP_MAP_DYNAMIC_ARRAY_P (OMP_CLAUSE_MAP_KIND (c))
@@ -16717,7 +16717,8 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE
 		&& TREE_CODE (var_type) != COMPLEX_TYPE
-		&& TYPE_PRECISION (inner_type) <= POINTER_SIZE)
+		&& TYPE_PRECISION (inner_type) <= POINTER_SIZE
+		&& maybe_lookup_decl_in_outer_ctx (var, ctx) == NULL)
 	      oacc_firstprivate_int = true;
 
 	    x = build_receiver_ref (var, true, ctx);
@@ -16993,7 +16994,8 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 		      ? TREE_TYPE (type) : type;
 		    gcc_checking_assert (is_gimple_omp_oacc (ctx->stmt));
 		    if (TREE_CODE (inner_type) != COMPLEX_TYPE
-			&& TYPE_PRECISION (inner_type) <= POINTER_SIZE)
+			&& TYPE_PRECISION (inner_type) <= POINTER_SIZE
+			&& maybe_lookup_decl_in_outer_ctx (var, ctx) == NULL)
 		      {
 			oacc_firstprivate_int = true;
 			if (is_gimple_reg (var)
