@@ -3,7 +3,7 @@
 program test
   implicit none
 
-  integer (kind=1)  :: i1i, i1o 
+  integer (kind=1)  :: i1i, i1o
   integer (kind=2)  :: i2i, i2o
   integer (kind=4)  :: i4i, i4o
   integer (kind=8)  :: i8i, i8o
@@ -44,7 +44,7 @@ program test
 
   ch1i = "a"
   ch4i = "b"
-  
+
   !$acc parallel firstprivate(i1i, i2i, i4i, i8i, i16i) &
   !$acc copyout(i1o, i2o, i4o, i8o, i16o) &
   !$acc firstprivate(l1i, l2i, l4i, l8i, l16i) &
@@ -64,7 +64,7 @@ program test
   l4o = l4i
   l8o = l8i
   l16o = l16i
-  
+
   r4o = r4i
   r8o = r8i
 
@@ -108,7 +108,7 @@ subroutine subtest(i1i, i2i, i4i, i8i, i16i, i1o, i2o, i4o, i8o, i16o, &
                    ch1i, ch4i, ch1o, ch4o)
   implicit none
 
-  integer (kind=1)  :: i1i, i1o 
+  integer (kind=1)  :: i1i, i1o
   integer (kind=2)  :: i2i, i2o
   integer (kind=4)  :: i4i, i4o
   integer (kind=8)  :: i8i, i8o
@@ -128,7 +128,7 @@ subroutine subtest(i1i, i2i, i4i, i8i, i16i, i1o, i2o, i4o, i8o, i16o, &
 
   character (kind=1) :: ch1i, ch1o
   character (kind=4) :: ch4i, ch4o
-  
+
   i1i = -i1i
   i2i = -i2i
   i4i = -i4i
@@ -149,7 +149,7 @@ subroutine subtest(i1i, i2i, i4i, i8i, i16i, i1o, i2o, i4o, i8o, i16o, &
 
   ch1i = "z"
   ch4i = "y"
-  
+
   !$acc parallel firstprivate(i1i, i2i, i4i, i8i, i16i) &
   !$acc copyout(i1o, i2o, i4o, i8o, i16o) &
   !$acc firstprivate(l1i, l2i, l4i, l8i, l16i) &
@@ -169,7 +169,7 @@ subroutine subtest(i1i, i2i, i4i, i8i, i16i, i1o, i2o, i4o, i8o, i16o, &
   l4o = l4i
   l8o = l8i
   l16o = l16i
-  
+
   r4o = r4i
   r8o = r8i
 

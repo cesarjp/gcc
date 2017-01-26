@@ -61,7 +61,7 @@ main ()
   test_ref (i8i, i8o, i16i, i16o, i32i, i32o, i64i, i64o, u8i, u8o, u16i,
 	    u16o, u32i, u32o, u64i, u64o, r32i, r32o, r64i, r64o, cii, cio,
 	    cfi, cfo, cdi, cdo);
-  
+
   assert(i8o = i8i);
   assert(i16o = i16i);
   assert(i32o = i32i);
