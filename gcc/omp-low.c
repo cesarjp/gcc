@@ -16504,7 +16504,7 @@ convert_to_firstprivate_pointer (tree var, gimple_seq *gs)
   return var;
 }
 
-/* Like convert_to_pointer, but restore the original type.  */
+/* Like convert_to_firstprivate_pointer, but restore the original type.  */
 
 static tree
 convert_from_firstprivate_pointer (tree var, bool is_ref, gimple_seq *gs)
