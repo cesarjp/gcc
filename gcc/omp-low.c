@@ -4368,9 +4368,9 @@ maybe_lookup_field_in_outer_ctx (tree decl, omp_context *ctx)
 
   for (up = ctx->outer; up; up = up->outer)
     if (maybe_lookup_field (decl, up))
-      return true;;
+      return true;
 
-  return false;  
+  return false;
 }
 
 /* Construct the initialization value for reduction operation OP.  */
@@ -16460,7 +16460,7 @@ lower_omp_taskreg (gimple_stmt_iterator *gsi_p, omp_context *ctx)
    mappings. */
 
 static tree
-convert_to_pointer (tree var, gimple_seq *gs)
+convert_to_firstprivate_pointer (tree var, gimple_seq *gs)
 {
   tree type = TREE_TYPE (var), new_type = NULL_TREE;
   tree tmp = NULL_TREE;
@@ -16482,7 +16482,7 @@ convert_to_pointer (tree var, gimple_seq *gs)
 
   switch (TYPE_PRECISION (type))
     {
-    case 8: new_type = unsigned_char_type_node; break;
+    case 1: case 2: case 4: case 8: new_type = unsigned_char_type_node; break;
     case 16: new_type = short_unsigned_type_node; break;
     case 32: new_type = unsigned_type_node; break;
     case 64: new_type = long_unsigned_type_node; break;
@@ -16507,7 +16507,7 @@ convert_to_pointer (tree var, gimple_seq *gs)
 /* Like convert_to_pointer, but restore the original type.  */
 
 static tree
-convert_from_pointer (tree var, bool is_ref, gimple_seq *gs)
+convert_from_firstprivate_pointer (tree var, bool is_ref, gimple_seq *gs)
 {
   tree type = TREE_TYPE (var);
   tree new_type = NULL_TREE;
@@ -16522,7 +16522,7 @@ convert_from_pointer (tree var, bool is_ref, gimple_seq *gs)
 
   switch (TYPE_PRECISION (type))
     {
-    case 8: new_type = unsigned_char_type_node; break;
+    case 1: case 2: case 4: case 8: new_type = unsigned_char_type_node; break;
     case 16: new_type = short_unsigned_type_node; break;
     case 32: new_type = unsigned_type_node; break;
     case 64: new_type = long_unsigned_type_node; break;
@@ -16729,8 +16729,11 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    x = build_receiver_ref (var, rcv_by_ref, ctx);
 
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE
-		&& TREE_CODE (var_type) != COMPLEX_TYPE
+		&& (TREE_CODE (inner_type) == REAL_TYPE
+		    || (!is_reference (var) && INTEGRAL_TYPE_P (inner_type))
+		    || TREE_CODE (inner_type) == INTEGER_TYPE)
 		&& TYPE_PRECISION (inner_type) <= POINTER_SIZE
+		&& TYPE_PRECISION (inner_type) != 0
 		&& !maybe_lookup_field_in_outer_ctx (var, ctx))
 	      oacc_firstprivate_int = true;
 
@@ -16744,7 +16747,8 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	      {
 		gcc_assert (is_gimple_omp_oacc (ctx->stmt));
 		if (oacc_firstprivate_int)
-		  x = convert_from_pointer (x, is_reference (var), &fplist);
+		  x = convert_from_firstprivate_pointer (x, is_reference (var),
+							 &fplist);
 		else if (is_reference (new_var)
 		    && TREE_CODE (var_type) != POINTER_TYPE)
 		  {
@@ -17004,15 +17008,19 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 		    tree inner_type = is_reference (var)
 		      ? TREE_TYPE (type) : type;
 		    gcc_checking_assert (is_gimple_omp_oacc (ctx->stmt));
-		    if (TREE_CODE (inner_type) != COMPLEX_TYPE
+		    if ((TREE_CODE (inner_type) == REAL_TYPE
+			 || (!is_reference (var)
+			     && INTEGRAL_TYPE_P (inner_type))
+			 || TREE_CODE (inner_type) == INTEGER_TYPE)
 			&& TYPE_PRECISION (inner_type) <= POINTER_SIZE
+			&& TYPE_PRECISION (inner_type) != 0
 			&& !maybe_lookup_field_in_outer_ctx (var, ctx))
 		      {
 			oacc_firstprivate_int = true;
 			if (is_gimple_reg (var)
 			    && OMP_CLAUSE_FIRSTPRIVATE_IMPLICIT (c))
 			  TREE_NO_WARNING (var) = 1;
-			var = convert_to_pointer (var, &ilist);
+			var = convert_to_firstprivate_pointer (var, &ilist);
 		      }
 		    else if (!is_reference (var))
 		      {
