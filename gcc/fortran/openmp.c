@@ -5950,6 +5950,7 @@ void
 gfc_resolve_oacc_blocks (gfc_code *code, gfc_namespace *ns)
 {
   fortran_omp_context ctx;
+  gfc_omp_namelist *n;
 
   resolve_oacc_loop_blocks (code);
 
@@ -5959,6 +5960,10 @@ gfc_resolve_oacc_blocks (gfc_code *code, gfc_namespace *ns)
   ctx.previous = omp_current_ctx;
   ctx.is_openmp = false;
   omp_current_ctx = &ctx;
+
+  if (code->ext.omp_clauses)
+    for (n = code->ext.omp_clauses->lists[OMP_LIST_PRIVATE]; n; n = n->next)
+      ctx.private_iterators->add (n->sym);
 
   gfc_resolve_blocks (code->block, ns);
 
