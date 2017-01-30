@@ -6636,9 +6636,10 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
   ctx = new_omp_context (region_type);
   ctx->clauses = *list_p;
   outer_ctx = ctx->outer_context;
-  if (code == OMP_TARGET)
+  if (code == OMP_TARGET && !(lang_GNU_Fortran () && !(region_type & ORT_ACC)))
     {
-      ctx->target_map_pointers_as_0len_arrays = true;
+      if (!lang_GNU_Fortran () || region_type & ORT_ACC)
+	ctx->target_map_pointers_as_0len_arrays = true;
       ctx->target_map_scalars_firstprivate = true;
     }
   if (!lang_GNU_Fortran ())
