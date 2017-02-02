@@ -1,5 +1,7 @@
 ! Test data movement on array pointers.
 
+! { dg-do run }
+
 module assumed
 contains
   subroutine test_explicit(b)
@@ -26,7 +28,7 @@ end module assumed
 
   call test_explicit (a)
   if (any (a .ne. 1, 1)) call abort
-  
+
   call test_implicit (a)
   if (any (a .ne. 2, 1)) call abort
 end
