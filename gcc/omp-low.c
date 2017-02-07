@@ -20958,11 +20958,18 @@ default_goacc_reduction (gcall *call)
       
       if (!integer_zerop (ref_to_res))
 	{
-	  tree ptype = build_pointer_type (TREE_TYPE (var));
-	  tree t = make_ssa_name (ptype);
-	  tree expr = fold_build1 (NOP_EXPR, ptype, ref_to_res);
-	  gimple_seq_add_stmt (&seq, gimple_build_assign (t, expr));
-	  tree dst = build_simple_mem_ref (fold_convert (ptype, t));
+	  /* Dummy reduction vars that have GOMP_MAP_FIRSTPRIVATE_POINTER data
+	     mappings gets retyped to (void *).  Adjust the type of ref_to_res
+	     as appropriate.  */
+	  if (TREE_TYPE (TREE_TYPE (ref_to_res)) != TREE_TYPE (var))
+	    {
+	      tree ptype = build_pointer_type (TREE_TYPE (var));
+	      tree t = make_ssa_name (ptype);
+	      tree expr = fold_build1 (NOP_EXPR, ptype, ref_to_res);
+	      gimple_seq_add_stmt (&seq, gimple_build_assign (t, expr));
+	      ref_to_res = t;
+	    }
+	  tree dst = build_simple_mem_ref (ref_to_res);
 	  tree src = var;
 	  
 	  if (code == IFN_GOACC_REDUCTION_SETUP)
