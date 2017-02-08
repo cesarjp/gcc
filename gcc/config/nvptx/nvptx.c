@@ -4327,7 +4327,7 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
     {
       dims[GOMP_DIM_VECTOR] = PTX_VECTOR_LENGTH;
       if (dims[GOMP_DIM_WORKER] < 0)
-	dims[GOMP_DIM_WORKER] = PTX_WORKER_LENGTH;
+	dims[GOMP_DIM_WORKER] = 4;
       if (dims[GOMP_DIM_GANG] < 0)
 	dims[GOMP_DIM_GANG] = PTX_GANG_DEFAULT;
       changed = true;
@@ -4344,7 +4344,7 @@ nvptx_dim_limit (int axis)
   switch (axis)
     {
     case GOMP_DIM_WORKER:
-      return PTX_WORKER_LENGTH;
+      return 4;
 
     case GOMP_DIM_VECTOR:
       return PTX_VECTOR_LENGTH;
