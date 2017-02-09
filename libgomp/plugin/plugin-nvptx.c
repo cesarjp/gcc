@@ -974,7 +974,7 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	      GOMP_PLUGIN_debug (0, " warp_size=%d, block_size=%d,"
 				 " dev_size=%d, cpu_size=%d\n",
 				 warp_size, block_size, dev_size, cpu_size);
-	      gang = (cpu_size / block_size) * dev_size;
+	      gang = 4 * warp_size * dev_size;
 	      worker = block_size / warp_size;
 	      vector = warp_size;
 	    }
