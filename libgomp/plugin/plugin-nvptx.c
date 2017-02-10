@@ -920,14 +920,13 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
       if (!dims[i])
 	seen_zero = 1;
     }
-  
+
   if (seen_zero)
     {
       /* See if the user provided GOMP_OPENACC_DIM environment
 	 variable to specify runtime defaults. */
       static int default_dims[GOMP_DIM_MAX];
 
-      
       pthread_mutex_lock (&ptx_dev_lock);
       if (!default_dims[0])
 	{
