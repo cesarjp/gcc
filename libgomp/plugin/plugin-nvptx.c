@@ -959,6 +959,7 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 
 	  CUdevice dev = nvptx_thread()->ptx_dev->dev;
 	  /* 32 is the default for known hardware.  */
+	  int gang = 0, worker = 32, vector = 32;
 	  CUdevice_attribute cu_tpb, cu_ws, cu_mpc, cu_tpm, cu_rf, cu_sm;
 
 	  cu_tpb = CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK;
@@ -980,7 +981,28 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 				 " smem_size=%d\n",
 				 warp_size, block_size, dev_size, cpu_size,
 				 rf_size, sm_size);
+	      gang = (cpu_size / block_size) * dev_size;
+	      worker = block_size / warp_size;
+	      vector = warp_size;
 	    }
+
+	  /* There is no upper bound on the gang size.  The best size
+	     matches the hardware configuration.  Logical gangs are
+	     scheduled onto physical hardware.  To maximize usage, we
+	     should guess a large number.  */
+	  /* The worker size must not exceed the hardware.  */
+	  if (default_dims[GOMP_DIM_WORKER] < 1
+	      || (default_dims[GOMP_DIM_WORKER] > worker && gang))
+	    default_dims[GOMP_DIM_WORKER] = worker;
+	  /* The vector size must exactly match the hardware.  */
+	  if (default_dims[GOMP_DIM_VECTOR] < 1
+	      || (default_dims[GOMP_DIM_VECTOR] != vector && gang))
+	    default_dims[GOMP_DIM_VECTOR] = vector;
+
+	  GOMP_PLUGIN_debug (0, " default dimensions [%d,%d,%d]\n",
+			     default_dims[GOMP_DIM_GANG],
+			     default_dims[GOMP_DIM_WORKER],
+			     default_dims[GOMP_DIM_VECTOR]);
 	}
       pthread_mutex_unlock (&ptx_dev_lock);
 
@@ -1005,25 +1027,23 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
       if (threads_per_sm > cpu_size)
 	threads_per_sm = cpu_size;
 
-      int threads_per_block = threads_per_sm > block_size
-	? block_size : threads_per_sm;
-
       for (i = 0; i != GOMP_DIM_MAX; i++)
-	if (!dims[i] && default_dims[i] > 0)
-	  dims[i] = default_dims[i];
-	else
-	  switch (i) {
-	  case GOMP_DIM_GANG:
-	    dims[i] = 2 * threads_per_sm / warp_size * dev_size;
-	    break;
-	  case GOMP_DIM_WORKER:
-	    dims[i] = threads_per_block / warp_size;
-	    break;
-	  case GOMP_DIM_VECTOR:
-	    dims[i] = warp_size;
-	    break;
-	  default:
-	    abort ();
+	if (!dims[i])
+	  {
+	    if (default_dims[i] > 0)
+	      dims[i] = default_dims[i];
+	    else
+	      switch (i) {
+	      case GOMP_DIM_GANG:
+		dims[i] = 2 * threads_per_sm / warp_size * dev_size;
+		break;
+	      case GOMP_DIM_WORKER:
+	      case GOMP_DIM_VECTOR:
+		dims[i] = warp_size;
+		break;
+	      default:
+		abort ();
+	      }
 	  }
     }
 
