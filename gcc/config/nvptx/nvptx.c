@@ -4251,7 +4251,9 @@ nvptx_expand_builtin (tree exp, rtx target, rtx ARG_UNUSED (subtarget),
 /* Define dimension sizes for known hardware.  */
 #define PTX_VECTOR_LENGTH 32
 #define PTX_WORKER_LENGTH 32
-#define PTX_GANG_DEFAULT  0 /* Defer to runtime.  */
+
+/* Defer to runtime.  */
+#define PTX_RUNTIME_DEFAULT 0
 
 /* Validate compute dimensions of an OpenACC offload or routine, fill
    in non-unity defaults.  FN_LEVEL indicates the level at which a
@@ -4327,9 +4329,9 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
     {
       dims[GOMP_DIM_VECTOR] = PTX_VECTOR_LENGTH;
       if (dims[GOMP_DIM_WORKER] < 0)
-	dims[GOMP_DIM_WORKER] = 4;
+	dims[GOMP_DIM_WORKER] = PTX_RUNTIME_DEFAULT;
       if (dims[GOMP_DIM_GANG] < 0)
-	dims[GOMP_DIM_GANG] = PTX_GANG_DEFAULT;
+	dims[GOMP_DIM_GANG] = PTX_RUNTIME_DEFAULT;
       changed = true;
     }
 
@@ -4341,18 +4343,13 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 static int
 nvptx_dim_limit (int axis)
 {
-  switch (axis)
-    {
-    case GOMP_DIM_WORKER:
-      return 4;
-
-    case GOMP_DIM_VECTOR:
+  /* Only the vector_length is known at compile time.  num_workers
+     depends on register and share-memory usage, and that changes at
+     runtime based on the target GPU and the PTX assembler.  */
+  if (axis == GOMP_DIM_VECTOR)
       return PTX_VECTOR_LENGTH;
 
-    default:
-      break;
-    }
-  return 0;
+  return PTX_RUNTIME_DEFAULT;
 }
 
 /* Determine whether fork & joins are needed.  */
