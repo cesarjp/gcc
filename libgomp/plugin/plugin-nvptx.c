@@ -1057,8 +1057,9 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	GOMP_PLUGIN_fatal ("The Nvidia accelerator has insufficient resources "
 			   "to launch '%s'; recompile the program with "
 			   "'num_workers = %d' on that offloaded region or "
-			   "'-fopenacc-dim=-:8'.\n",
-			   targ_fn->launch->fn, threads_per_block);
+			   "'-fopenacc-dim=-:%d'.\n",
+			   targ_fn->launch->fn, threads_per_block,
+			   threads_per_block);
     }
 
   /* This reserves a chunk of a pre-allocated page of memory mapped on both
