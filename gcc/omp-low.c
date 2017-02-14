@@ -20799,6 +20799,7 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
   bool assign = (loop->flags & OLF_AUTO) && (loop->flags & OLF_INDEPENDENT);
   bool noisy = true;
   bool tiling = loop->flags & OLF_TILE;
+  unsigned outermost_axis = 0;
 
 #ifdef ACCEL_COMPILER
   /* When device_type is supported, we want the device compiler to be
@@ -20835,6 +20836,7 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	}
 
       loop->mask |= this_mask;
+      outermost_axis = this_mask;
     }
 
   if (loop->child)
@@ -20849,6 +20851,7 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	 outermost available level above.  That way we'll partition
 	 this along 2 axes, if they are available.  */
       unsigned this_mask = 0;
+      bool is_outermost = loop->parent == NULL || loop->parent->parent == NULL;
 
       /* Determine the outermost partitioning used within this loop. */
       this_mask = loop->inner | GOMP_DIM_MASK (GOMP_DIM_MAX);
@@ -20856,8 +20859,13 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 
       /* Pick the partitioning just inside that one.  */
       this_mask >>= 1;
-      /* And avoid picking one use by an outer loop. */
-      this_mask &= ~outer_mask;
+
+      /* If this is the outermost loop, select the outermost level of
+	 avilable partitioning.  */
+      if (is_outermost && outermost_axis)
+	this_mask = outermost_axis;
+      else
+	this_mask &= ~outer_mask;
 
       /* If tiling and we failed completely above, grab the next one
 	 too.  Making sure it doesn't hit an outer loop.  */
