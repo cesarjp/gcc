@@ -685,6 +685,22 @@ nvptx_open_device (int n)
   ptx_dev->images = NULL;
   pthread_mutex_init (&ptx_dev->image_lock, NULL);
 
+  GOMP_PLUGIN_debug (0, "Nvidia device %d:\n\tGPU_OVERLAP = %d\n"
+		     "\tCAN_MAP_HOST_MEMORY = %d\n\tCONCURRENT_KERNELS = %d\n"
+		     "\tCOMPUTE_MODE = %d\n\tINTEGRATED = %d\n"
+		     "\tMAX_THREADS_PER_BLOCK = %d\n\tWARP_SIZE = %d\n"
+		     "\tMULTIPROCESSOR_COUNT = %d\n"
+		     "\tMAX_THREADS_PER_MULTIPROCESSOR = %d\n"
+		     "\tMAX_REGISTERS_PER_MULTIPROCESSOR = %d\n"
+		     "\tMAX_SHARED_MEMORY_PER_MULTIPROCESSOR = %d\n",
+		     ptx_dev->ord, ptx_dev->overlap, ptx_dev->map,
+		     ptx_dev->concur, ptx_dev->mode, ptx_dev->mkern,
+		     ptx_dev->max_threads_per_block, ptx_dev->warp_size,
+		     ptx_dev->multiprocessor_count,
+		     ptx_dev->max_threads_per_multiprocessor,
+		     ptx_dev->max_registers_per_multiprocessor,
+		     ptx_dev->max_shared_memory_per_multiprocessor);
+
   if (!init_streams_for_device (ptx_dev, async_engines))
     return NULL;
 
