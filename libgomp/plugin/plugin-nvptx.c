@@ -304,13 +304,12 @@ struct ptx_device
   bool concur;
   int  mode;
   bool mkern;
-  int max_threads_per_block; // block size
+  int max_threads_per_block;
   int warp_size;
-  int multiprocessor_count; // dev size
-  int max_threads_per_multiprocessor; // cpu_size
-  int max_registers_per_multiprocessor; // rf_size
-  int max_shared_memory_per_multiprocessor; // sm_size
-  int compute_version; // E.g. SM_XY
+  int multiprocessor_count;
+  int max_threads_per_multiprocessor;
+  int max_registers_per_multiprocessor;
+  int max_shared_memory_per_multiprocessor;
 
   int binary_version;
 
