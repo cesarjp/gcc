@@ -301,6 +301,13 @@ struct ptx_device
   bool concur;
   int  mode;
   bool mkern;
+  int max_threads_per_block; // block size
+  int warp_size;
+  int multiprocessor_count; // dev size
+  int max_threads_per_multiprocessor; // cpu_size
+  int max_registers_per_multiprocessor; // rf_size
+  int max_shared_memory_per_multiprocessor; // sm_size
+  int compute_version; // E.g. SM_XY
 
   struct ptx_image_data *images;  /* Images loaded on device.  */
   pthread_mutex_t image_lock;     /* Lock for above list.  */
@@ -642,6 +649,33 @@ nvptx_open_device (int n)
   CUDA_CALL_ERET (NULL, cuDeviceGetAttribute,
 		  &pi, CU_DEVICE_ATTRIBUTE_INTEGRATED, dev);
   ptx_dev->mkern = pi;
+
+  CUDA_CALL_ERET (NULL, cuDeviceGetAttribute,
+		  &pi, CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK, dev);
+  ptx_dev->max_threads_per_block = pi;
+
+  CUDA_CALL_ERET (NULL, cuDeviceGetAttribute,
+		  &pi, CU_DEVICE_ATTRIBUTE_WARP_SIZE, dev);
+  ptx_dev->warp_size = pi;
+
+  CUDA_CALL_ERET (NULL, cuDeviceGetAttribute,
+		  &pi, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, dev);
+  ptx_dev->multiprocessor_count = pi;
+
+  CUDA_CALL_ERET (NULL, cuDeviceGetAttribute,
+		  &pi, CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR, dev);
+  ptx_dev->max_threads_per_multiprocessor = pi;
+
+  CUDA_CALL_ERET (NULL, cuDeviceGetAttribute,
+		  &pi, CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_MULTIPROCESSOR,
+		  dev);
+  ptx_dev->max_registers_per_multiprocessor = pi;
+
+  CUDA_CALL_ERET (NULL, cuDeviceGetAttribute,
+		  &pi,
+		  CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR,
+		  dev);
+  ptx_dev->max_shared_memory_per_multiprocessor = pi;
 
   r = cuDeviceGetAttribute (&async_engines,
 			    CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT, dev);
