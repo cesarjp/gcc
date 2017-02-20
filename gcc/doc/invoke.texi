@@ -6432,8 +6432,8 @@ Enabled at level @option{-O2}.
 @opindex finform-parallelism
 Report any parallelism detected by the compiler.  Inside OpenACC
 offloaded regions, this includes the gang, worker and vector level
-parallelism associated with any @code{ACC LOOP}s.  This option is disabled
-by default.
+parallelism associated with any @code{ACC LOOP}s.  This option is
+disabled by default.
 
 @item -finline-functions
 @opindex finline-functions
