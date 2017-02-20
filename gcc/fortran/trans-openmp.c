@@ -1947,7 +1947,6 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 			  && n->expr->ref->next->u.ar.type == AR_FULL)))
 		{
 		  gfc_ref *ref = n->expr->ref;
-		  tree orig_decl = decl;
 		  gfc_component *c = ref->u.c.component;
 		  tree field;
 		  tree context;
@@ -3819,6 +3818,7 @@ gfc_trans_oacc_combined_directive (gfc_code *code)
   enum tree_code construct_code;
   bool scan_nodesc_arrays = false;
   hash_set<gfc_symbol *> *array_set = NULL;
+  location_t loc = input_location;
 
   switch (code->op)
     {
@@ -3850,6 +3850,9 @@ gfc_trans_oacc_combined_directive (gfc_code *code)
     pushlevel ();
   stmt = gfc_trans_omp_do (code, EXEC_OACC_LOOP, pblock, loop_clauses, NULL);
 
+  if (CAN_HAVE_LOCATION_P (stmt))
+    SET_EXPR_LOCATION (stmt, loc);
+
   if (array_set && array_set->elements ())
     gfc_add_expr_to_block (&inner, stmt);
 
@@ -3865,8 +3868,7 @@ gfc_trans_oacc_combined_directive (gfc_code *code)
       delete array_set;
     }
 
-  stmt = build2_loc (input_location, construct_code, void_type_node, stmt,
-		     oacc_clauses);
+  stmt = build2_loc (loc, construct_code, void_type_node, stmt, oacc_clauses);
   gfc_add_expr_to_block (&block, stmt);
 
   gfc_free_omp_clauses (loop_clauses);

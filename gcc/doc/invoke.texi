@@ -351,7 +351,7 @@ Objective-C and Objective-C++ Dialects}.
 -fforward-propagate -ffp-contract=@var{style} -ffunction-sections @gol
 -fgcse -fgcse-after-reload -fgcse-las -fgcse-lm -fgraphite-identity @gol
 -fgcse-sm -fhoist-adjacent-loads -fif-conversion @gol
--fif-conversion2 -findirect-inlining @gol
+-fif-conversion2 -findirect-inlining -finform-parallelism @gol
 -finline-functions -finline-functions-called-once -finline-limit=@var{n} @gol
 -finline-small-functions -fipa-cp -fipa-cp-clone -fipa-cp-alignment @gol
 -fipa-pta -fipa-profile -fipa-pure-const -fipa-reference -fipa-icf @gol
@@ -6427,6 +6427,13 @@ when inlining itself is turned on by the @option{-finline-functions}
 or @option{-finline-small-functions} options.
 
 Enabled at level @option{-O2}.
+
+@item -finform-parallelism
+@opindex finform-parallelism
+Report any parallelism detected by the compiler.  Inside OpenACC
+offloaded regions, this includes the gang, worker and vector level
+parallelism associated with any @code{ACC LOOP}s.  This option is disabled
+by default.
 
 @item -finline-functions
 @opindex finline-functions
