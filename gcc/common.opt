@@ -1451,10 +1451,6 @@ fif-conversion2
 Common Report Var(flag_if_conversion2) Optimization
 Perform conversion of conditional jumps to conditional execution.
 
-finform-parallelism
-Common Var(flag_inform_parallelism) Init(0)
-Report all paralllelism detected inside offloaded regions.
-
 fstack-reuse=
 Common Joined RejectNegative Enum(stack_reuse_level) Var(flag_stack_reuse) Init(SR_ALL) Optimization
 -fstack-reuse=[all|named_vars|none] Set stack reuse level for local variables.
