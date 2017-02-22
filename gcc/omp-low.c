@@ -20405,15 +20405,17 @@ debug_oacc_loop (oacc_loop *loop)
 static void
 inform_oacc_loop (oacc_loop *loop)
 {
-  const char *seq = loop->mask == 0 ? " SEQ" : "";
+  const char *seq = loop->mask == 0 ? " seq" : "";
   const char *gang = loop->mask & GOMP_DIM_MASK (GOMP_DIM_GANG)
-    ? " GANG" : "";
+    ? " gang" : "";
   const char *worker = loop->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER)
-    ? " WORKER" : "";
+    ? " worker" : "";
   const char *vector = loop->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)
-    ? " VECTOR" : "";
+    ? " vector" : "";
 
-  inform (loop->loc, "ACC LOOP%s%s%s%s", seq, gang, worker, vector);
+  dump_printf_loc (MSG_NOTE, loop->loc,
+		   "Detected parallelism <acc loop%s%s%s%s>\n", seq, gang,
+		   worker, vector);
 
   if (loop->child)
     inform_oacc_loop (loop->child);
@@ -21091,7 +21093,7 @@ execute_oacc_device_lower ()
       dump_oacc_loop (dump_file, loops, 0);
       fprintf (dump_file, "\n");
     }
-  if (flag_inform_parallelism && loops->child)
+  if (dump_enabled_p () && loops->child)
     inform_oacc_loop (loops->child);
 
   /* Offloaded targets may introduce new basic blocks, which require
