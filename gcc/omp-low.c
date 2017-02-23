@@ -14771,7 +14771,7 @@ const pass_data pass_data_expand_omp =
 {
   GIMPLE_PASS, /* type */
   "ompexp", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OPENMP, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_gimple_any, /* properties_required */
   PROP_gimple_eomp, /* properties_provided */
@@ -14818,7 +14818,7 @@ const pass_data pass_data_expand_omp_ssa =
 {
   GIMPLE_PASS, /* type */
   "ompexpssa", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OPENMP, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_cfg | PROP_ssa, /* properties_required */
   PROP_gimple_eomp, /* properties_provided */
@@ -19087,7 +19087,7 @@ const pass_data pass_data_lower_omp =
 {
   GIMPLE_PASS, /* type */
   "omplower", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OPENMP, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_gimple_any, /* properties_required */
   PROP_gimple_lomp, /* properties_provided */
@@ -19569,7 +19569,7 @@ const pass_data pass_data_diagnose_omp_blocks =
 {
   GIMPLE_PASS, /* type */
   "*diagnose_omp_blocks", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OPENMP, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_gimple_any, /* properties_required */
   0, /* properties_provided */
@@ -20399,6 +20399,30 @@ debug_oacc_loop (oacc_loop *loop)
   dump_oacc_loop (stderr, loop, 0);
 }
 
+/* Provide diagnostics on OpenACC loops LOOP, its siblings and its
+   children.  */
+
+static void
+inform_oacc_loop (oacc_loop *loop)
+{
+  const char *seq = loop->mask == 0 ? " seq" : "";
+  const char *gang = loop->mask & GOMP_DIM_MASK (GOMP_DIM_GANG)
+    ? " gang" : "";
+  const char *worker = loop->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER)
+    ? " worker" : "";
+  const char *vector = loop->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)
+    ? " vector" : "";
+
+  dump_printf_loc (MSG_NOTE, loop->loc,
+		   "Detected parallelism <acc loop%s%s%s%s>\n", seq, gang,
+		   worker, vector);
+
+  if (loop->child)
+    inform_oacc_loop (loop->child);
+  if (loop->sibling)
+    inform_oacc_loop (loop->sibling);
+}
+
 /* DFS walk of basic blocks BB onwards, creating OpenACC loop
    structures as we go.  By construction these loops are properly
    nested.  */
@@ -21069,6 +21093,8 @@ execute_oacc_device_lower ()
       dump_oacc_loop (dump_file, loops, 0);
       fprintf (dump_file, "\n");
     }
+  if (dump_enabled_p () && loops->child)
+    inform_oacc_loop (loops->child);
 
   /* Offloaded targets may introduce new basic blocks, which require
      dominance information to update SSA.  */
@@ -21226,7 +21252,7 @@ const pass_data pass_data_oacc_device_lower =
 {
   GIMPLE_PASS, /* type */
   "oaccdevlow", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
+  OPTGROUP_OPENMP, /* optinfo_flags */
   TV_NONE, /* tv_id */
   PROP_cfg, /* properties_required */
   0 /* Possibly PROP_gimple_eomp.  */, /* properties_provided */
@@ -21271,7 +21297,7 @@ const pass_data pass_data_omp_target_link =
 {
   GIMPLE_PASS,			/* type */
   "omptargetlink",		/* name */
-  OPTGROUP_NONE,		/* optinfo_flags */
+  OPTGROUP_OPENMP,		/* optinfo_flags */
   TV_NONE,			/* tv_id */
   PROP_ssa,			/* properties_required */
   0,				/* properties_provided */
