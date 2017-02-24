@@ -35757,7 +35757,7 @@ cp_parser_oacc_loop (cp_parser *parser, cp_token *pragma_tok, char *p_name,
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_VECTOR_LENGTH)	\
 	| (OMP_CLAUSE_MASK_1 << PRAGMA_OACC_CLAUSE_WAIT))
 
-static tree
+tree
 mark_vars_oacc_gangprivate (tree *tp,
 			    int *walk_subtrees ATTRIBUTE_UNUSED,
 			    void *data ATTRIBUTE_UNUSED)
@@ -35771,6 +35771,8 @@ mark_vars_oacc_gangprivate (tree *tp,
   if (TREE_CODE (*tp) == BIND_EXPR)
     {
       tree block = BIND_EXPR_BLOCK (*tp);
+      if (block == NULL)
+	return NULL;
       for (tree var = BLOCK_VARS (block); var; var = DECL_CHAIN (var))
 	{
 	  gcc_assert (TREE_CODE (var) == VAR_DECL);
