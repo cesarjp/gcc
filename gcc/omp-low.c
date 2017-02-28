@@ -6707,15 +6707,18 @@ lower_oacc_head_tail (location_t loc, tree clauses,
     {
       gimple_seq fork_seq = NULL;
       gimple_seq join_seq = NULL;
+      tree perfect = ctx->perfect ? integer_one_node : integer_zero_node;
 
       tree place = build_int_cst (integer_type_node, -1);
-      gcall *fork = gimple_build_call_internal (IFN_UNIQUE, 3,
-						fork_kind, ddvar, place);
+      gcall *fork = gimple_build_call_internal (IFN_UNIQUE, 4,
+						fork_kind, ddvar, place,
+						perfect);
       gimple_set_location (fork, loc);
       gimple_set_lhs (fork, ddvar);
 
-      gcall *join = gimple_build_call_internal (IFN_UNIQUE, 3,
-						join_kind, ddvar, place);
+      gcall *join = gimple_build_call_internal (IFN_UNIQUE, 4,
+						join_kind, ddvar, place,
+						perfect);
       gimple_set_location (join, loc);
       gimple_set_lhs (join, ddvar);
 
@@ -18152,8 +18155,13 @@ lower_omp_discover_perfect_loops (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	is_perfect = false;
     }
 
-  if (stmts == 1 || (is_omp_for && is_perfect))
+  if (stmts == 1)
     ctx->perfect = true;
+  else if (is_omp_for && is_perfect)
+    {
+      new_ctx->perfect = true;
+      ctx->perfect = true;
+    }
 
   return;
 }
@@ -21246,6 +21254,8 @@ execute_oacc_device_lower ()
 		    remove = true;
 		  else if (!targetm.goacc.fork_join
 			   (call, dims, kind == IFN_UNIQUE_OACC_FORK))
+		    remove = true;
+		  else if (integer_onep (gimple_call_arg (call, 3)))
 		    remove = true;
 		  break;
 
