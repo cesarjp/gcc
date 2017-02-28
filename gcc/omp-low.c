@@ -207,6 +207,9 @@ struct omp_context
 
   /* Hash map of dynamic arrays in this context.  */
   hash_map<tree_operand_hash, tree> *dynamic_arrays;
+
+  /* True if stmt contains a perfectly nested loop nest.  */
+  bool perfect;
 };
 
 /* A structure holding the elements of:
@@ -18094,6 +18097,67 @@ lower_omp_regimplify_operands (omp_context *ctx, gimple *stmt,
     }
 }
 
+/* Scan for perfectly nested OMP for loops.  */
+
+static void
+lower_omp_discover_perfect_loops (gimple_stmt_iterator *gsi_p, omp_context *ctx)
+{
+  gimple *stmt = gsi_stmt (*gsi_p);
+  gimple_seq body;
+  omp_context *new_ctx = ctx;
+  bool is_omp_for = false;
+
+  switch (gimple_code (stmt))
+    {
+    case GIMPLE_BIND:
+      body = gimple_bind_body (as_a <gbind *> (stmt));
+      break;
+    case GIMPLE_OMP_TARGET:
+      {
+	new_ctx = maybe_lookup_ctx (stmt);
+	gcc_assert (ctx);
+	switch (gimple_omp_target_kind (stmt))
+	  {
+	  case GF_OMP_TARGET_KIND_OACC_PARALLEL:
+	  case GF_OMP_TARGET_KIND_OACC_KERNELS:
+	    break;
+	  default:
+	    return;
+	  }
+	gbind *tgt_bind
+	  = gimple_seq_first_stmt_as_a_bind (gimple_omp_body (stmt));
+	body = gimple_bind_body (tgt_bind);
+	break;
+      }
+    case GIMPLE_OMP_FOR:
+      {
+      new_ctx = maybe_lookup_ctx (stmt);
+      gcc_assert (ctx);
+      body = gimple_omp_body (stmt);
+      is_omp_for = true;
+      break;
+      }
+    default:
+      return;
+    }
+
+  int stmts = 0;
+  gimple_stmt_iterator gsi;
+  bool is_perfect = true;
+  for (gsi = gsi_start (body); !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      stmts++;
+      lower_omp_discover_perfect_loops (&gsi, new_ctx);
+      if (is_omp_for && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_FOR)
+	is_perfect = false;
+    }
+
+  if (stmts == 1 || (is_omp_for && is_perfect))
+    ctx->perfect = true;
+
+  return;
+}
+
 static void
 lower_omp_1 (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 {
@@ -18206,6 +18270,7 @@ lower_omp_1 (gimple_stmt_iterator *gsi_p, omp_context *ctx)
     case GIMPLE_OMP_TARGET:
       ctx = maybe_lookup_ctx (stmt);
       gcc_assert (ctx);
+      lower_omp_discover_perfect_loops (gsi_p, ctx);
       lower_omp_target (gsi_p, ctx);
       break;
     case GIMPLE_OMP_TEAMS:
