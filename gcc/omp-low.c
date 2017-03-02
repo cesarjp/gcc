@@ -210,6 +210,17 @@ struct omp_context
 
   /* True if stmt contains a perfectly nested loop nest.  */
   bool perfect;
+
+  /* The number of stmts inside this context, excluding
+     instructions in nested contexts.  */
+  int num_stmts;
+
+  /* True if the omp_context has any side-effects that prevents it
+     from optimizing ifn_unique.  */
+  bool side_effects;
+
+  /* True if it contains a GIMPLE_OMP_FOR region. */
+  bool nested_for;
 };
 
 /* A structure holding the elements of:
@@ -18100,66 +18111,156 @@ lower_omp_regimplify_operands (omp_context *ctx, gimple *stmt,
     }
 }
 
+/* Set OMP->perfect on discovery of a perfect loop nest.  */
+
+static void
+lower_omp_annotate_perfect_loops (gimple_seq body, omp_context *ctx)
+{
+  gimple_stmt_iterator gsi;
+
+  for (gsi = gsi_start (body); !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      gimple_seq new_body;
+
+      switch (gimple_code (stmt))
+	{
+	case GIMPLE_BIND:
+	  new_body = gimple_bind_body (as_a <gbind *> (stmt));
+	  lower_omp_annotate_perfect_loops (new_body, ctx);
+	  break;
+	case GIMPLE_OMP_FOR:
+	  ctx->nested_for = true;
+	  {
+	    omp_context *new_ctx = maybe_lookup_ctx (stmt);
+	    gcc_assert (new_ctx);
+	    new_body = gimple_omp_body (stmt);
+	    lower_omp_annotate_perfect_loops (new_body, new_ctx);
+
+	    /* Set the nested side-effects.  */
+	    new_ctx->side_effects = new_ctx->side_effects || ctx->side_effects;
+	    ctx->side_effects = new_ctx->side_effects;
+
+	    if (!ctx->side_effects)
+	      new_ctx->perfect = true;
+	  }
+	default:;
+	}
+    }
+}
+
+/* Propagate any side_effects inside CTX.  Return true if any of the
+   nested loops contain any side-effects.  */
+
+static bool
+lower_omp_propagate_side_effects (gimple_seq body, omp_context *ctx)
+{
+  gimple_stmt_iterator gsi;
+  gimple_seq new_body;
+  bool side_effects = false;
+
+  for (gsi = gsi_start (body); !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+
+      switch (gimple_code (stmt))
+	{
+	case GIMPLE_BIND:
+	  new_body = gimple_bind_body (as_a <gbind *> (stmt));
+	  side_effects = lower_omp_propagate_side_effects (new_body, ctx);
+	  break;
+	case GIMPLE_OMP_FOR:
+	  {
+	    omp_context *new_ctx = maybe_lookup_ctx (stmt);
+	    gcc_assert (ctx);
+	    new_body = gimple_omp_body (stmt);
+	    side_effects = lower_omp_propagate_side_effects (new_body, new_ctx);
+	  }
+	default:;
+	}
+    }
+
+  ctx->side_effects = ctx->side_effects || side_effects;
+
+  return ctx->side_effects;
+}
+
+/* Return the number of statements inside BODY, not including any
+   nested GIMPLE_OMP_FOR.  It also sets CTX's side-effects flag to
+   true upon discovery of any hazards.  */
+
+static int
+lower_omp_count_loop_stmts (gimple_seq body, omp_context *ctx)
+{
+  int count = 0;
+  gimple_stmt_iterator gsi;
+
+  for (gsi = gsi_start (body); !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      gimple_seq new_body;
+
+      switch (gimple_code (stmt))
+	{
+	case GIMPLE_BIND:
+	  new_body = gimple_bind_body (as_a <gbind *> (stmt));
+	  count += lower_omp_count_loop_stmts (new_body, ctx);
+	  break;
+	case GIMPLE_OMP_ATOMIC_LOAD:
+	case GIMPLE_OMP_ATOMIC_STORE:
+	  ctx->side_effects = true;
+	  count++;
+	  break;
+	case GIMPLE_OMP_FOR:
+	  ctx->nested_for = true;
+	  {
+	    omp_context *new_ctx = maybe_lookup_ctx (stmt);
+	    gcc_assert (ctx);
+	    gimple_seq new_body = gimple_omp_body (stmt);
+	    if (find_omp_clause (gimple_omp_for_clauses (stmt),
+				 OMP_CLAUSE_REDUCTION))
+	      new_ctx->side_effects = true;
+	    lower_omp_count_loop_stmts (new_body, new_ctx);
+	  }
+	default:
+	  count++;
+	}
+    }
+  return count;
+}
+
 /* Scan for perfectly nested OMP for loops.  */
 
 static void
 lower_omp_discover_perfect_loops (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 {
+  if (ctx->num_stmts != 0)
+    return;
+
+  /* Pass 1: Determine the number of statements inside for loop, and
+     populate ctx->side_effects.  */
+
   gimple *stmt = gsi_stmt (*gsi_p);
-  gimple_seq body;
-  omp_context *new_ctx = ctx;
-  bool is_omp_for = false;
+  gimple_seq body = gimple_omp_body (stmt);
 
-  switch (gimple_code (stmt))
-    {
-    case GIMPLE_BIND:
-      body = gimple_bind_body (as_a <gbind *> (stmt));
-      break;
-    case GIMPLE_OMP_TARGET:
-      {
-	new_ctx = maybe_lookup_ctx (stmt);
-	gcc_assert (ctx);
-	switch (gimple_omp_target_kind (stmt))
-	  {
-	  case GF_OMP_TARGET_KIND_OACC_PARALLEL:
-	  case GF_OMP_TARGET_KIND_OACC_KERNELS:
-	    break;
-	  default:
-	    return;
-	  }
-	gbind *tgt_bind
-	  = gimple_seq_first_stmt_as_a_bind (gimple_omp_body (stmt));
-	body = gimple_bind_body (tgt_bind);
-	break;
-      }
-    case GIMPLE_OMP_FOR:
-      {
-      new_ctx = maybe_lookup_ctx (stmt);
-      gcc_assert (ctx);
-      body = gimple_omp_body (stmt);
-      is_omp_for = true;
-      break;
-      }
-    default:
-      return;
-    }
+  if (find_omp_clause (gimple_omp_for_clauses (stmt),
+		       OMP_CLAUSE_REDUCTION))
+    ctx->side_effects = true;
 
-  int stmts = 0;
-  gimple_stmt_iterator gsi;
-  bool is_perfect = true;
-  for (gsi = gsi_start (body); !gsi_end_p (gsi); gsi_next (&gsi))
-    {
-      stmts++;
-      lower_omp_discover_perfect_loops (&gsi, new_ctx);
-      if (is_omp_for && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_FOR)
-	is_perfect = false;
-    }
+  ctx->num_stmts = lower_omp_count_loop_stmts (body, ctx);
 
-  if (stmts == 1)
-    ctx->perfect = true;
-  else if (is_omp_for && is_perfect)
+  /* Phase 2: Propagate side-effects.  */
+  bool side_effects = lower_omp_propagate_side_effects (body, ctx);
+
+  ctx->side_effects = ctx->side_effects || side_effects;
+
+  /* Phase 3: Annotate perfect loops.  */
+  lower_omp_annotate_perfect_loops (body, ctx);
+
+  if (!ctx->side_effects)
     {
-      new_ctx->perfect = true;
+      dump_printf_loc (MSG_NOTE, gimple_location (stmt),
+		       "Found perfect loop\n");
       ctx->perfect = true;
     }
 
@@ -18234,6 +18335,7 @@ lower_omp_1 (gimple_stmt_iterator *gsi_p, omp_context *ctx)
       gcc_assert (ctx);
       if (ctx->cancellable)
 	ctx->cancel_label = create_artificial_label (UNKNOWN_LOCATION);
+      lower_omp_discover_perfect_loops (gsi_p, ctx);
       lower_omp_for (gsi_p, ctx);
       break;
     case GIMPLE_OMP_SECTIONS:
@@ -18278,7 +18380,6 @@ lower_omp_1 (gimple_stmt_iterator *gsi_p, omp_context *ctx)
     case GIMPLE_OMP_TARGET:
       ctx = maybe_lookup_ctx (stmt);
       gcc_assert (ctx);
-      lower_omp_discover_perfect_loops (gsi_p, ctx);
       lower_omp_target (gsi_p, ctx);
       break;
     case GIMPLE_OMP_TEAMS:
