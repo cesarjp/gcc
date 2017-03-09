@@ -3680,3 +3680,25 @@ gfc_resolve_unlink_sub (gfc_code *c)
   name = gfc_get_string (PREFIX ("unlink_i%d_sub"), kind);
   c->resolved_sym = gfc_get_intrinsic_sub_symbol (name);
 }
+
+/* Resolve the GOACC_DIM_POS function.  */
+
+void
+gfc_resolve_goacc_dim_pos (gfc_expr *f, gfc_expr *a)
+{
+  f->ts = a->ts;
+  f->value.function.name
+    = gfc_get_string ("GOACC_DIM_POS", gfc_type_letter (a->ts.type),
+		      a->ts.kind);
+}
+
+/* Resolve the GOACC_DIM_POS function.  */
+
+void
+gfc_resolve_goacc_dim_size (gfc_expr *f, gfc_expr *a)
+{
+  f->ts = a->ts;
+  f->value.function.name
+    = gfc_get_string ("GOACC_DIM_SIZE", gfc_type_letter (a->ts.type),
+		      a->ts.kind);
+}

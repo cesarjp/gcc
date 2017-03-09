@@ -3042,6 +3042,19 @@ add_functions (void)
 	     BT_REAL, dr, GFC_STD_GNU, NULL, NULL, NULL,
 	     x, BT_REAL, dr, REQUIRED);
   make_from_module();
+
+  /* The following are OpenACC internal functions.  */
+  add_sym_1 ("goacc_dim_pos", GFC_ISYM_GOACC_DIM_POS, CLASS_ELEMENTAL,
+	     ACTUAL_NO, BT_INTEGER, di, GFC_STD_F77, gfc_check_goacc_dim,
+	     gfc_simplify_goacc_dim, gfc_resolve_goacc_dim_pos, a, BT_INTEGER,
+	     di, REQUIRED);
+  make_generic ("goacc_dim_pos", GFC_ISYM_GOACC_DIM_POS, GFC_STD_F77);
+
+  add_sym_1 ("goacc_dim_size", GFC_ISYM_GOACC_DIM_SIZE, CLASS_ELEMENTAL,
+	     ACTUAL_NO, BT_INTEGER, di, GFC_STD_F77, gfc_check_goacc_dim,
+	     gfc_simplify_goacc_dim, gfc_resolve_goacc_dim_size, a, BT_INTEGER,
+	     di, REQUIRED);
+  make_generic ("goacc_dim_size", GFC_ISYM_GOACC_DIM_SIZE, GFC_STD_F77);
 }
 
 

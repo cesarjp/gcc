@@ -6385,3 +6385,13 @@ gfc_check_storage_size (gfc_expr *a, gfc_expr *kind)
 
   return true;
 }
+
+
+bool
+gfc_check_goacc_dim (gfc_expr *a)
+{
+  if (!type_check (a, 0, BT_INTEGER))
+    return false;
+
+  return true;
+}

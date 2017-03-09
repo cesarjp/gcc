@@ -226,6 +226,7 @@ bool gfc_check_this_image (gfc_expr *, gfc_expr *, gfc_expr *);
 bool gfc_check_ttynam_sub (gfc_expr *, gfc_expr *);
 bool gfc_check_umask_sub (gfc_expr *, gfc_expr *);
 bool gfc_check_unlink_sub (gfc_expr *, gfc_expr *);
+bool gfc_check_goacc_dim (gfc_expr *);
 
 
 /* Simplification functions.  */
@@ -407,6 +408,8 @@ gfc_expr *gfc_simplify_ucobound (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_unpack (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_verify (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_xor (gfc_expr *, gfc_expr *);
+gfc_expr *gfc_simplify_goacc_dim (gfc_expr *);
+
 
 /* Constant conversion simplification.  */
 gfc_expr *gfc_convert_constant (gfc_expr *, bt, int);
@@ -592,6 +595,8 @@ void gfc_resolve_unpack (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_verify (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *,
 			 gfc_expr *);
 void gfc_resolve_xor (gfc_expr *, gfc_expr *, gfc_expr *);
+void gfc_resolve_goacc_dim_pos (gfc_expr *, gfc_expr *);
+void gfc_resolve_goacc_dim_size (gfc_expr *, gfc_expr *);
 
 
 /* Intrinsic subroutine resolution.  */

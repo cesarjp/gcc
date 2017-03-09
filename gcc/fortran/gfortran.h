@@ -605,7 +605,9 @@ enum gfc_isym_id
   GFC_ISYM_Y0,
   GFC_ISYM_Y1,
   GFC_ISYM_YN,
-  GFC_ISYM_YN2
+  GFC_ISYM_YN2,
+  GFC_ISYM_GOACC_DIM_POS,
+  GFC_ISYM_GOACC_DIM_SIZE
 };
 
 enum init_local_logical

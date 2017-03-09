@@ -2935,6 +2935,9 @@ fold_internal_goacc_dim (const gimple *call)
   if (gimple_call_lhs (call) == NULL_TREE)
     return NULL_TREE;
 
+  if (get_oacc_fn_attrib (current_function_decl) == NULL_TREE)
+    return NULL;
+
   int axis = get_oacc_ifn_dim_arg (call);
   int size = get_oacc_fn_dim_size (current_function_decl, axis);
   bool is_pos = gimple_call_internal_fn (call) == IFN_GOACC_DIM_POS;

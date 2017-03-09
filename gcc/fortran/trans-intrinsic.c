@@ -33,6 +33,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-nested.h"
 #include "stor-layout.h"
 #include "toplev.h"	/* For rest_of_decl_compilation.  */
+#include "internal-fn.h"
 #include "arith.h"
 #include "trans-const.h"
 #include "trans-types.h"
@@ -2235,6 +2236,17 @@ gfc_conv_intrinsic_abs (gfc_se * se, gfc_expr * expr)
     default:
       gcc_unreachable ();
     }
+}
+
+
+static void
+gfc_conv_intrinsic_goacc_dim (gfc_se * se, gfc_expr * expr, enum internal_fn fn)
+{
+  tree arg;
+
+  gfc_conv_intrinsic_function_args (se, expr, &arg, 1);
+  se->expr = build_call_expr_internal_loc (input_location, fn, TREE_TYPE (arg),
+					   1, arg);
 }
 
 
@@ -8318,6 +8330,14 @@ gfc_conv_intrinsic_function (gfc_se * se, gfc_expr * expr)
 
     case GFC_ISYM_NUM_IMAGES:
       trans_num_images (se, expr);
+      break;
+
+    case GFC_ISYM_GOACC_DIM_POS:
+      gfc_conv_intrinsic_goacc_dim (se, expr, IFN_GOACC_DIM_POS);
+      break;
+
+    case GFC_ISYM_GOACC_DIM_SIZE:
+      gfc_conv_intrinsic_goacc_dim (se, expr, IFN_GOACC_DIM_SIZE);
       break;
 
     case GFC_ISYM_ACCESS:

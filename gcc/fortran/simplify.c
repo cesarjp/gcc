@@ -6768,6 +6768,14 @@ gfc_simplify_xor (gfc_expr *x, gfc_expr *y)
 }
 
 
+gfc_expr *
+gfc_simplify_goacc_dim (gfc_expr *e)
+{
+  gfc_expr *result;
+
+  return NULL;
+}
+
 /****************** Constant simplification *****************/
 
 /* Master function to convert one constant to another.  While this is
