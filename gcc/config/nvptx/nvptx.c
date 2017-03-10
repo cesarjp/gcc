@@ -3846,7 +3846,9 @@ nvptx_reorg (void)
      offloaded function  (i.e. this is a regular compiler), the
      function has no neutering.  */
   tree attr = get_oacc_fn_attrib (current_function_decl);
-  if (attr)
+  if (attr
+      && lookup_attribute ("oacc perfect",
+			   DECL_ATTRIBUTES (current_function_decl)) == NULL)
     {
       /* If we determined this mask before RTL expansion, we could
 	 elide emission of some levels of forks and joins.  */
