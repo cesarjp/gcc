@@ -630,6 +630,7 @@ cleanup:
 #define OMP_CLAUSE_BIND			((uint64_t) 1 << 59)
 #define OMP_CLAUSE_NOHOST		((uint64_t) 1 << 60)
 #define OMP_CLAUSE_DEVICE_TYPE		((uint64_t) 1 << 61)
+#define OMP_CLAUSE_GNU_PERFECT		((uint64_t) 1 << 62)
 
 /* Helper function for OpenACC and OpenMP clauses involving memory
    mapping.  */
@@ -993,6 +994,12 @@ gfc_match_omp_clauses (gfc_omp_clauses **cp, uint64_t mask,
 		}
 	      else if (m == MATCH_NO)
 		needs_space = true;
+	      continue;
+	    }
+	  if ((mask & OMP_CLAUSE_GNU_PERFECT) && !c->gnu_perfect
+	      && gfc_match ("gnu_perfect") == MATCH_YES)
+	    {
+	      c->gnu_perfect = true;
 	      continue;
 	    }
 	  break;
@@ -1504,7 +1511,7 @@ gfc_match_omp_clauses (gfc_omp_clauses **cp, uint64_t mask,
    | OMP_CLAUSE_PRESENT_OR_COPYIN | OMP_CLAUSE_PRESENT_OR_COPYOUT             \
    | OMP_CLAUSE_PRESENT_OR_CREATE | OMP_CLAUSE_DEVICEPTR | OMP_CLAUSE_PRIVATE \
    | OMP_CLAUSE_FIRSTPRIVATE | OMP_CLAUSE_DEFAULT | OMP_CLAUSE_WAIT	      \
-   | OMP_CLAUSE_DEVICE_TYPE)
+   | OMP_CLAUSE_DEVICE_TYPE | OMP_CLAUSE_GNU_PERFECT)
 #define OACC_KERNELS_CLAUSES \
   (OMP_CLAUSE_IF | OMP_CLAUSE_ASYNC | OMP_CLAUSE_DEVICEPTR                    \
    | OMP_CLAUSE_COPY | OMP_CLAUSE_COPYIN | OMP_CLAUSE_COPYOUT                 \

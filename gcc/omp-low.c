@@ -2416,6 +2416,7 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 	case OMP_CLAUSE_SEQ:
 	case OMP_CLAUSE_TILE:
 	case OMP_CLAUSE_DEVICE_TYPE:
+	case OMP_CLAUSE_GNU_PERFECT:
 	  break;
 
 	case OMP_CLAUSE_ALIGNED:
@@ -2590,6 +2591,7 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 	case OMP_CLAUSE_TILE:
 	case OMP_CLAUSE__GRIDDIM_:
 	case OMP_CLAUSE_DEVICE_TYPE:
+	case OMP_CLAUSE_GNU_PERFECT:
 	  break;
 
 	case OMP_CLAUSE_BIND:
@@ -13064,6 +13066,11 @@ set_oacc_fn_attrib (tree fn, tree clauses, bool is_kernel, vec<tree> *args)
   tree attr = NULL_TREE;
   unsigned non_const = 0;
 
+  if (find_omp_clause (clauses, OMP_CLAUSE_GNU_PERFECT))
+    DECL_ATTRIBUTES (fn)
+      = tree_cons (get_identifier ("oacc perfect"),
+		   NULL_TREE, DECL_ATTRIBUTES (fn));
+  
   for (ix = GOMP_DIM_MAX; ix--;)
     {
       tree clause = find_omp_clause (clauses, ids[ix]);
@@ -13082,7 +13089,7 @@ set_oacc_fn_attrib (tree fn, tree clauses, bool is_kernel, vec<tree> *args)
       if (is_kernel)
 	TREE_PUBLIC (attr) = 1;
     }
-
+  
   replace_oacc_fn_attrib (fn, attr);
 
   if (non_const)

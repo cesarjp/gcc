@@ -468,7 +468,10 @@ enum omp_clause_code {
   OMP_CLAUSE__GRIDDIM_,
 
   /* OpenACC clause: device_type ( device-type-list).  */
-  OMP_CLAUSE_DEVICE_TYPE
+  OMP_CLAUSE_DEVICE_TYPE,
+
+  /* Internal OpenACC clause: gnu_perfect */
+  OMP_CLAUSE_GNU_PERFECT
 };
 
 #undef DEFTREESTRUCT
