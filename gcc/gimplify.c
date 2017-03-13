@@ -7660,6 +7660,7 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	case OMP_CLAUSE_THREADS:
 	case OMP_CLAUSE_SIMD:
 	case OMP_CLAUSE_DEVICE_TYPE:
+	case OMP_CLAUSE_GNU_PERFECT:
 	  break;
 
 	case OMP_CLAUSE_DEFAULTMAP:
@@ -8507,6 +8508,7 @@ gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
 	case OMP_CLAUSE_SEQ:
 	case OMP_CLAUSE_TILE:
 	case OMP_CLAUSE_DEVICE_TYPE:
+	case OMP_CLAUSE_GNU_PERFECT:
 	  break;
 
 	case OMP_CLAUSE_BIND:

@@ -330,7 +330,8 @@ unsigned const char omp_clause_num_ops[] =
   0, /* OMP_CLAUSE_NOHOST  */
   3, /* OMP_CLAUSE_TILE  */
   2, /* OMP_CLAUSE__GRIDDIM_  */
-  2  /* OMP_CLAUSE_DEVICE_TYPE */
+  2, /* OMP_CLAUSE_DEVICE_TYPE */
+  0  /* OMP_CLAUSE_GNU_PERFECT */
 };
 
 const char * const omp_clause_code_name[] =

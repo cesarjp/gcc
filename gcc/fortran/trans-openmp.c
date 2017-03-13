@@ -2734,6 +2734,11 @@ gfc_trans_omp_clauses_1 (stmtblock_t *block, gfc_omp_clauses *clauses,
 	  OMP_CLAUSE_GANG_STATIC_EXPR (c) = arg;
 	}
     }
+  if (clauses->gnu_perfect)
+    {
+      c = build_omp_clause (where.lb->location, OMP_CLAUSE_GNU_PERFECT);
+      omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+    }
   if (clauses->nohost)
     {
       c = build_omp_clause (where.lb->location, OMP_CLAUSE_NOHOST);
