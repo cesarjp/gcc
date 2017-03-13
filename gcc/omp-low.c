@@ -13065,16 +13065,20 @@ set_oacc_fn_attrib (tree fn, tree clauses, bool is_kernel, vec<tree> *args)
   tree dims[GOMP_DIM_MAX];
   tree attr = NULL_TREE;
   unsigned non_const = 0;
+  bool perfect = false;
 
   if (find_omp_clause (clauses, OMP_CLAUSE_GNU_PERFECT))
-    DECL_ATTRIBUTES (fn)
-      = tree_cons (get_identifier ("oacc perfect"),
-		   NULL_TREE, DECL_ATTRIBUTES (fn));
+    {
+      DECL_ATTRIBUTES (fn)
+	= tree_cons (get_identifier ("oacc perfect"),
+		     NULL_TREE, DECL_ATTRIBUTES (fn));
+      perfect = true;
+    }
   
   for (ix = GOMP_DIM_MAX; ix--;)
     {
       tree clause = find_omp_clause (clauses, ids[ix]);
-      tree dim = NULL_TREE;
+      tree dim = perfect ? integer_minus_one_node : NULL_TREE;
 
       if (clause)
 	dim = OMP_CLAUSE_EXPR (clause, ids[ix]);
