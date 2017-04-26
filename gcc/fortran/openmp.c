@@ -2379,7 +2379,7 @@ static oacc_function
 gfc_oacc_routine_dims (gfc_omp_clauses *clauses)
 {
   int level = -1;
-  oacc_function ret = OACC_FUNCTION_SEQ;
+  oacc_function ret = OACC_FUNCTION_AUTO;
 
   if (clauses)
     {
@@ -2504,6 +2504,12 @@ gfc_match_oacc_routine (void)
       /* Don't abort early, because it's important to let the user
 	 know of any potential duplicate routine directives.  */
       seen_error = true;
+    }
+  else if (dims == OACC_FUNCTION_AUTO)
+    {
+      gfc_warning (0, "Expected one of %<gang%>, %<worker%>, %<vector%> or "
+		   "%<seq%> clauses in !$ACC ROUTINE at %L", &old_loc);
+      dims = OACC_FUNCTION_SEQ;
     }
 
   if (isym != NULL)
