@@ -14,7 +14,7 @@ subroutine s1
      sum = sum + 1
   end do
   !$acc end parallel
-  
+
   !$acc parallel loop gang reduction(+:sum)
   do i = 1, n
      sum = sum + 1
@@ -31,7 +31,7 @@ end subroutine s1
 subroutine s2
   implicit none
   !$acc routine worker
-  
+
   integer, parameter :: n = 100
   integer :: i, j, sum
   sum = 0
@@ -62,7 +62,7 @@ integer function f1 ()
      sum = sum + 1
   end do
   !$acc end parallel
-  
+
   !$acc parallel loop gang reduction(+:sum)
   do i = 1, n
      sum = sum + 1
@@ -81,7 +81,7 @@ end function f1
 integer function f2 ()
   implicit none
   !$acc routine worker
-  
+
   integer, parameter :: n = 100
   integer :: i, j, sum
   sum = 0
