@@ -6703,8 +6703,7 @@ lower_oacc_head_tail (location_t loc, tree clauses,
   if (get_oacc_fn_attrib (current_function_decl)
       && find_omp_clause (clauses, OMP_CLAUSE_REDUCTION)
       && find_omp_clause (clauses, OMP_CLAUSE_GANG))
-    warning_at (gimple_location (ctx->stmt), 0,
-		"gang reduction on an orphan loop");
+    error_at (gimple_location (ctx->stmt), "gang reduction on an orphan loop");
 
   gcc_assert (count);
   for (unsigned done = 1; count; count--, done++)
