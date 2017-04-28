@@ -5832,7 +5832,7 @@ lower_oacc_reductions (location_t loc, tree clauses, tree level, bool inner,
 	tree incoming, outgoing, v1, v2, v3;
 	bool is_private = false;
 	bool is_fpp = false;
-	
+
 	enum tree_code rcode = OMP_CLAUSE_REDUCTION_CODE (c);
 	if (rcode == MINUS_EXPR)
 	  rcode = PLUS_EXPR;
@@ -6706,7 +6706,6 @@ lower_oacc_head_tail (location_t loc, tree clauses,
     warning_at (gimple_location (ctx->stmt), 0,
 		"gang reduction on an orphan loop");
 
-  
   gcc_assert (count);
   for (unsigned done = 1; count; count--, done++)
     {
