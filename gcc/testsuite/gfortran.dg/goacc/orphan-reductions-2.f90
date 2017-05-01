@@ -46,4 +46,40 @@ subroutine s3 ! { dg-warning "region is gang partitioned but does not contain ga
   end do
 end subroutine s3
 
+subroutine s4
+  implicit none
+
+  integer i, j, k, sum
+
+  !$acc parallel copy(sum)
+  !$acc loop reduction (+:sum) ! { dg-message "Detected parallelism <acc loop gang vector>" }
+  do i = 1, 10
+     sum = sum + 1
+  end do
+  !$acc end parallel
+
+  !$acc parallel copy(sum)
+  !$acc loop reduction (+:sum) ! { dg-message "Detected parallelism <acc loop gang worker>" }
+  do i = 1, 10
+     !$acc loop reduction (+:sum) ! { dg-message "Detected parallelism <acc loop vector>" }
+     do j = 1, 10
+        sum = sum + 1
+     end do
+  end do
+  !$acc end parallel
+
+  !$acc parallel copy(sum)
+  !$acc loop reduction (+:sum) ! { dg-message "Detected parallelism <acc loop gang>" }
+  do i = 1, 10
+     !$acc loop reduction (+:sum) ! { dg-message "Detected parallelism <acc loop worker>" }
+     do j = 1, 10
+        !$acc loop reduction (+:sum) ! { dg-message "Detected parallelism <acc loop vector>" }
+        do k = 1, 10
+           sum = sum + 1
+        end do
+     end do
+  end do
+  !$acc end parallel
+end subroutine s4
+
 ! { dg-warning "insufficient partitioning available to parallelize loop" "" { target *-*-* } 39 }

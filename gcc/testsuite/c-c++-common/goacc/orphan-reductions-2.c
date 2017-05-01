@@ -49,4 +49,39 @@ f3 () /* { dg-warning "region is gang partitioned but does not contain gang part
   return sum;
 }
 
+int
+main ()
+{
+  int sum = 0, i, j, k;
+
+#pragma acc parallel copy (sum)
+  {
+#pragma acc loop reduction (+:sum) /* { dg-message "Detected parallelism <acc loop gang vector>" } */
+  for (i = 0; i < 100; i++)
+    sum++;
+  }
+
+#pragma acc parallel copy (sum)
+  {
+#pragma acc loop reduction (+:sum) /* { dg-message "Detected parallelism <acc loop gang worker>" } */
+  for (i = 0; i < 100; i++)
+#pragma acc loop reduction (+:sum) /* { dg-message "Detected parallelism <acc loop vector>" } */
+    for (j = 0; j < 100; j++)
+      sum++;
+  }
+
+#pragma acc parallel copy (sum)
+  {
+#pragma acc loop reduction (+:sum) /* { dg-message "Detected parallelism <acc loop gang>" } */
+  for (i = 0; i < 100; i++)
+#pragma acc loop reduction (+:sum) /* { dg-message "Detected parallelism <acc loop worker>" } */
+    for (j = 0; j < 100; j++)
+#pragma acc loop reduction (+:sum) /* { dg-message "Detected parallelism <acc loop vector>" } */
+      for (k = 0; k < 100; k++)
+	sum++;
+  }
+
+  return sum;
+}
+
 /* { dg-warning "insufficient partitioning available to parallelize loop" "" { target *-*-* } 43 } */

@@ -20935,7 +20935,6 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
   bool assign = (loop->flags & OLF_AUTO) && (loop->flags & OLF_INDEPENDENT);
   bool noisy = true;
   bool tiling = loop->flags & OLF_TILE;
-  bool reduction = loop->flags & OLF_REDUCTION;
 
 #ifdef ACCEL_COMPILER
   /* When device_type is supported, we want the device compiler to be
@@ -20950,7 +20949,10 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
       unsigned this_mask = GOMP_DIM_MASK (GOMP_DIM_GANG);
 
       /* Orphan reductions cannot have gang partitioning.  */
-      if (reduction && get_oacc_fn_attrib (current_function_decl))
+      if ((loop->flags & OLF_REDUCTION)
+	  && get_oacc_fn_attrib (current_function_decl)
+	  && !lookup_attribute ("omp target entrypoint",
+				DECL_ATTRIBUTES (current_function_decl)))
 	this_mask = GOMP_DIM_MASK (GOMP_DIM_WORKER);
 
       /* Find the first outermost available partition. */
