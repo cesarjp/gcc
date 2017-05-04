@@ -2,7 +2,7 @@
 
 ! { dg-compile }
 
-subroutine t
+subroutine t1
   implicit none
   !$acc routine gang if_present ! { dg-error "Unclassifiable OpenACC directive" }
   integer a, b, c(10)
@@ -41,4 +41,29 @@ subroutine t
   do b = 1, 10
   end do
   !$acc end parallel loop   ! { dg-error "Unexpected ..ACC END PARALLEL LOOP statement" }
-end subroutine t
+end subroutine t1
+
+subroutine t2
+  implicit none
+  integer a, b, c(10)
+
+  a = 5
+  b = 10
+  c(:) = -1
+
+  !$acc parallel
+  !$acc loop if_present ! { dg-error "Unclassifiable OpenACC directive" }
+  do b = 1, 10
+  end do
+  !$acc end parallel
+
+  !$acc kernels loop if_present ! { dg-error "Unclassifiable OpenACC directive" }
+  do b = 1, 10
+  end do
+  !$acc end kernels loop ! { dg-error "Unexpected ..ACC END KERNELS LOOP statement" }
+
+  !$acc parallel loop if_present ! { dg-error "Unclassifiable OpenACC directive" }
+  do b = 1, 10
+  end do
+  !$acc end parallel loop   ! { dg-error "Unexpected ..ACC END PARALLEL LOOP statement" }
+end subroutine t2
