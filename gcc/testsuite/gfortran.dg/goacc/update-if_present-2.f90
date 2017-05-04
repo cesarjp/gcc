@@ -26,21 +26,6 @@ subroutine t1
   !$acc shutdown if_present ! { dg-error "Unclassifiable OpenACC directive" }
   
   !$acc update self(a) device_type(nvidia) device(b) if_present ! { dg-error "Unclassifiable OpenACC directive" }
-  !$acc parallel
-  !$acc loop if_present ! { dg-error "Unclassifiable OpenACC directive" }
-  do b = 1, 10
-  end do
-  !$acc end parallel
-
-  !$acc kernels loop if_present ! { dg-error "Unclassifiable OpenACC directive" }
-  do b = 1, 10
-  end do
-  !$acc end kernels loop ! { dg-error "Unexpected ..ACC END KERNELS LOOP statement" }
-
-  !$acc parallel loop if_present ! { dg-error "Unclassifiable OpenACC directive" }
-  do b = 1, 10
-  end do
-  !$acc end parallel loop   ! { dg-error "Unexpected ..ACC END PARALLEL LOOP statement" }
 end subroutine t1
 
 subroutine t2
