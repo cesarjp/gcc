@@ -530,7 +530,7 @@ module openacc
   public :: acc_present_or_create, acc_pcreate, acc_copyout, acc_delete
   public :: acc_update_device, acc_update_self, acc_is_present
 
-  integer, parameter :: openacc_version = 201306
+  integer, parameter :: openacc_version = 201510
 
   interface acc_get_num_devices
     procedure :: acc_get_num_devices_h
