@@ -1,3 +1,51 @@
+2017-05-16  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* tree-core.h (enum omp_clause_code): Add OMP_CLAUSE_FINALIZE.
+	* tree.c (omp_clause_num_ops): Add entry for OMP_CLAUSE_FINALIZE.
+	(omp_clause_code_name): Add "finalize" entry.
+	* omp-low.c (scan_sharing_clauses): Handle OMP_CLAUSE_FINALIZE.
+	(expand_omp_target): Add finalize argument for GOACC_enter_exit_data
+	call.
+	* gimplify.c (gimplify_scan_omp_clauses): Handle OMP_CLAUSE_FINALIZE.
+	(gimplify_adjust_omp_clauses): Likewise.
+
+2017-05-15  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* doc/invoke.texi: Update for OpenACC 2.5.
+
+2017-05-14  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* omp-low.c (execute_oacc_device_lower): Remove the parallelism
+	dimensions function attributes for unparallelized OpenACC kernels
+	constructs.
+
+2017-05-12  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_goacc_reduction_init): Don't update
+	LHS if it doesn't exist.
+
+2017-05-12  Thomas Schwinge  <thomas@codesourcery.com>
+
+	PR middle-end/69921
+	* tree-parloops.c (create_parallel_loop): Set "oacc kernels
+	parallelized" attribute for parallelized OpenACC kernels.
+	* omp-low.c (execute_oacc_device_lower): Use it.
+	* config/nvptx/nvptx.c (nvptx_goacc_validate_dims): Likewise.
+	* omp-low.c (set_oacc_fn_attrib): Make it "static".
+	* omp-low.h (set_oacc_fn_attrib): Remove prototype.
+
+	* omp-low.c (expand_omp_target) <GF_OMP_TARGET_KIND_OACC_KERNELS>:
+	Set "oacc kernels" attribute.
+	(set_oacc_fn_attrib): Remove is_kernel formal parameter.  Adjust
+	all users.
+	(oacc_fn_attrib_kernels_p): Remove function.
+	(oacc_validate_dims, execute_oacc_device_lower): Look for "oacc
+	kernels" attribute instead of calling oacc_fn_attrib_kernels_p.
+	* tree-ssa-loop.c (gate_oacc_kernels): Likewise.
+	* config/nvptx/nvptx.c (nvptx_goacc_validate_dims): Likewise.
+	* tree-parloops.c (create_parallel_loop): If oacc_kernels_p,
+	assert "oacc kernels" attribute is set.
+
 2017-05-11  Cesar Philippidis  <cesar@codesourcery.com>
 
 	* gimplify.c (gomp_needs_data_present): Ensure that the

@@ -1,3 +1,82 @@
+2017-05-15  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-c++-common/cpp/openacc-define-3.c: Update.
+	* gfortran.dg/openacc-define-3.f90: Likewise.
+
+2017-05-14  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-c++-common/goacc/parallel-dims-1.c: Update.
+	* c-c++-common/goacc/parallel-dims-2.c: Likewise.
+	* c-c++-common/goacc/routine-1.c: Likewise.
+	* c-c++-common/goacc/uninit-dim-clause.c: Likewise.
+	* g++.dg/goacc/template.C: Likewise.
+	* gfortran.dg/goacc/kernels-tree.f95: Likewise.
+	* gfortran.dg/goacc/routine-3.f90: Likewise.
+	* gfortran.dg/goacc/sie.f95: Likewise.
+	* gfortran.dg/goacc/uninit-dim-clause.f95: Likewise.
+
+2017-05-12  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-c++-common/goacc/parallel-dims-1.c: New file.
+	* c-c++-common/goacc/parallel-dims-2.c: Likewise.
+
+	* c-c++-common/goacc/classify-kernels-unparallelized.c: Adjust.
+	* c-c++-common/goacc/classify-kernels.c: Likewise.
+	* c-c++-common/goacc/kernels-acc-loop-reduction.c: Likewise.
+	* c-c++-common/goacc/kernels-acc-loop-smaller-equal.c: Likewise.
+	* c-c++-common/goacc/kernels-counter-vars-function-scope.c:
+	Likewise.
+	* c-c++-common/goacc/kernels-double-reduction-n.c: Likewise.
+	* c-c++-common/goacc/kernels-double-reduction.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-2-acc-loop.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-2.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-3-acc-loop.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-3.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-acc-loop.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-data-2.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-data-enter-exit-2.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-data-enter-exit.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-data-update.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-data.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-g.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-mod-not-zero.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-n-acc-loop.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-n.c: Likewise.
+	* c-c++-common/goacc/kernels-loop-nest.c: Likewise.
+	* c-c++-common/goacc/kernels-loop.c: Likewise.
+	* c-c++-common/goacc/kernels-one-counter-var.c: Likewise.
+	* c-c++-common/goacc/kernels-parallel-loop-data-enter-exit.c:
+	Likewise.
+	* c-c++-common/goacc/kernels-reduction.c: Likewise.
+	* gfortran.dg/goacc/classify-kernels-unparallelized.f95: Likewise.
+	* gfortran.dg/goacc/classify-kernels.f95: Likewise.
+	* gfortran.dg/goacc/kernels-loop-2.f95: Likewise.
+	* gfortran.dg/goacc/kernels-loop-data-2.f95: Likewise.
+	* gfortran.dg/goacc/kernels-loop-data-enter-exit-2.f95: Likewise.
+	* gfortran.dg/goacc/kernels-loop-data-enter-exit.f95: Likewise.
+	* gfortran.dg/goacc/kernels-loop-data-update.f95: Likewise.
+	* gfortran.dg/goacc/kernels-loop-data.f95: Likewise.
+	* gfortran.dg/goacc/kernels-loop-n.f95: Likewise.
+	* gfortran.dg/goacc/kernels-loop.f95: Likewise.
+	* gfortran.dg/goacc/kernels-parallel-loop-data-enter-exit.f95:
+	Likewise.
+
+	* c-c++-common/goacc/oaccdevlow-kernels.c: Adjust.
+	* c-c++-common/goacc/oaccdevlow-parallel.c: Likewise.
+	* c-c++-common/goacc/oaccdevlow-routine.c: Likewise.
+	* gfortran.dg/goacc/oaccdevlow-kernels.f95: Likewise.
+	* gfortran.dg/goacc/oaccdevlow-parallel.f95: Likewise.
+	* gfortran.dg/goacc/oaccdevlow-routine.f95: Likewise.
+
+	* c-c++-common/goacc/classify-kernels-unparallelized.c: New file.
+	* c-c++-common/goacc/classify-kernels.c: Likewise.
+	* c-c++-common/goacc/classify-parallel.c: Likewise.
+	* c-c++-common/goacc/classify-routine.c: Likewise.
+	* gfortran.dg/goacc/classify-kernels-unparallelized.f95: Likewise.
+	* gfortran.dg/goacc/classify-kernels.f95: Likewise.
+	* gfortran.dg/goacc/classify-parallel.f95: Likewise.
+	* gfortran.dg/goacc/classify-routine.f95: Likewise.
+
 2017-05-09  Cesar Philippidis  <cesar@codesourcery.com>
 
 	* c-c++-common/goacc/update-if_present-1.c: Update test case.

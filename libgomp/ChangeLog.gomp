@@ -1,3 +1,120 @@
+2017-05-16  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* openacc.h (acc_copyout_finalize): Declare new API function.
+	(acc_copyout_finalize_async): Likewise.
+	(acc_delete_finalize): Likewise.
+	(acc_delete_finalize_async): Likewise.
+	* openacc_lib.h (acc_copyout_finalize): Declare new API function.
+	(acc_copyout_finalize_async): Likewise.
+	(acc_delete_finalize): Likewise.
+	(acc_delete_finalize_async): Likewise.
+	* openacc.f90 (acc_copyout_finalize_32_h): Define.
+	(acc_copyout_finalize_64_h): Likewise.
+	(acc_copyout_finalize_array_h): Likewise.
+	(acc_copyout_finalize_l): Likewise.
+	(acc_copyout_finalize_async_32_h): Define.
+	(acc_copyout_finalize_async_64_h): Likewise.
+	(acc_copyout_finalize_async_array_h): Likewise.
+	(acc_copyout_finalize_async_l): Likewise.
+	(acc_delete_finalize_32_h): Define.
+	(acc_delete_finalize_64_h): Likewise.
+	(acc_delete_finalize_array_h): Likewise.
+	(acc_delete_finalize_l): Likewise.
+	(acc_delete_finalize_async_32_h): Define.
+	(acc_delete_finalize_async_64_h): Likewise.
+	(acc_delete_finalize_async_array_h): Likewise.
+	(acc_delete_finalize_async_l): Likewise.
+	* libgomp.map (OACC_2.5): Add acc_copyout_finalize* and
+	acc_delete_finalize* entries.
+	* libgomp.h (struct splay_tree_key_s): Add 'dynamic_refcount' field.
+	(gomp_acc_remove_pointer): Adjust declaration.
+	(gomp_remove_var): New declaration.
+	* libgomp_g.h (GOACC_enter_exit_data): Adjust declaration.
+	* oacc-mem.c (acc_map_data): Adjust new key refcount to
+	REFCOUNT_INFINITY.
+	(acc_unmap_data): Adjust key refcount to 1 for removal.
+	(present_create_copy): Increment mapping refcounts when mapping exists,
+	initialize dynamic refcount when creating new mapping.
+	(FLAG_FINALIZE): Define macro.
+	(delete_copyout): Adjust delete/copyout handling, add handling for
+	FLAG_FINALIZE.
+	(acc_delete_finalize): Define new API function.
+	(acc_delete_finalize_async): Likewise.
+	(acc_copyout_finalize): Likewise.
+	(acc_copyout_finalize_async): Likewise.
+	(gomp_acc_insert_pointer): Adjust handling.
+	(gomp_acc_remove_pointer): Add finalize parameter, adjust handling.
+	* oacc-parallel.c (GOACC_parallel_keyed): Disable async registering
+	when no copyout needed.
+	(GOACC_enter_exit_data): Add and handle finalize argument, adjust
+	gomp_acc_insert_pointer and gomp_acc_remove_pointer calls.
+	(GOACC_declare): Adjust calls to GOACC_enter_exit_data.
+	* target.c (gomp_map_vars): Initialize dynamic_refcount.
+	(gomp_remove_var): Abstract out key unreferencing into new function.
+	(gomp_unmap_vars): Adjust to call gomp_remove_var.
+	(gomp_unload_image_from_device): Likewise.
+	(gomp_exit_data): Likewise.
+	* testsuite/libgomp.oacc-c-c++-common/data-2.c: Adjust testcase for
+	2.5 reference counting.
+	* testsuite/libgomp.oacc-c-c++-common/lib-38.c: Likewise.
+	* testsuite/libgomp.oacc-fortran/data-2.f90: Likewise.
+	* testsuite/libgomp.oacc-c-c++-common/data-4.c: New test.
+	* testsuite/libgomp.oacc-c-c++-common/data-5.c: Likewise.
+	* testsuite/libgomp.oacc-fortran/data-5.f90: Likewise.
+	* testsuite/libgomp.oacc-fortran/data-6.f90: Likewise.
+
+2017-05-15  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* libgomp.texi (OpenACC Environment Variables): Mention
+	"ACC_PROFLIB".
+	(OpenACC Profiling Interface): Update.
+
+	* libgomp.texi: Update for OpenACC 2.5.
+	* openacc.f90 (openacc_version): Update to "201510".
+	* openacc_lib.h (openacc_version): Likewise.
+	* testsuite/libgomp.oacc-fortran/openacc_version-1.f: Update.
+	* testsuite/libgomp.oacc-fortran/openacc_version-2.f90: Update.
+
+	* oacc-async.c (acc_async_test, acc_async_test_all, acc_wait)
+	(acc_wait_async, acc_wait_all, acc_wait_all_async): Set up
+	profiling.
+	* oacc-cuda.c (acc_get_current_cuda_device)
+	(acc_get_current_cuda_context, acc_get_cuda_stream)
+	(acc_set_cuda_stream): Likewise.
+	* oacc-init.c (acc_set_device_type, acc_get_device_type)
+	(acc_get_device_num): Likewise.
+	* oacc-mem.c (acc_malloc, acc_free, memcpy_tofrom_device)
+	(acc_map_data, acc_unmap_data, present_create_copy)
+	(delete_copyout, update_dev_host): Likewise.
+	* oacc-parallel.c (GOACC_data_start, GOACC_data_end)
+	(GOACC_enter_exit_data, GOACC_update, GOACC_wait): Likewise.
+	* oacc-profiling.c (goacc_profiling_setup_p): New function.
+	(goacc_profiling_dispatch_p): Add a "bool" formal parameter.
+	Adjust all users.
+	* oacc-int.h (goacc_profiling_setup_p)
+	(goacc_profiling_dispatch_p): Update.
+	* plugin/plugin-nvptx.c (nvptx_exec, nvptx_wait, nvptx_wait_all):
+	Generate more profiling events.
+	* libgomp.texi (OpenACC Profiling Interface): Update.
+
+2017-05-14  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* testsuite/libgomp.oacc-c-c++-common/acc_prof-kernels-1.c: New
+	file.
+	* testsuite/libgomp.oacc-c-c++-common/kernels-loop-2.c: Update.
+	* testsuite/libgomp.oacc-c-c++-common/parallel-dims.c: Likewise.
+	* testsuite/libgomp.oacc-fortran/kernels-loop-2.f95: Likewise.
+
+	* testsuite/libgomp.oacc-c-c++-common/parallel-dims.c: Rewrite.
+	* testsuite/libgomp.oacc-c++/c++.exp (check_effective_target_c)
+	(check_effective_target_c++): New procs.
+	* testsuite/libgomp.oacc-c/c.exp (check_effective_target_c)
+	(check_effective_target_c++): Likewise.
+
+2017-05-12  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* testsuite/libgomp.oacc-c-c++-common/par-reduction-3.c: New test.
+
 2017-05-11  Cesar Philippidis  <cesar@codesourcery.com>
 
 	* testsuite/libgomp.oacc-fortran/implicit_copy.f90: New test.
