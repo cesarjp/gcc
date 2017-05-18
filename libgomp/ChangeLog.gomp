@@ -1,3 +1,24 @@
+2017-05-17  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* libgomp.texi (OpenACC Profiling Interface): Update.
+	* oacc-parallel.c (GOACC_parallel_keyed): Update profiling event
+	generation.
+
+	* oacc-parallel.c (GOACC_enter_exit_data): Locally compute
+	"finalize", and remove the formal parameter.  Adjust all users.
+	(GOACC_declare): Don't replace GOMP_MAP_FROM with
+	GOMP_MAP_FORCE_FROM.
+
+	* oacc-parallel.c (GOACC_enter_exit_data, GOACC_declare): Handle
+	"GOMP_MAP_RELEASE".
+
+2017-05-16  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* libgomp.texi: Update OpenACC references to version 2.5. Add entries
+	for acc_memcpy_to_device_async, acc_memcpy_from_device_async,
+	acc_memcpy_device, acc_memcpy_device_async, acc_get_default_async,
+	acc_set_default_async.
+
 2017-05-16  Chung-Lin Tang  <cltang@codesourcery.com>
 
 	* openacc.h (acc_copyout_finalize): Declare new API function.
