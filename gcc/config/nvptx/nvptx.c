@@ -4270,31 +4270,18 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 	 construct could not be parallelized, but only do that for -O2 and
 	 higher, as otherwise we're not expecting any parallelization to
 	 happen.  */
-      tree oacc_function_attr = get_oacc_fn_attrib (decl);
       if (optimize >= 2
-	  && oacc_function_attr
-	  && oacc_fn_attrib_kernels_p (oacc_function_attr))
+	  && lookup_attribute ("oacc kernels", DECL_ATTRIBUTES (decl))
+	  && !lookup_attribute ("oacc kernels parallelized",
+				DECL_ATTRIBUTES (decl)))
 	{
-	  bool avoid_offloading_p = true;
-	  for (unsigned ix = 0; ix != GOMP_DIM_MAX; ix++)
-	    {
-	      if (dims[ix] == 0 || dims[ix] > 1)
-		{
-		  avoid_offloading_p = false;
-		  break;
-		}
-	    }
-	  if (avoid_offloading_p)
-	    {
-	      warning_at (DECL_SOURCE_LOCATION (decl), 0,
-			  "OpenACC kernels construct will be executed"
-			  " sequentially; will by default avoid offloading to"
-			  " prevent data copy penalty");
-	      DECL_ATTRIBUTES (decl)
-		= tree_cons (get_identifier ("omp avoid offloading"),
-			     NULL_TREE, DECL_ATTRIBUTES (decl));
-
-	    }
+	  warning_at (DECL_SOURCE_LOCATION (decl), 0,
+		      "OpenACC kernels construct will be executed"
+		      " sequentially; will by default avoid offloading to"
+		      " prevent data copy penalty");
+	  DECL_ATTRIBUTES (decl)
+	    = tree_cons (get_identifier ("omp avoid offloading"),
+			 NULL_TREE, DECL_ATTRIBUTES (decl));
 	}
     }
 
@@ -4934,7 +4921,11 @@ nvptx_goacc_reduction_init (gcall *call)
 	    init = var;
 	}
 
-      gimplify_assign (lhs, init, &seq);
+      /* The LHS may be NULL if a reduction variable on a parallel
+	 construct is initialized to some constant inside the parallel
+	 region.  */
+      if (lhs)
+	gimplify_assign (lhs, init, &seq);
     }
 
   pop_gimplify_context (NULL);

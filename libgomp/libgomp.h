@@ -835,6 +835,8 @@ struct splay_tree_key_s {
   uintptr_t tgt_offset;
   /* Reference count.  */
   uintptr_t refcount;
+  /* Dynamic reference count.  */
+  uintptr_t dynamic_refcount;
   /* Pointer to the original mapping of "omp declare target link" object.  */
   splay_tree_key link_key;
 };
@@ -973,7 +975,9 @@ enum gomp_map_vars_kind
 };
 
 extern void gomp_acc_insert_pointer (size_t, void **, size_t *, void *);
-extern void gomp_acc_remove_pointer (void *, bool, int, int);
+extern void gomp_acc_remove_pointer (void *, size_t, bool, int, int, int);
+extern void gomp_acc_declare_allocate (bool, size_t, void **, size_t *,
+				       unsigned short *);
 
 extern struct target_mem_desc *gomp_map_vars (struct gomp_device_descr *,
 					      size_t, void **, void **,
@@ -983,6 +987,7 @@ extern void gomp_unmap_vars (struct target_mem_desc *, bool);
 extern void gomp_init_device (struct gomp_device_descr *);
 extern void gomp_unload_device (struct gomp_device_descr *);
 extern bool gomp_offload_target_available_p (int);
+extern bool gomp_remove_var (struct gomp_device_descr *, splay_tree_key);
 
 /* work.c */
 
@@ -1044,8 +1049,6 @@ extern void gomp_set_nest_lock_25 (omp_nest_lock_25_t *) __GOMP_NOTHROW;
 extern void gomp_unset_nest_lock_25 (omp_nest_lock_25_t *) __GOMP_NOTHROW;
 extern int gomp_test_nest_lock_25 (omp_nest_lock_25_t *) __GOMP_NOTHROW;
 
-# define strong_alias(fn, al) \
-  extern __typeof (fn) al __attribute__ ((alias (#fn)));
 # define omp_lock_symver(fn) \
   __asm (".symver g" #fn "_30, " #fn "@@OMP_3.0"); \
   __asm (".symver g" #fn "_25, " #fn "@OMP_1.0");
@@ -1069,6 +1072,9 @@ extern int gomp_test_nest_lock_25 (omp_nest_lock_25_t *) __GOMP_NOTHROW;
 #endif
 
 #ifdef HAVE_ATTRIBUTE_ALIAS
+# define strong_alias(fn, al) \
+  extern __typeof (fn) al __attribute__ ((alias (#fn)));
+
 # define ialias_ulp	ialias_str1(__USER_LABEL_PREFIX__)
 # define ialias_str1(x)	ialias_str2(x)
 # define ialias_str2(x)	#x

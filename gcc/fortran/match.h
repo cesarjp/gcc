@@ -95,6 +95,7 @@ match gfc_match_nullify (void);
 match gfc_match_deallocate (void);
 match gfc_match_return (void);
 match gfc_match_call (void);
+match gfc_match_call_name (char *, gfc_symbol **, gfc_symtree **, bool &);
 
 /* We want to use this function to check for a common-block-name
    that can exist in a bind statement, so removed the "static"
@@ -162,6 +163,7 @@ match gfc_match_omp_do_simd (void);
 match gfc_match_omp_flush (void);
 match gfc_match_omp_master (void);
 match gfc_match_omp_ordered (void);
+match gfc_match_omp_ordered_depend (void);
 match gfc_match_omp_parallel (void);
 match gfc_match_omp_parallel_do (void);
 match gfc_match_omp_parallel_do_simd (void);
@@ -172,6 +174,12 @@ match gfc_match_omp_simd (void);
 match gfc_match_omp_single (void);
 match gfc_match_omp_target (void);
 match gfc_match_omp_target_data (void);
+match gfc_match_omp_target_enter_data (void);
+match gfc_match_omp_target_exit_data (void);
+match gfc_match_omp_target_parallel (void);
+match gfc_match_omp_target_parallel_do (void);
+match gfc_match_omp_target_parallel_do_simd (void);
+match gfc_match_omp_target_simd (void);
 match gfc_match_omp_target_teams (void);
 match gfc_match_omp_target_teams_distribute (void);
 match gfc_match_omp_target_teams_distribute_parallel_do (void);
@@ -180,6 +188,8 @@ match gfc_match_omp_target_teams_distribute_simd (void);
 match gfc_match_omp_target_update (void);
 match gfc_match_omp_task (void);
 match gfc_match_omp_taskgroup (void);
+match gfc_match_omp_taskloop (void);
+match gfc_match_omp_taskloop_simd (void);
 match gfc_match_omp_taskwait (void);
 match gfc_match_omp_taskyield (void);
 match gfc_match_omp_teams (void);
@@ -189,6 +199,7 @@ match gfc_match_omp_teams_distribute_parallel_do_simd (void);
 match gfc_match_omp_teams_distribute_simd (void);
 match gfc_match_omp_threadprivate (void);
 match gfc_match_omp_workshare (void);
+match gfc_match_omp_end_critical (void);
 match gfc_match_omp_end_nowait (void);
 match gfc_match_omp_end_single (void);
 

@@ -378,6 +378,14 @@ OACC_2.0 {
 	acc_set_cuda_stream;
 };
 
+OACC_2.0.1 {
+  global:
+	acc_async_wait;
+	acc_async_wait_all;
+	acc_pcopyin;
+	acc_pcreate;
+} OACC_2.0;
+
 OACC_2.5 {
   global:
 	acc_copyin_async;
@@ -388,6 +396,14 @@ OACC_2.5 {
 	acc_copyout_async_32_h_;
 	acc_copyout_async_64_h_;
 	acc_copyout_async_array_h_;
+	acc_copyout_finalize;
+	acc_copyout_finalize_32_h_;
+	acc_copyout_finalize_64_h_;
+	acc_copyout_finalize_array_h_;
+	acc_copyout_finalize_async;
+	acc_copyout_finalize_async_32_h_;
+	acc_copyout_finalize_async_64_h_;
+	acc_copyout_finalize_async_array_h_;
 	acc_create_async;
 	acc_create_async_32_h_;
 	acc_create_async_64_h_;
@@ -396,6 +412,14 @@ OACC_2.5 {
 	acc_delete_async_32_h_;
 	acc_delete_async_64_h_;
 	acc_delete_async_array_h_;
+	acc_delete_finalize;
+	acc_delete_finalize_32_h_;
+	acc_delete_finalize_64_h_;
+	acc_delete_finalize_array_h_;
+	acc_delete_finalize_async;
+	acc_delete_finalize_async_32_h_;
+	acc_delete_finalize_async_64_h_;
+	acc_delete_finalize_async_array_h_;
 	acc_get_default_async;
 	acc_get_default_async_h_;
 	acc_memcpy_from_device_async;
@@ -414,7 +438,7 @@ OACC_2.5 {
 	acc_update_self_async_32_h_;
 	acc_update_self_async_64_h_;
 	acc_update_self_async_array_h_;
-} OACC_2.0;
+} OACC_2.0.1;
 
 GOACC_2.0 {
   global:

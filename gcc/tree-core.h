@@ -351,7 +351,9 @@ enum omp_clause_code {
   /* OpenMP clause: ordered [(constant-integer-expression)].  */
   OMP_CLAUSE_ORDERED,
 
-  /* OpenMP clause: default.  */
+  /* OpenACC clause: default ( none | present ).
+
+     OpenMP clause: default ( firstprivate | none | private | shared ). */
   OMP_CLAUSE_DEFAULT,
 
   /* OpenACC/OpenMP clause: collapse (constant-integer-expression).  */
@@ -467,8 +469,14 @@ enum omp_clause_code {
      kernel.  */
   OMP_CLAUSE__GRIDDIM_,
 
+  /* OpenACC clause: if_present.  */
+  OMP_CLAUSE_IF_PRESENT,
+
   /* OpenACC clause: device_type ( device-type-list).  */
   OMP_CLAUSE_DEVICE_TYPE,
+
+  /* OpenACC clause: finalize.  */
+  OMP_CLAUSE_FINALIZE,
 
   /* Internal OpenACC clause: gnu_perfect */
   OMP_CLAUSE_GNU_PERFECT
@@ -501,6 +509,7 @@ enum omp_clause_default_kind {
   OMP_CLAUSE_DEFAULT_NONE,
   OMP_CLAUSE_DEFAULT_PRIVATE,
   OMP_CLAUSE_DEFAULT_FIRSTPRIVATE,
+  OMP_CLAUSE_DEFAULT_PRESENT,
   OMP_CLAUSE_DEFAULT_LAST
 };
 

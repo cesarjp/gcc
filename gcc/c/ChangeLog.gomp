@@ -1,3 +1,79 @@
+2017-05-17  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-parser.c (c_parser_oacc_data_clause)
+	<PRAGMA_OACC_CLAUSE_DELETE>: Use "GOMP_MAP_RELEASE".
+
+2017-05-16  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_clause_name):  Handle 'finalize' clause.
+	(c_parser_oacc_simple_clause): Add 'finalize' to comments.
+	(c_parser_oacc_all_clauses): Handle PRAGMA_OACC_CLAUSE_FINALIZE.
+	(OACC_EXIT_DATA_CLAUSE_MASK): Add PRAGMA_OACC_CLAUSE_FINALIZE.
+	* c-typeck.c (c_finish_omp_clauses): Handle OMP_CLAUSE_FINALIZE.
+
+2017-05-14  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-parser.c (OACC_KERNELS_CLAUSE_MASK)
+	(OACC_KERNELS_CLAUSE_DEVICE_TYPE_MASK): Add
+	"PRAGMA_OACC_CLAUSE_NUM_GANGS", "PRAGMA_OACC_CLAUSE_NUM_WORKERS",
+	"VECTOR_LENGTH".
+
+2017-05-12  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_clause_num_gangs)
+	(c_parser_omp_clause_num_workers)
+	(c_parser_omp_clause_vector_length): Merge functions into...
+	(c_parser_oacc_single_int_clause): ... this new function.  Adjust
+	all users.
+
+2017-05-04  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_clause_name): Add support for if_present.
+	(c_parser_oacc_all_clauses): Likewise.
+	(c_finish_oacc_routine): Likewise.
+	(OACC_UPDATE_CLAUSE_MASK): Add PRAGMA_OACC_CLAUSE_IF_PRESENT.
+	* c-typeck.c (c_finish_omp_clauses): Add support for if_present.
+
+2017-05-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-typeck.c (c_finish_omp_clauses): Emit an error on orphan OpenACC
+	gang reductions.
+
+2017-04-26  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_variable_list): New c_omp_region_type
+	argument.  Use it to specialize handling of OMP_CLAUSE_REDUCTION for
+	OpenACC.
+	(c_parser_omp_clause_reduction): Update call to
+	c_parser_omp_variable_list.  Propage OpenACC errors as necessary.
+	(c_parser_oacc_all_clauses): Update call to
+	p_parser_omp_clause_reduction.
+	(c_parser_omp_all_clauses): Likewise.
+	(c_parser_cilk_all_clauses): Likewise.
+
+2017-04-13  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_clause_name): Remove occurences of
+	PRAGMA_OACC_CLAUSE_PRESENT_OR_COPY/COPYIN/COPYOUT/CREATE, adjust
+	them to non-PRESENT_OR values.
+	(c_parser_oacc_data_clause): Remove PRAGMA_OACC_CLAUSE_PRESENT_OR_*
+	cases, remove FORCE from PRAGMA_OACC_CLAUSE_COPY/COPYIN/COPYOUT/CREATE
+	kinds, update comment description.
+	(c_parser_oacc_all_clauses): Remove PRAGMA_OACC_CLAUSE_PRESENT_OR_*
+	cases.
+	(OACC_DATA_CLAUSE_MASK): Remove PRAGMA_OACC_CLAUSE_PRESENT_OR_*.
+	(OACC_DECLARE_CLAUSE_MASK): Likewise.
+	(c_parser_oacc_declare): Remove GOMP_MAP_FORCE_ALLOC/TO, change to
+	COMP_MAP_ALLOC/TO.
+	(OACC_ENTER_DATA_CLAUSE_MASK): Remove PRAGMA_OACC_CLAUSE_PRESENT_OR_*.
+	(OACC_KERNELS_CLAUSE_MASK): Likewise.
+	(OACC_PARALLEL_CLAUSE_MASK): Likewise.
+
+2017-04-07  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_clause_default): Handle
+	"OMP_CLAUSE_DEFAULT_PRESENT".
+
 2017-02-27  Chung-Lin Tang  <cltang@codesourcery.com>
 	    Cesar Philippidis  <cesar@codesourcery.com>
 

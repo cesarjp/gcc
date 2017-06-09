@@ -501,6 +501,9 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, int flags)
 	case OMP_CLAUSE_DEFAULT_FIRSTPRIVATE:
 	  pp_string (pp, "firstprivate");
 	  break;
+	case OMP_CLAUSE_DEFAULT_PRESENT:
+	  pp_string (pp, "present");
+	  break;
 	default:
 	  gcc_unreachable ();
 	}
@@ -763,6 +766,12 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, int flags)
 	  break;
 	case GOMP_MAP_DYNAMIC_ARRAY_FORCE_PRESENT:
 	  pp_string (pp, "force_present,dynamic_array");
+	  break;
+	case GOMP_MAP_DECLARE_ALLOCATE:
+	  pp_string (pp, "declare_allocate");
+	  break;
+	case GOMP_MAP_DECLARE_DEALLOCATE:
+	  pp_string (pp, "declare_deallocate");
 	  break;
 	default:
 	  gcc_unreachable ();
@@ -1070,7 +1079,6 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, int flags)
 			 spc, flags, false);
       pp_string (pp, ")");
       break;
-
     case OMP_CLAUSE__GRIDDIM_:
       pp_string (pp, "_griddim_(");
       pp_unsigned_wide_integer (pp, OMP_CLAUSE__GRIDDIM__DIMENSION (clause));
@@ -1081,6 +1089,12 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, int flags)
       dump_generic_node (pp, OMP_CLAUSE__GRIDDIM__GROUP (clause), spc, flags,
 			 false);
       pp_right_paren (pp);
+      break;
+    case OMP_CLAUSE_IF_PRESENT:
+      pp_string (pp, "if_present");
+      break;
+    case OMP_CLAUSE_FINALIZE:
+      pp_string (pp, "finalize");
       break;
 
     default:

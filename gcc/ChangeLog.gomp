@@ -1,3 +1,177 @@
+2017-05-17  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* omp-low.c (expand_omp_target): Revert GOACC_enter_exit_data ABI
+	change.
+	* gimplify.c (gimplify_omp_target_update): Handle
+	OMP_CLAUSE_FINALIZE for OACC_EXIT_DATA.
+
+	* tree-nested.c (convert_nonlocal_omp_clauses)
+	(convert_local_omp_clauses): Handle "OMP_CLAUSE_FINALIZE".
+	* tree-pretty-print.c (dump_omp_clause): Handle
+	"OMP_CLAUSE_FINALIZE".
+
+	* gimplify.c (gimplify_oacc_declare_1) <GOMP_MAP_ALLOC>: Use
+	"GOMP_MAP_RELEASE".
+
+2017-05-16  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* doc/include/texinfo.tex: Backport @title linewrap changes from
+	texinfo 6.3.
+
+2017-05-16  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* tree-core.h (enum omp_clause_code): Add OMP_CLAUSE_FINALIZE.
+	* tree.c (omp_clause_num_ops): Add entry for OMP_CLAUSE_FINALIZE.
+	(omp_clause_code_name): Add "finalize" entry.
+	* omp-low.c (scan_sharing_clauses): Handle OMP_CLAUSE_FINALIZE.
+	(expand_omp_target): Add finalize argument for GOACC_enter_exit_data
+	call.
+	* gimplify.c (gimplify_scan_omp_clauses): Handle OMP_CLAUSE_FINALIZE.
+	(gimplify_adjust_omp_clauses): Likewise.
+
+2017-05-15  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* doc/invoke.texi: Update for OpenACC 2.5.
+
+2017-05-14  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* omp-low.c (execute_oacc_device_lower): Remove the parallelism
+	dimensions function attributes for unparallelized OpenACC kernels
+	constructs.
+
+2017-05-12  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_goacc_reduction_init): Don't update
+	LHS if it doesn't exist.
+
+2017-05-12  Thomas Schwinge  <thomas@codesourcery.com>
+
+	PR middle-end/69921
+	* tree-parloops.c (create_parallel_loop): Set "oacc kernels
+	parallelized" attribute for parallelized OpenACC kernels.
+	* omp-low.c (execute_oacc_device_lower): Use it.
+	* config/nvptx/nvptx.c (nvptx_goacc_validate_dims): Likewise.
+	* omp-low.c (set_oacc_fn_attrib): Make it "static".
+	* omp-low.h (set_oacc_fn_attrib): Remove prototype.
+
+	* omp-low.c (expand_omp_target) <GF_OMP_TARGET_KIND_OACC_KERNELS>:
+	Set "oacc kernels" attribute.
+	(set_oacc_fn_attrib): Remove is_kernel formal parameter.  Adjust
+	all users.
+	(oacc_fn_attrib_kernels_p): Remove function.
+	(oacc_validate_dims, execute_oacc_device_lower): Look for "oacc
+	kernels" attribute instead of calling oacc_fn_attrib_kernels_p.
+	* tree-ssa-loop.c (gate_oacc_kernels): Likewise.
+	* config/nvptx/nvptx.c (nvptx_goacc_validate_dims): Likewise.
+	* tree-parloops.c (create_parallel_loop): If oacc_kernels_p,
+	assert "oacc kernels" attribute is set.
+
+2017-05-11  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (gomp_needs_data_present): Ensure that the
+	correct decl is matched when scanning clauses in the enclosing
+	acc data constructs.
+
+2017-05-09  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (gimplify_omp_target_update): Relax OpenACC update data
+	mappings to GOMP_MAP_{TO,FROM} when the user specifies if_present.
+
+2017-05-05  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* tree-nested.c (convert_nonlocal_omp_clauses)
+	(convert_local_omp_clauses): Handle OMP_CLAUSE_IF_PRESENT.
+
+2017-05-04  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (gimplify_scan_omp_clauses): Handle OMP_CLAUSE_IF_PRESENT.
+	(gimplify_adjust_omp_clauses): Likewise.
+	* omp-low.c (scan_sharing_clauses): Likewise, but just ignore it for
+	now.
+	* tree-pretty-print.c (dump_omp_clause): Likewise.
+	* tree.c (omp_clause_num_ops): Add an entry for OMP_CLAUSE_IF_PRESENT.
+	(omp_clause_code_name): Likewise.
+	* tree-core.h (enum omp_clause_code): Likewise.
+
+2017-05-03  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (lower_oacc_head_mark): Don't mark OpenACC auto
+	loops as independent inside acc parallel regions.
+
+2017-05-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (verify_oacc_routine_clauses): Emit a warning when the
+	user doesn't supply a gang, worker, vector or seq clause to an
+	OpenACC routine construct.
+	(enum oacc_loop_flags): Add OLF_REDUCTION enum.
+	(lower_oacc_head_mark): Use it to mark OpenACC reductions.
+	(oacc_loop_auto_partitions): Don't assign gang level parallelism
+	to orphan reductions.
+
+2017-04-24  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (lower_omp_target): Don't privatize firstprivate VLAs.
+
+2017-04-19  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (convert_to_firstprivate_int): Handle pointer types.
+	(convert_from_firstprivate_int): Likewise.  Create local storage for
+	the values being pointed too.  Add new argument orig_type.
+	(lower_omp_target): Allow pointer types with GOMP_MAP_FIRSTPRIVATE_INT.
+
+2017-04-13  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* gimplify.c (gimplify_oacc_declare_1): Remove GOMP_MAP_FORCE_* cases.
+
+2017-04-07  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* tree-core.h (enum omp_clause_default_kind): Add
+	"OMP_CLAUSE_DEFAULT_PRESENT".
+	* tree-pretty-print.c (dump_omp_clause): Handle it.
+	* gimplify.c (enum gimplify_omp_var_data): Add
+	"GOVD_MAP_FORCE_PRESENT".
+	(gimplify_adjust_omp_clauses_1): Map it to
+	"GOMP_MAP_FORCE_PRESENT".
+	(omp_default_clause, oacc_default_clause): Handle
+	"OMP_CLAUSE_DEFAULT_PRESENT".
+
+	* gimplify.c (oacc_default_clause): Clarify.
+
+2017-04-05  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (scan_sharing_clauses): Update handling of OpenACC declare
+	create, copyin and deviceptr to have local lifetimes.
+	(lower_omp_target): Handle GOMP_MAP_DECLARE_{ALLOCATE,DEALLOCATE}.
+	* tree-pretty-print.c (dump_omp_clause): Likewise.
+
+2017-03-15  Cesar Philippidis  <cesar@codesourcery.com>
+
+	Backport from trunk:
+	2016-11-10  Jakub Jelinek  <jakub@redhat.com>
+
+	* omp-low.c (lower_omp_target): Fix up argument to is_reference.
+	(expand_omp_ordered_sink): Handle TREE_PURPOSE of deps being
+	TRUNC_DIV_EXPR.
+	* gimplify.c (gimplify_scan_omp_clauses): Likewise.  Set
+	ctx->target_map_scalars_firstprivate on OMP_TARGET even for Fortran.
+	Remove omp_no_lastprivate callers.  Propagate lastprivate on combined
+	teams distribute parallel for simd even to distribute and teams
+	construct.  For OMP_CLAUSE_DEPEND add missing break at the end of
+	OMP_CLAUSE_DEPEND_SINK case.
+	(omp_notice_variable): Use lang_hooks.decls.omp_scalar_p.
+	(omp_no_lastprivate): Removed.
+	(gimplify_adjust_omp_clauses): Remove omp_no_lastprivate callers.
+	(gimplify_omp_for): Likewise.
+	(computable_teams_clause): Fail for automatic vars from current
+	function not yet seen in bind expr.
+	* langhooks.c (lhd_omp_scalar_p): New function.
+	* langhooks.h (struct lang_hooks_for_decls): Add omp_scalar_p.
+	* varpool.c (varpool_node::get_create): Set node->offloading
+	even for DECL_EXTERNAL decls.
+	* langhooks-def.h (lhd_omp_scalar_p): New prototype.
+	(LANG_HOOKS_OMP_SCALAR_P): Define.
+	(LANG_HOOKS_DECLS): Use it.
+
 2017-02-28  Thomas Schwinge  <thomas@codesourcery.com>
 
 	Backport from trunk r245769:
