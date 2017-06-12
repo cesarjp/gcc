@@ -950,11 +950,12 @@ init_frame (FILE  *file, int regno, unsigned align, unsigned size)
 static void
 nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
 {
-  fprintf (file, "\t{\n");
-  fprintf (file, "\t\t.reg.u32\t%%%s;\n", name);
-  fprintf (file, "\t\tmov.u32\t%%%s, %%tid.%s;\n", name, name);
-  fprintf (file, "\t\tsetp.ne.u32\t%%r%d, %%%s, 0;\n", regno, name);
-  fprintf (file, "\t}\n");
+  fprintf (file, "\t// initialize %s predicate ",
+	   *name == 'x' ? "vector" : "worker");
+  output_reg (file, regno, VOIDmode);
+  fprintf (file, "\n\t.reg.u32\t%%%s;\n", name);
+  fprintf (file, "\tmov.u32\t%%%s, %%tid.%s;\n", name, name);
+  fprintf (file, "\tsetp.ne.u32\t%%r%d, %%%s, 0;\n", regno, name);
 }
 
 /* Implement ASM_DECLARE_FUNCTION_NAME.  Writes the start of a ptx
@@ -1043,6 +1044,29 @@ nvptx_declare_function_name (FILE *file, const char *name, const_tree decl)
   if (cfun->machine->axis_predicate[1])
     nvptx_init_axis_predicate (file,
 			       REGNO (cfun->machine->axis_predicate[1]), "x");
+  if (cfun->machine->axis_predicate[2])
+    {
+      /* Create a single predicate for loops containing both worker and
+	 vectors.  */
+      if (cfun->machine->axis_predicate[0] == NULL_RTX
+	  && cfun->machine->axis_predicate[1] == NULL_RTX)
+	nvptx_init_axis_predicate (file,
+				   REGNO (cfun->machine->axis_predicate[2]),
+				   "y");
+      else if (cfun->machine->axis_predicate[0] != NULL_RTX
+	       && cfun->machine->axis_predicate[1] != NULL_RTX)
+	{
+      	  fprintf (file, "\t// initialize combined worker-vector predicate ");
+	  output_reg (file, REGNO (cfun->machine->axis_predicate[2]), VOIDmode);
+	  fprintf (file, "\n\t.reg.u32\t%%xytmp;\n");
+	  fprintf (file, "\tor.b32\t%%xytmp, %%x, %%y;\n");
+	  fprintf (file, "\tsetp.ne.u32\t");
+	  output_reg (file, REGNO (cfun->machine->axis_predicate[2]), VOIDmode);
+	  fprintf (file, ", %%xytmp, 0;\n");
+	}
+      else
+	gcc_unreachable ();
+    }
 }
 
 /* Output a return instruction.  Also copy the return value to its outgoing
@@ -3519,7 +3543,6 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
   /* Insert the vector test inside the worker test.  */
   unsigned mode;
   rtx_insn *before = tail;
-  rtx wvpred = NULL_RTX;
   bool skip_vector = false;
 
   /* Create a single predicate for loops containing both worker and
@@ -3528,18 +3551,8 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
       && (GOMP_DIM_MASK (GOMP_DIM_WORKER) & mask)
       && (GOMP_DIM_MASK (GOMP_DIM_VECTOR) & mask))
     {
-      rtx regx = gen_reg_rtx (SImode);
-      rtx regy = gen_reg_rtx (SImode);
-      rtx tmp = gen_reg_rtx (SImode);
-      wvpred = gen_reg_rtx (BImode);
-
-      emit_insn_before (gen_oacc_dim_pos (regx, const1_rtx), head);
-      emit_insn_before (gen_oacc_dim_pos (regy, const2_rtx), head);
-      emit_insn_before (gen_rtx_SET (tmp, gen_rtx_IOR (SImode, regx, regy)),
-			head);
-      emit_insn_before (gen_rtx_SET (wvpred, gen_rtx_NE (BImode, tmp,
-							 const0_rtx)),
-			head);
+      if (cfun->machine->axis_predicate[2] == NULL_RTX)
+	cfun->machine->axis_predicate[2] = gen_reg_rtx (BImode);
 
       skip_mask &= ~(GOMP_DIM_MASK (GOMP_DIM_VECTOR));
       skip_vector = true;
@@ -3549,7 +3562,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
     if (GOMP_DIM_MASK (mode) & skip_mask)
       {
 	rtx_code_label *label = gen_label_rtx ();
-	rtx pred = skip_vector ? wvpred
+	rtx pred = skip_vector ? cfun->machine->axis_predicate[2]
 	  : cfun->machine->axis_predicate[mode - GOMP_DIM_WORKER];
 
 	if (!pred)
@@ -4265,6 +4278,8 @@ nvptx_expand_builtin (tree exp, rtx target, rtx ARG_UNUSED (subtarget),
 }
 
 /* Define dimension sizes for known hardware.  */
+//#define PTX_VECTOR_LENGTH 128
+//#define PTX_WORKER_LENGTH 8
 #define PTX_VECTOR_LENGTH 32
 #define PTX_WORKER_LENGTH 32
 #define PTX_GANG_DEFAULT  0 /* Defer to runtime.  */

@@ -211,7 +211,8 @@ struct GTY(()) machine_function
   int num_args;	/* Number of args of current call.  */
   int return_mode; /* Return mode of current fn.
 		      (machine_mode not defined yet.) */
-  rtx axis_predicate[2]; /* Neutering predicates.  */
+  rtx axis_predicate[3]; /* Neutering predicates.  WORKER = 0, VECTOR = 1, 
+			    COMBINED = 3.  */
 };
 #endif
 
