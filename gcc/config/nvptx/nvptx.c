@@ -122,20 +122,38 @@ struct tree_hasher : ggc_cache_ptr_hash<tree_node>
 static GTY((cache)) hash_table<tree_hasher> *declared_fndecls_htab;
 static GTY((cache)) hash_table<tree_hasher> *needed_fndecls_htab;
 
-/* Buffer needed to broadcast across workers.  This is used for both
-   worker-neutering and worker broadcasting.  It is shared by all
+/* Shared-memory buffer needed to broadcast execution state across
+   workers and vectors.  This is used for both worker-neutering and
+   worker broadcasting, and vector-neutering and broadcasting when
+   vector_length is larger than a CUDA warp.  It is shared by all
    functions emitted.  The buffer is placed in shared memory.  It'd be
    nice if PTX supported common blocks, because then this could be
-   shared across TUs (taking the largest size).  */
-static unsigned worker_bcast_size;
-static unsigned worker_bcast_align;
-static GTY(()) rtx worker_bcast_sym;
+   shared across TUs (taking the largest size).  shared_bcast_sym is
+   large enough to store worker and vector state, and it is
+   partitioned into num_worker elements.  The size of the partitions
+   is stored in shared_bcast_psize_sym.  */
+static unsigned shared_bcast_size;
+static unsigned shared_bcast_align;
+static GTY(()) rtx shared_bcast_sym;
 
-/* Buffer needed for worker reductions.  This has to be distinct from
-   the worker broadcast array, as both may be live concurrently.  */
+static unsigned shared_bcast_psize_align;
+static unsigned shared_bcast_partitions = 1;
+static GTY(()) rtx shared_bcast_psize_sym;
+
+/* Shared-memory buffer needed for worker reductions.  This
+   has to be distinct from the shared-memory broadcast array, as both
+   may be live concurrently.  */
 static unsigned worker_red_size;
 static unsigned worker_red_align;
 static GTY(()) rtx worker_red_sym;
+
+/* Shared-memory buffer needed for vector reductions when
+   vector_length is larger than the CUDA warp size.  This has to be
+   distinct from the shared-memory broadcast array, as both may be
+   live concurrently.  */
+static unsigned vector_red_size;
+static unsigned vector_red_align;
+static GTY(()) rtx vector_red_sym;
 
 /* Shared memory block for gang-private variables.  */
 static unsigned gangprivate_shared_size;
@@ -174,14 +192,22 @@ nvptx_option_override (void)
   needed_fndecls_htab = hash_table<tree_hasher>::create_ggc (17);
   declared_libfuncs_htab
     = hash_table<declared_libfunc_hasher>::create_ggc (17);
-  
-  worker_bcast_sym = gen_rtx_SYMBOL_REF (Pmode, "__worker_bcast");
-  SET_SYMBOL_DATA_AREA (worker_bcast_sym, DATA_AREA_SHARED);
-  worker_bcast_align = GET_MODE_ALIGNMENT (SImode) / BITS_PER_UNIT;
+
+  shared_bcast_sym = gen_rtx_SYMBOL_REF (Pmode, "__shared_bcast");
+  SET_SYMBOL_DATA_AREA (shared_bcast_sym, DATA_AREA_SHARED);
+  shared_bcast_align = GET_MODE_ALIGNMENT (SImode) / BITS_PER_UNIT;
+
+  shared_bcast_psize_sym = gen_rtx_SYMBOL_REF (Pmode, "__shared_bcast_psize");
+  SET_SYMBOL_DATA_AREA (shared_bcast_psize_sym, DATA_AREA_CONST);
+  shared_bcast_psize_align = GET_MODE_ALIGNMENT (SImode) / BITS_PER_UNIT;
 
   worker_red_sym = gen_rtx_SYMBOL_REF (Pmode, "__worker_red");
   SET_SYMBOL_DATA_AREA (worker_red_sym, DATA_AREA_SHARED);
   worker_red_align = GET_MODE_ALIGNMENT (SImode) / BITS_PER_UNIT;
+
+  vector_red_sym = gen_rtx_SYMBOL_REF (Pmode, "__vector_red");
+  SET_SYMBOL_DATA_AREA (vector_red_sym, DATA_AREA_SHARED);
+  vector_red_align = GET_MODE_ALIGNMENT (SImode) / BITS_PER_UNIT;
 
   gangprivate_shared_sym
     = gen_rtx_SYMBOL_REF (Pmode, "__gangprivate_shared");
@@ -330,6 +356,31 @@ output_reg (FILE *file, unsigned regno, machine_mode inner_mode,
       if (subreg_offset == -1)
 	fprintf (file, "}");
     }
+}
+
+/* Get a register containing the value of tid.x or tid.y.  The former
+   corresponds to the vector thread ID, whereas the later corresponds
+   to the worker thread ID.  This is for nvptx_wsync and others.  */
+
+static rtx
+nvptx_axis_pos (int axis)
+{
+  switch (axis)
+    {
+    case GOMP_DIM_WORKER:
+      axis = 0;
+      break;
+    case GOMP_DIM_VECTOR:
+      axis = 1;
+      break;
+    default:
+      gcc_unreachable ();
+    }
+  
+  if (cfun->machine->axis_id[axis])
+    cfun->machine->axis_id[axis] = gen_reg_rtx (SImode);
+
+  return cfun->machine->axis_id[axis];
 }
 
 /* Emit forking instructions for MASK.  */
@@ -1067,6 +1118,21 @@ nvptx_declare_function_name (FILE *file, const char *name, const_tree decl)
       else
 	gcc_unreachable ();
     }
+  if (cfun->machine->shared_bcast)
+    {
+      fprintf (file, "\t// initialze __shared_bcast pointer ");
+      output_reg (file, REGNO (cfun->machine->shared_bcast), VOIDmode);
+      fprintf (file, "\n\t.reg.u64\t%%ty;\n");
+      fprintf (file, "\tcvt.u64.u32\t%%ty, %%tid.y;\n");
+      fprintf (file, "\tcvta.shared.u64\t");
+      output_reg (file, REGNO (cfun->machine->shared_bcast), VOIDmode);
+      fprintf (file, ", __shared_bcast;\n");
+      fprintf (file, "\tmad.lo.u64\t");
+      output_reg (file, REGNO (cfun->machine->shared_bcast), VOIDmode);
+      fprintf (file, ", %d, %%ty, ", shared_bcast_size);
+      output_reg (file, REGNO (cfun->machine->shared_bcast), VOIDmode);
+      fprintf (file, ";\n");
+    }
 }
 
 /* Output a return instruction.  Also copy the return value to its outgoing
@@ -1432,8 +1498,8 @@ nvptx_gen_wcast (rtx reg, propagate_mask pm, unsigned rep, wcast_data_t *data)
 	  {
 	    unsigned align = GET_MODE_ALIGNMENT (mode) / BITS_PER_UNIT;
 
-	    if (align > worker_bcast_align)
-	      worker_bcast_align = align;
+	    if (align > shared_bcast_align)
+	      shared_bcast_align = align;
 	    data->offset = (data->offset + align - 1) & ~(align - 1);
 	    addr = data->base;
 	    if (data->offset)
@@ -2570,7 +2636,9 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
 	    par = new parallel (par, mask);
 	    par->forked_block = block;
 	    par->forked_insn = end;
-	    if (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+	    /* FIXME: Take into account vector_length == 32 */
+	    if ((mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+		|| (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)))
 	      par->fork_insn
 		= nvptx_discover_pre (block, CODE_FOR_nvptx_fork);
 	  }
@@ -2585,7 +2653,9 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
 	    gcc_assert (par->mask == mask);
 	    par->join_block = block;
 	    par->join_insn = end;
-	    if (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+	    /* FIXME: Take into account vector_length == 32 */
+	    if ((mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+		|| (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)))
 	      par->joining_insn
 		= nvptx_discover_pre (block, CODE_FOR_nvptx_joining);
 	    par = par->parent;
@@ -3395,10 +3465,12 @@ nvptx_vpropagate (bool is_call, basic_block block, rtx_insn *insn)
   return nvptx_propagate (is_call, block, insn, PM_read_write, vprop_gen, 0);
 }
 
-/* Worker for nvptx_wpropagate.  */
+/* Generic worker for nvptx_wpropagate.  It gets called for state
+   propagations involving shared memory.  */
 
 static rtx
-wprop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
+shared_prop_gen (bool worker, rtx reg, propagate_mask pm, unsigned rep,
+		 void *data_)
 {
   wcast_data_t *data = (wcast_data_t *)data_;
 
@@ -3407,8 +3479,9 @@ wprop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
       /* Starting a loop, initialize pointer.    */
       unsigned align = GET_MODE_ALIGNMENT (GET_MODE (reg)) / BITS_PER_UNIT;
 
-      if (align > worker_bcast_align)
-	worker_bcast_align = align;
+      /* FIXME: correct offset for vectors.  */
+      if (align > shared_bcast_align)
+	shared_bcast_align = align;
       data->offset = (data->offset + align - 1) & ~(align - 1);
 
       data->ptr = gen_reg_rtx (Pmode);
@@ -3425,31 +3498,65 @@ wprop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
     return nvptx_gen_wcast (reg, pm, rep, data);
 }
 
+/* Worker for nvptx_wpropagate.  */
+
+static rtx
+wprop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
+{
+  shared_prop_gen (false, reg, pm, rep, data_);
+}
+
+/* Worker for nvptx_wpropagate, specifically for vector state
+   propagation requiring shared memory.  */
+
+static rtx
+vsprop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
+{
+  shared_prop_gen (true, reg, pm, rep, data_);
+}
+  
+
 /* Spill or fill live state that is live at start of BLOCK.  PRE_P
    indicates if this is just before partitioned mode (do spill), or
    just after it starts (do fill). Sequence is inserted just after
    INSN.  IS_CALL and return as for nvptx_propagate.  */
 
 static bool
-nvptx_wpropagate (bool pre_p, bool is_call, basic_block block, rtx_insn *insn)
+nvptx_wpropagate (bool pre_p, bool is_call, bool worker, basic_block block, rtx_insn *insn)
 {
-  wcast_data_t data;
+  unsigned num_workers = get_oacc_fn_dim_size (current_function_decl,
+					       GOMP_DIM_WORKER);
+  //rtx buffer = worker ? shared_bcast_sym : cfun->machine->shared_bcast;
+  rtx buffer = shared_bcast_sym;
 
+  if (!worker)
+    {
+      if (cfun->machine->shared_bcast == NULL_RTX)
+	cfun->machine->shared_bcast = gen_reg_rtx (Pmode);
+      buffer = cfun->machine->shared_bcast;
+    }
+  
+  if (!worker && shared_bcast_partitions < num_workers)
+    shared_bcast_partitions = num_workers;
+
+  wcast_data_t data;
   data.base = gen_reg_rtx (Pmode);
   data.offset = 0;
   data.ptr = NULL_RTX;
 
   bool empty = nvptx_propagate (is_call, block, insn,
-				pre_p ? PM_read : PM_write, wprop_gen, &data);
+				pre_p ? PM_read : PM_write,
+				worker ? wprop_gen : vsprop_gen, &data);
   gcc_assert (empty == !data.offset);
   if (data.offset)
     {
       /* Stuff was emitted, initialize the base pointer now.  */
-      rtx init = gen_rtx_SET (data.base, worker_bcast_sym);
+      /* FIXME: this set is broken */
+      rtx init = gen_rtx_SET (data.base, buffer);
       emit_insn_after (init, insn);
 
-      if (worker_bcast_size < data.offset)
-	worker_bcast_size = data.offset;
+      if (shared_bcast_size < data.offset)
+	shared_bcast_size = data.offset;
     }
   return empty;
 }
@@ -3458,9 +3565,25 @@ nvptx_wpropagate (bool pre_p, bool is_call, basic_block block, rtx_insn *insn)
    markers for before and after synchronizations.  */
 
 static rtx
-nvptx_wsync (bool after)
+nvptx_wsync (rtx bar)
 {
-  return gen_nvptx_barsync (GEN_INT (after));
+  rtx ret;
+  int threads = get_oacc_fn_dim_size (current_function_decl, GOMP_DIM_WORKER)
+    * get_oacc_fn_dim_size (current_function_decl, GOMP_DIM_VECTOR);
+  //threads = get_oacc_fn_dim_size (current_function_decl, GOMP_DIM_WORKER);
+  
+  if (bar == const0_rtx)
+    ret = gen_nvptx_barsync (GEN_INT (15), GEN_INT (threads));
+  else
+    ret = gen_nvptx_barsync (bar, GEN_INT (128));
+
+//  if (worker)
+//    ret = gen_nvptx_barsync (GEN_INT (0));
+//  else
+//    //ret = gen_nvptx_barsync (gen_rtx_REG (SImode, NVPTX_TIDY_REGNUM));
+//    ret = gen_nvptx_barsync (nvptx_axis_pos (GOMP_DIM_WORKER));
+
+  return ret;
 }
 
 /* Single neutering according to MASK.  FROM is the incoming block and
@@ -3485,9 +3608,16 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
   rtx_insn *tail = BB_END (to);
   unsigned skip_mask = mask;
 
-  /* Find first insn of from block */
-  while (head != BB_END (from) && !INSN_P (head))
-    head = NEXT_INSN (head);
+  /* Find first non-barsync insn of from block */
+  while (head != BB_END (from))
+    {
+      if (!INSN_P (head))
+	head = NEXT_INSN (head);
+      else if (recog_memoized (head) == CODE_FOR_nvptx_barsync)
+	head = NEXT_INSN (head);
+      else
+	break;
+    }
 
   /* Find last insn of to block */
   rtx_insn *limit = from == to ? head : BB_HEAD (to);
@@ -3589,35 +3719,49 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
   if (cond_branch)
     {
       rtx pvar = XEXP (XEXP (cond_branch, 0), 0);
-
-      if (GOMP_DIM_MASK (GOMP_DIM_VECTOR) == mask)
+      bool vector = GOMP_DIM_MASK (GOMP_DIM_VECTOR) == mask;
+      
+      /* FIXME: long vl */
+      if (vector
+	  && (get_oacc_fn_dim_size (current_function_decl, GOMP_DIM_VECTOR)
+	      == 32))
 	{
 	  /* Vector mode only, do a shuffle.  */
 	  emit_insn_before (nvptx_gen_vcast (pvar), tail);
 	}
-      else
+      else 
 	{
 	  /* Includes worker mode, do spill & fill.  By construction
 	     we should never have worker mode only. */
 	  wcast_data_t data;
 
-	  data.base = worker_bcast_sym;
+	  data.base = cfun->machine->shared_bcast;
 	  data.ptr = 0;
 
-	  if (worker_bcast_size < GET_MODE_SIZE (SImode))
-	    worker_bcast_size = GET_MODE_SIZE (SImode);
+	  if (shared_bcast_size < GET_MODE_SIZE (SImode))
+	    shared_bcast_size = GET_MODE_SIZE (SImode);
 
 	  data.offset = 0;
 	  emit_insn_before (nvptx_gen_wcast (pvar, PM_read, 0, &data),
 			    before);
 	  /* Barrier so other workers can see the write.  */
-	  emit_insn_before (nvptx_wsync (false), tail);
+	  rtx bar;
+	  if (vector)
+	    {
+	      rtx t;
+	      bar = gen_reg_rtx (SImode);
+	      t = gen_rtx_SET (bar, gen_rtx_REG (SImode, NVPTX_TIDY_REGNUM));
+	      emit_insn_before (t, tail);
+	    }
+	  else
+	    bar = const0_rtx;
+	  emit_insn_before (nvptx_wsync (bar), tail);
 	  data.offset = 0;
 	  emit_insn_before (nvptx_gen_wcast (pvar, PM_write, 0, &data), tail);
 	  /* This barrier is needed to avoid worker zero clobbering
 	     the broadcast buffer before all the other workers have
 	     had a chance to read this instance of it.  */
-	  emit_insn_before (nvptx_wsync (true), tail);
+	  emit_insn_before (nvptx_wsync (bar), tail);
 	}
 
       extract_insn (tail);
@@ -3726,22 +3870,40 @@ nvptx_process_pars (parallel *par)
     }
 
   bool is_call = (par->mask & GOMP_DIM_MASK (GOMP_DIM_MAX)) != 0;
-  
-  if (par->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+  bool worker = par->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER);
+  bool vector = par->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR);
+
+  /* FIXME: this needs to optimize for vector_length = 32.  */
+  if (vector
+      && get_oacc_fn_dim_size (current_function_decl, GOMP_DIM_VECTOR) == 32)
+    nvptx_vpropagate (is_call, par->forked_block, par->forked_insn);
+  else if (worker || vector)
     {
-      nvptx_wpropagate (false, is_call, par->forked_block, par->forked_insn);
-      bool empty = nvptx_wpropagate (true, is_call,
+      nvptx_wpropagate (false, is_call, worker, par->forked_block,
+			par->forked_insn);
+      bool empty = nvptx_wpropagate (true, is_call, worker,
 				     par->forked_block, par->fork_insn);
 
       if (!empty || !is_call)
 	{
 	  /* Insert begin and end synchronizations.  */
-	  emit_insn_after (nvptx_wsync (false), par->forked_insn);
-	  emit_insn_before (nvptx_wsync (true), par->joining_insn);
+	  rtx bar;
+	  if (!worker)
+	    {
+	      rtx t;
+	      bar = gen_reg_rtx (SImode);
+	      t = gen_rtx_SET (bar, gen_rtx_REG (SImode, NVPTX_TIDY_REGNUM));
+	      emit_insn_before (t, par->forked_insn);
+	    }
+	  else
+	    bar = const0_rtx;
+
+	  //emit_insn_after (nvptx_wsync (bar), par->forked_insn);
+	  //emit_insn_before (nvptx_wsync (bar), par->joining_insn);
+	  emit_insn_before (nvptx_wsync (bar), par->forked_insn);
+	  emit_insn_before (nvptx_wsync (bar), par->join_insn);
 	}
     }
-  else if (par->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
-    nvptx_vpropagate (is_call, par->forked_block, par->forked_insn);
 
   /* Now do siblings.  */
   if (par->next)
@@ -4066,13 +4228,23 @@ nvptx_file_end (void)
     nvptx_record_fndecl (decl);
   fputs (func_decls.str().c_str(), asm_out_file);
 
-  if (worker_bcast_size)
-    write_worker_buffer (asm_out_file, worker_bcast_sym,
-			 worker_bcast_align, worker_bcast_size);
-
+  if (shared_bcast_size)
+    {
+      write_worker_buffer (asm_out_file, shared_bcast_sym,
+			   shared_bcast_align,
+			   shared_bcast_size * shared_bcast_partitions);
+      fprintf (asm_out_file, ".visible .const .align %d .u32 %s = %d;\n",
+	       shared_bcast_psize_align, XSTR (shared_bcast_psize_sym, 0),
+	       shared_bcast_partitions * shared_bcast_size);
+    }
+  
   if (worker_red_size)
     write_worker_buffer (asm_out_file, worker_red_sym,
 			 worker_red_align, worker_red_size);
+
+  if (vector_red_size)
+    write_worker_buffer (asm_out_file, vector_red_sym,
+			 vector_red_align, vector_red_size);
 
   if (gangprivate_shared_size)
     write_worker_buffer (asm_out_file, gangprivate_shared_sym,
@@ -4277,11 +4449,9 @@ nvptx_expand_builtin (tree exp, rtx target, rtx ARG_UNUSED (subtarget),
     }
 }
 
-/* Define dimension sizes for known hardware.  */
-//#define PTX_VECTOR_LENGTH 128
-//#define PTX_WORKER_LENGTH 8
-#define PTX_VECTOR_LENGTH 32
-#define PTX_WORKER_LENGTH 32
+/* Define dimension sizes for known hardware.  Defined in gomp-constants.h.  */
+#define PTX_VECTOR_LENGTH DEFAULT_VECTOR_LENGTH
+#define PTX_WORKER_LENGTH DEFAULT_NUM_WORKERS
 #define PTX_GANG_DEFAULT  0 /* Defer to runtime.  */
 
 /* Validate compute dimensions of an OpenACC offload or routine, fill

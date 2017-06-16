@@ -284,4 +284,8 @@ enum gomp_map_kind
 /* Identifiers of device-specific target arguments.  */
 #define GOMP_TARGET_ARG_HSA_KERNEL_ATTRIBUTES	(1 << 8)
 
+/* OpenACC default geometry.  */
+#define DEFAULT_NUM_WORKERS 8
+#define DEFAULT_VECTOR_LENGTH 128
+
 #endif

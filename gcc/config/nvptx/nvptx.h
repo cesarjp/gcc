@@ -93,7 +93,7 @@
    We have to have some available hard registers, to keep gcc setup
    happy.  */
 #define FIRST_PSEUDO_REGISTER 16
-#define FIXED_REGISTERS	    { 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+#define FIXED_REGISTERS	    { 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0 }
 #define CALL_USED_REGISTERS { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
 
 #define HARD_REGNO_NREGS(REG, MODE)		\
@@ -141,11 +141,16 @@ enum reg_class             {  NO_REGS,    ALL_REGS,	LIM_REG_CLASSES };
 #define FRAME_POINTER_REGNUM 2
 #define ARG_POINTER_REGNUM 3
 #define STATIC_CHAIN_REGNUM 4
+#define NVPTX_TIDX_REGNUM 5
+#define NVPTX_TIDY_REGNUM 6
+#define NVPTX_NTIDX_REGNUM 7
+#define NVPTX_NTIDY_REGNUM 8
 
-#define REGISTER_NAMES							\
-  {									\
-    "%value", "%stack", "%frame", "%args", "%chain", "%hr5", "%hr6", "%hr7", \
-    "%hr8", "%hr9", "%hr10", "%hr11", "%hr12", "%hr13", "%hr14", "%hr15" \
+#define REGISTER_NAMES							 \
+  {									 \
+    "%value", "%stack", "%frame", "%args", "%chain", "%tid.x", "%tid.y", \
+    "%ntid.x", "%ntid.y", "%hr9", "%hr10", "%hr11", "%hr12", "%hr13",    \
+    "%hr14", "%hr15"						         \
   }
 
 #define FIRST_PARM_OFFSET(FNDECL) ((void)(FNDECL), 0)
@@ -213,6 +218,8 @@ struct GTY(()) machine_function
 		      (machine_mode not defined yet.) */
   rtx axis_predicate[3]; /* Neutering predicates.  WORKER = 0, VECTOR = 1, 
 			    COMBINED = 3.  */
+  rtx axis_id[2]; /* tid.x, tid.y  */
+  rtx shared_bcast; /* Shared-memory buffer used for stated propagation.  */
 };
 #endif
 

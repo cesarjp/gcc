@@ -1093,7 +1093,8 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	}
 
       /* 32 is the default for known hardware.  */
-      int gang = 0, worker = 32, vector = 32;
+      int gang = 0, worker = DEFAULT_NUM_WORKERS,
+	vector = DEFAULT_VECTOR_LENGTH;
 
       gang = (cpu_size / block_size) * dev_size;
       worker = block_size / warp_size;

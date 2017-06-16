@@ -83,6 +83,13 @@
           : immediate_operand (op, mode));
 })
 
+(define_predicate "nvptx_nonmemory_integer_operand"
+  (match_code "reg,const_int")
+{
+  return (REG_P (op) ? register_operand (op, mode)
+          : immediate_operand (op, mode));
+})
+
 (define_predicate "const0_operand"
   (and (match_code "const_int")
        (match_test "op == const0_rtx")))
@@ -1063,8 +1070,9 @@
 
 (define_insn "oacc_dim_pos"
   [(set (match_operand:SI 0 "nvptx_register_operand" "")
-	(unspec_volatile:SI [(match_operand:SI 1 "const_int_operand" "")]
-			    UNSPECV_DIM_POS))]
+	(unspec_volatile:SI [(match_operand:SI 1
+			      "nvptx_nonmemory_integer_operand" "")]
+			      UNSPECV_DIM_POS))]
   ""
 {
   static const char *const asms[] =
@@ -1246,7 +1254,13 @@
   "%.\\tatom%A1.b%T0.<logic>\\t%0, %1, %2;")
 
 (define_insn "nvptx_barsync"
-  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "")]
+  [(unspec_volatile [(match_operand:SI 0 "nvptx_nonmemory_integer_operand" "")
+		     (match_operand:SI 1 "const_int_operand" "")]
 		    UNSPECV_BARSYNC)]
   ""
-  "\\tbar.sync\\t%0;")
+{
+  if (operands[1] == const0_rtx)
+    return "\\tbar.sync\\t%0;";
+  else
+    return "\\tbar.sync\\t%0, %1;";
+})
