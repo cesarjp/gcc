@@ -3735,6 +3735,9 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	     we should never have worker mode only. */
 	  wcast_data_t data;
 
+	  if (cfun->machine->shared_bcast == NULL_RTX)
+	    cfun->machine->shared_bcast = gen_reg_rtx (Pmode);
+
 	  data.base = cfun->machine->shared_bcast;
 	  data.ptr = 0;
 
