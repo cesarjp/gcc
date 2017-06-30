@@ -824,8 +824,7 @@ nvptx_open_device (int n)
     }
   ptx_dev->max_registers_per_multiprocessor = pi;
 
-  CUDA_CALL_ERET (NULL, cuDeviceGetAttribute,
-		  &pi,
+  CUDA_CALL_ERET (NULL, cuDeviceGetAttribute, &pi,
 		  CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR,
 		  dev);
   ptx_dev->max_shared_memory_per_multiprocessor = pi;
