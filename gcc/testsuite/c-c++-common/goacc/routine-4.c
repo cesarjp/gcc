@@ -22,7 +22,7 @@ void seq (void)
   for (int i = 0; i < 10; i++)
     red ++;
 
-#pragma acc loop gang reduction (+:red) // { dg-error "disallowed by containing routine" }
+#pragma acc loop seq reduction (+:red)
   for (int i = 0; i < 10; i++)
     red ++;
 
@@ -35,7 +35,7 @@ void seq (void)
     red ++;
 }
 
-void vector (void) /* { dg-message "declared here" "1" } */
+void vector (void) /* { dg-message "declared here" 1 } */
 {
   gang ();  /* { dg-error "routine call uses" } */
   worker ();  /* { dg-error "routine call uses" } */

@@ -1,5 +1,3 @@
-// { dg-additional-options "-fno-exceptions" }
-
 // Defaults, if not "#include"d from ../libgomp.oacc-c++/routine-1-*.C.
 #ifndef TEMPLATE
 # define TEMPLATE
@@ -10,7 +8,7 @@
 
 #include <stdlib.h>
 
-#pragma acc routine
+#pragma acc routine seq
 TEMPLATE
 RETURN_1 fact(TYPE n) RETURN_2
 {

@@ -1334,6 +1334,8 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 	    install_var_local (decl, ctx);
 	  break;
 
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
 	case OMP_CLAUSE__CACHE_:
 	default:
 	  gcc_unreachable ();
@@ -1499,6 +1501,8 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 	case OMP_CLAUSE__SIMT_:
 	  break;
 
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
 	case OMP_CLAUSE__CACHE_:
 	default:
 	  gcc_unreachable ();
@@ -9354,11 +9358,322 @@ public:
 
 } // anon namespace
 
+/* Find an OMP clause of type KIND within CLAUSES.  */
+
+tree
+find_omp_clause (tree clauses, enum omp_clause_code kind)
+{
+  for (; clauses ; clauses = OMP_CLAUSE_CHAIN (clauses))
+    if (OMP_CLAUSE_CODE (clauses) == kind)
+      return clauses;
+
+  return NULL_TREE;
+}
+
 gimple_opt_pass *
 make_pass_diagnose_omp_blocks (gcc::context *ctxt)
 {
   return new pass_diagnose_omp_blocks (ctxt);
 }
 
+
+/* Look for compute grid dimension clauses and convert to an attribute
+   attached to FN.  This permits the target-side code to (a) massage
+   the dimensions, (b) emit that data and (c) optimize.  Non-constant
+   dimensions are pushed onto ARGS.
+
+   The attribute value is a TREE_LIST.  A set of dimensions is
+   represented as a list of INTEGER_CST.  Those that are runtime
+   exprs are represented as an INTEGER_CST of zero.
+
+   TOOO. Normally the attribute will just contain a single such list.  If
+   however it contains a list of lists, this will represent the use of
+   device_type.  Each member of the outer list is an assoc list of
+   dimensions, keyed by the device type.  The first entry will be the
+   default.  Well, that's the plan.  */
+
+#define OACC_FN_ATTRIB "oacc function"
+
+/* Replace any existing oacc fn attribute with updated dimensions.  */
+
+void
+replace_oacc_fn_attrib (tree fn, tree dims)
+{
+  tree ident = get_identifier (OACC_FN_ATTRIB);
+  tree attribs = DECL_ATTRIBUTES (fn);
+
+  /* If we happen to be present as the first attrib, drop it.  */
+  if (attribs && TREE_PURPOSE (attribs) == ident)
+    attribs = TREE_CHAIN (attribs);
+  DECL_ATTRIBUTES (fn) = tree_cons (ident, dims, attribs);
+}
+
+/* Scan CLAUSES for launch dimensions and attach them to the oacc
+   function attribute.  Push any that are non-constant onto the ARGS
+   list, along with an appropriate GOMP_LAUNCH_DIM tag.  */
+
+static void
+set_oacc_fn_attrib (tree fn, tree clauses, vec<tree> *args)
+{
+  /* Must match GOMP_DIM ordering.  */
+  static const omp_clause_code ids[]
+    = { OMP_CLAUSE_NUM_GANGS, OMP_CLAUSE_NUM_WORKERS,
+	OMP_CLAUSE_VECTOR_LENGTH };
+  unsigned ix;
+  tree dims[GOMP_DIM_MAX];
+  tree attr = NULL_TREE;
+  unsigned non_const = 0;
+
+  for (ix = GOMP_DIM_MAX; ix--;)
+    {
+      tree clause = find_omp_clause (clauses, ids[ix]);
+      tree dim = NULL_TREE;
+
+      if (clause)
+	dim = OMP_CLAUSE_EXPR (clause, ids[ix]);
+      dims[ix] = dim;
+      if (dim && TREE_CODE (dim) != INTEGER_CST)
+	{
+	  dim = integer_zero_node;
+	  non_const |= GOMP_DIM_MASK (ix);
+	}
+      attr = tree_cons (NULL_TREE, dim, attr);
+    }
+
+  replace_oacc_fn_attrib (fn, attr);
+
+  if (non_const)
+    {
+      /* Push a dynamic argument set.  */
+      args->safe_push (oacc_launch_pack (GOMP_LAUNCH_DIM,
+					 NULL_TREE, non_const));
+      for (unsigned ix = 0; ix != GOMP_DIM_MAX; ix++)
+	if (non_const & GOMP_DIM_MASK (ix))
+	  args->safe_push (dims[ix]);
+    }
+}
+
+/* Verify OpenACC routine clauses.
+
+   Returns 0 if FNDECL should be marked as an accelerator routine, 1 if it has
+   already been marked in compatible way, and -1 if incompatible.  Upon
+   returning, the chain of clauses will contain exactly one clause specifying
+   the level of parallelism.  */
+
+int
+verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
+			     const char *routine_str)
+{
+  tree c_level = NULL_TREE;
+  tree c_bind = NULL_TREE;
+  tree c_nohost = NULL_TREE;
+  tree c_p = NULL_TREE;
+  for (tree c = *clauses; c; c_p = c, c = OMP_CLAUSE_CHAIN (c))
+    switch (OMP_CLAUSE_CODE (c))
+      {
+      case OMP_CLAUSE_GANG:
+      case OMP_CLAUSE_WORKER:
+      case OMP_CLAUSE_VECTOR:
+      case OMP_CLAUSE_SEQ:
+	if (c_level == NULL_TREE)
+	  c_level = c;
+	else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_CODE (c_level))
+	  {
+	    /* This has already been diagnosed in the front ends.  */
+	    /* Drop the duplicate clause.  */
+	    gcc_checking_assert (c_p != NULL_TREE);
+	    OMP_CLAUSE_CHAIN (c_p) = OMP_CLAUSE_CHAIN (c);
+	    c = c_p;
+	  }
+	else
+	  {
+	    error_at (OMP_CLAUSE_LOCATION (c),
+		      "%qs specifies a conflicting level of parallelism",
+		      omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	    inform (OMP_CLAUSE_LOCATION (c_level),
+		    "... to the previous %qs clause here",
+		    omp_clause_code_name[OMP_CLAUSE_CODE (c_level)]);
+	    /* Drop the conflicting clause.  */
+	    gcc_checking_assert (c_p != NULL_TREE);
+	    OMP_CLAUSE_CHAIN (c_p) = OMP_CLAUSE_CHAIN (c);
+	    c = c_p;
+	  }
+	break;
+      case OMP_CLAUSE_BIND:
+	/* Don't bother with duplicate clauses at this point.  */
+	c_bind = c;
+	break;
+      case OMP_CLAUSE_NOHOST:
+	/* Don't bother with duplicate clauses at this point.  */
+	c_nohost = c;
+	break;
+      default:
+	gcc_unreachable ();
+      }
+  if (c_level == NULL_TREE)
+    {
+      /* OpenACC 2.5 expects the user to supply one parallelism clause.  */
+      warning_at (loc, 0, "expecting one of %<gang%>, %<worker%>, %<vector%> "
+		  "or %<seq%> clauses");
+      inform (loc, "assigning %<seq%> parallelism to this routine");
+      c_level = build_omp_clause (loc, OMP_CLAUSE_SEQ);
+      OMP_CLAUSE_CHAIN (c_level) = *clauses;
+      *clauses = c_level;
+    }
+  /* In *clauses, we now have exactly one clause specifying the level of
+     parallelism.  */
+
+  /* Still got some work to do for Fortran...  */
+  if (fndecl == NULL_TREE)
+    return 0;
+
+  tree attr
+    = lookup_attribute ("omp declare target", DECL_ATTRIBUTES (fndecl));
+  if (attr != NULL_TREE)
+    {
+      /* If a "#pragma acc routine" has already been applied, just verify
+	 this one for compatibility.  */
+      /* Collect previous directive's clauses.  */
+      tree c_level_p = NULL_TREE;
+      tree c_bind_p = NULL_TREE;
+      tree c_nohost_p = NULL_TREE;
+      for (tree c = TREE_VALUE (attr); c; c = OMP_CLAUSE_CHAIN (c))
+	switch (OMP_CLAUSE_CODE (c))
+	  {
+	  case OMP_CLAUSE_GANG:
+	  case OMP_CLAUSE_WORKER:
+	  case OMP_CLAUSE_VECTOR:
+	  case OMP_CLAUSE_SEQ:
+	    gcc_checking_assert (c_level_p == NULL_TREE);
+	    c_level_p = c;
+	    break;
+	  case OMP_CLAUSE_BIND:
+	    /* Don't bother with duplicate clauses at this point.  */
+	    c_bind_p = c;
+	    break;
+	  case OMP_CLAUSE_NOHOST:
+	    /* Don't bother with duplicate clauses at this point.  */
+	    c_nohost_p = c;
+	    break;
+	  default:
+	    gcc_unreachable ();
+	  }
+      gcc_checking_assert (c_level_p != NULL_TREE);
+      /* ..., and compare to current directive's, which we've already collected
+	 above.  */
+      tree c_diag;
+      tree c_diag_p;
+      /* Matching level of parallelism?  */
+      if (OMP_CLAUSE_CODE (c_level) != OMP_CLAUSE_CODE (c_level_p))
+	{
+	  c_diag = c_level;
+	  c_diag_p = c_level_p;
+	  goto incompatible;
+	}
+      /* Matching bind clauses?  */
+      if ((c_bind == NULL_TREE) != (c_bind_p == NULL_TREE))
+	{
+	  c_diag = c_bind;
+	  c_diag_p = c_bind_p;
+	  goto incompatible;
+	}
+      /* Matching bind clauses' names?  */
+      if ((c_bind != NULL_TREE) && (c_bind_p != NULL_TREE))
+	{
+	  tree c_bind_name = OMP_CLAUSE_BIND_NAME (c_bind);
+	  tree c_bind_name_p = OMP_CLAUSE_BIND_NAME (c_bind_p);
+	  /* TODO: will/should actually be the trees/strings/string pointers be
+	     identical?  */
+	  if (strcmp (TREE_STRING_POINTER (c_bind_name),
+		      TREE_STRING_POINTER (c_bind_name_p)) != 0)
+	    {
+	      c_diag = c_bind;
+	      c_diag_p = c_bind_p;
+	      goto incompatible;
+	    }
+	}
+      /* Matching nohost clauses?  */
+      if ((c_nohost == NULL_TREE) != (c_nohost_p == NULL_TREE))
+	{
+	  c_diag = c_nohost;
+	  c_diag_p = c_nohost_p;
+	  goto incompatible;
+	}
+      /* Compatible.  */
+      return 1;
+
+    incompatible:
+      if (c_diag != NULL_TREE)
+	error_at (OMP_CLAUSE_LOCATION (c_diag),
+		  "incompatible %qs clause when applying"
+		  " %<%s%> to %qD, which has already been"
+		  " marked as an accelerator routine",
+		  omp_clause_code_name[OMP_CLAUSE_CODE (c_diag)],
+		  routine_str, fndecl);
+      else if (c_diag_p != NULL_TREE)
+	error_at (loc,
+		  "missing %qs clause when applying"
+		  " %<%s%> to %qD, which has already been"
+		  " marked as an accelerator routine",
+		  omp_clause_code_name[OMP_CLAUSE_CODE (c_diag_p)],
+		  routine_str, fndecl);
+      else
+	gcc_unreachable ();
+      if (c_diag_p != NULL_TREE)
+	inform (OMP_CLAUSE_LOCATION (c_diag_p),
+		"... with %qs clause here",
+		omp_clause_code_name[OMP_CLAUSE_CODE (c_diag_p)]);
+      else
+	{
+	  /* In the front ends, we don't preserve location information for the
+	     OpenACC routine directive itself.  However, that of c_level_p
+	     should be close.  */
+	  location_t loc_routine = OMP_CLAUSE_LOCATION (c_level_p);
+	  inform (loc_routine, "... without %qs clause near to here",
+		  omp_clause_code_name[OMP_CLAUSE_CODE (c_diag)]);
+	}
+      /* Incompatible.  */
+      return -1;
+    }
+
+  return 0;
+}
+
+/*  Process the OpenACC routine's clauses to generate an attribute
+    for the level of parallelism.  All dimensions have a size of zero
+    (dynamic).  TREE_PURPOSE is set to indicate whether that dimension
+    can have a loop partitioned on it.  non-zero indicates
+    yes, zero indicates no.  By construction once a non-zero has been
+    reached, further inner dimensions must also be non-zero.  We set
+    TREE_VALUE to zero for the dimensions that may be partitioned and
+    1 for the other ones -- if a loop is (erroneously) spawned at
+    an outer level, we don't want to try and partition it.  */
+
+tree
+build_oacc_routine_dims (tree clauses)
+{
+  /* Must match GOMP_DIM ordering.  */
+  static const omp_clause_code ids[] = 
+    {OMP_CLAUSE_GANG, OMP_CLAUSE_WORKER, OMP_CLAUSE_VECTOR, OMP_CLAUSE_SEQ};
+  int ix;
+  int level = -1;
+
+  for (; clauses; clauses = OMP_CLAUSE_CHAIN (clauses))
+    for (ix = GOMP_DIM_MAX + 1; ix--;)
+      if (OMP_CLAUSE_CODE (clauses) == ids[ix])
+	{
+	  level = ix;
+	  break;
+	}
+  gcc_checking_assert (level >= 0);
+
+  tree dims = NULL_TREE;
+
+  for (ix = GOMP_DIM_MAX; ix--;)
+    dims = tree_cons (build_int_cst (boolean_type_node, ix >= level),
+		      build_int_cst (integer_type_node, ix < level), dims);
+
+  return dims;
+}
 
 #include "gt-omp-low.h"
