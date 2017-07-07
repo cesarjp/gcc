@@ -38,7 +38,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "gomp-constants.h"
 #include "omp-general.h"
 #include "omp-offload.h"
-#include "omp-low.h"
 #include "c-family/c-indentation.h"
 #include "context.h"
 #include "cp-cilkplus.h"
@@ -37804,8 +37803,7 @@ cp_finalize_oacc_routine (cp_parser *parser, tree fndecl, bool is_defn)
 	  return;
 	}
       if (compatible > 0)
-	{
-	}
+	;
       else
 	{
 	  if (TREE_USED (fndecl) || (!is_defn && DECL_SAVED_TREE (fndecl)))

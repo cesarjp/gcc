@@ -14270,8 +14270,7 @@ c_finish_oacc_routine (struct oacc_routine_data *data, tree fndecl,
       return;
     }
   if (compatible > 0)
-    {
-    }
+    ;
   else
     {
       if (TREE_USED (fndecl) || (!is_defn && DECL_SAVED_TREE (fndecl)))

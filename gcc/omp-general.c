@@ -647,7 +647,6 @@ oacc_get_ifn_dim_arg (const gimple *stmt)
   return (int) axis;
 }
 
-
 /* Look for compute grid dimension clauses and convert to an attribute
    attached to FN.  This permits the target-side code to (a) massage
    the dimensions, (b) emit that data and (c) optimize.  Non-constant

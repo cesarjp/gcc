@@ -84,7 +84,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Don't put any single quote (') in MOD_VERSION, if you want it to be
    recognized.  */
-#define MOD_VERSION "14"
+#define MOD_VERSION "15"
 
 
 /* Structure that describes a position within a module file.  */
