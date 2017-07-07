@@ -87,5 +87,8 @@ extern tree oacc_build_routine_dims (tree clauses);
 extern tree oacc_get_fn_attrib (tree fn);
 extern int oacc_get_fn_dim_size (tree fn, int axis);
 extern int oacc_get_ifn_dim_arg (const gimple *stmt);
+extern void replace_oacc_fn_attrib (tree, tree);
+extern int verify_oacc_routine_clauses (tree, tree *, location_t, const char *);
+extern tree build_oacc_routine_dims (tree);
 
 #endif /* GCC_OMP_GENERAL_H */

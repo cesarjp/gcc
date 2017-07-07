@@ -46,7 +46,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "trans-stmt.h"
 #include "gomp-constants.h"
 #include "gimplify.h"
-#include "omp-low.h"
+#include "omp-general.h"
 
 #define MAX_LABEL_VALUE 99999
 

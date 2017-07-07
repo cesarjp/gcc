@@ -54,7 +54,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "plugin.h"
 #include "omp-general.h"
 #include "omp-offload.h"
-#include "omp-low.h"
 #include "builtins.h"
 #include "gomp-constants.h"
 #include "c-family/c-indentation.h"
