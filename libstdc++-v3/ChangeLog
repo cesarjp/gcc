@@ -1,3 +1,22 @@
+2017-07-06  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/20_util/specialized_algorithms/memory_management_tools/
+	1.cc: Free memory.
+	* testsuite/22_locale/locale/cons/5.cc: Remove redundant restoration
+	of original environment and free memory.
+
+	* testsuite/abi/pr42230.cc: Free memory.
+	* testsuite/util/testsuite_abi.cc (demangle): Return std::string
+	instead of pointer that might need freeing.
+	* testsuite/util/testsuite_abi.h (demangle): Likewise.
+	* testsuite/util/testsuite_hooks.cc (verify_demangle): Free memory.
+
+	* include/bits/uses_allocator.h (__use_alloc(const _Alloc&&)): Add
+	deleted overload to prevent dangling references to rvalues.
+	* include/experimental/memory_resource
+	(polymorphic_allocator::construct): Do not call __use_alloc with
+	rvalue arguments.
+
 2017-06-27  Tim Shen  <timshen@google.com>
 
 	PR libstdc++/80187
