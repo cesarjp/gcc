@@ -45,7 +45,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "common/common-target.h"
 #include "omp-general.h"
 #include "omp-offload.h"
-#include "omp-low.h"
 #include "lto-section-names.h"
 #include "gomp-constants.h"
 #include "gimple-pretty-print.h"
@@ -1425,28 +1424,6 @@ default_goacc_reduction (gcall *call)
   gsi_replace_with_seq (&gsi, seq, true);
 }
 
-/* Determine whether DECL should be discarded in this offload
-   compilation.  */
-
-static bool
-maybe_discard_oacc_function (tree decl)
-{
-  tree attr = lookup_attribute ("omp declare target", DECL_ATTRIBUTES (decl));
-
-  if (!attr)
-    return false;
-
-  enum omp_clause_code kind = OMP_CLAUSE_NOHOST;
-  
-#ifdef ACCEL_COMPILER
-  kind = OMP_CLAUSE_BIND;
-#endif
-  if (find_omp_clause (TREE_VALUE (attr), kind))
-    return true;
-
-  return false;
-}
-
 /* Main entry point for oacc transformations which run on the device
    compiler after LTO, so we know what the target device is at this
    point (including the host fallback).  */
@@ -1459,14 +1436,6 @@ execute_oacc_device_lower ()
   if (!attrs)
     /* Not an offloaded function.  */
     return 0;
-
-  if (maybe_discard_oacc_function (current_function_decl))
-    {
-      if (dump_file)
-	fprintf (dump_file, "Discarding function\n");
-      TREE_ASM_WRITTEN (current_function_decl) = 1;
-      return TODO_discard_function;
-    }
 
   /* Parse the default dim argument exactly once.  */
   if ((const void *)flag_openacc_dims != &flag_openacc_dims)

@@ -734,26 +734,6 @@ cleanup:
   return MATCH_ERROR;
 }
 
-static match
-gfc_match_oacc_bind_clause (gfc_omp_clauses *clauses)
-{
-  if (gfc_match (" %n )", clauses->bind_name) == MATCH_YES)
-    {
-      gfc_symbol *sym;
-      gfc_symtree *st;
-      bool exit;
-      match m = gfc_match_call_name (clauses->bind_name, &sym, &st, exit);
-
-      if (exit)
-	return m;
-    }
-  else if (gfc_match (" \"%n\" )", clauses->bind_name) != MATCH_YES)
-    return MATCH_ERROR;
-
-  clauses->bind = 1;
-  return MATCH_YES;
-}
-
 /* OpenMP 4.5 clauses.  */
 enum omp_mask1
 {
@@ -833,8 +813,6 @@ enum omp_mask2
   OMP_CLAUSE_DELETE,
   OMP_CLAUSE_AUTO,
   OMP_CLAUSE_TILE,
-  OMP_CLAUSE_BIND,
-  OMP_CLAUSE_NOHOST,
   /* This must come last.  */
   OMP_MASK2_LAST
 };
@@ -1036,12 +1014,6 @@ gfc_match_omp_clauses (gfc_omp_clauses **cp, const omp_mask mask,
 	      needs_space = true;
 	      continue;
 	    }
-	  break;
-	case 'b':
-	  if ((mask & OMP_CLAUSE_BIND) && c->routine_bind == NULL
-	      && gfc_match ("bind (") == MATCH_YES
-	      && gfc_match_oacc_bind_clause (c))
-	    continue;
 	  break;
 	case 'c':
 	  if ((mask & OMP_CLAUSE_COLLAPSE)
@@ -2002,7 +1974,7 @@ gfc_match_omp_clauses (gfc_omp_clauses **cp, const omp_mask mask,
   omp_mask (OMP_CLAUSE_ASYNC)
 #define OACC_ROUTINE_CLAUSES \
   (omp_mask (OMP_CLAUSE_GANG) | OMP_CLAUSE_WORKER | OMP_CLAUSE_VECTOR	      \
-   | OMP_CLAUSE_SEQ | OMP_CLAUSE_BIND | OMP_CLAUSE_NOHOST)
+   | OMP_CLAUSE_SEQ)
 
 
 static match
@@ -2463,8 +2435,6 @@ gfc_match_oacc_routine (void)
 
       gfc_current_ns->proc_name->attr.oacc_function
 	= seen_error ? OACC_FUNCTION_SEQ : dims;
-      gfc_current_ns->proc_name->attr.oacc_function_nohost
-	= c ? c->nohost : false;
 
       if (seen_error)
 	goto cleanup;

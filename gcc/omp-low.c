@@ -1334,8 +1334,6 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 	    install_var_local (decl, ctx);
 	  break;
 
-	case OMP_CLAUSE_BIND:
-	case OMP_CLAUSE_NOHOST:
 	case OMP_CLAUSE__CACHE_:
 	default:
 	  gcc_unreachable ();
@@ -1501,8 +1499,6 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 	case OMP_CLAUSE__SIMT_:
 	  break;
 
-	case OMP_CLAUSE_BIND:
-	case OMP_CLAUSE_NOHOST:
 	case OMP_CLAUSE__CACHE_:
 	default:
 	  gcc_unreachable ();
@@ -9499,14 +9495,6 @@ verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
 	    c = c_p;
 	  }
 	break;
-      case OMP_CLAUSE_BIND:
-	/* Don't bother with duplicate clauses at this point.  */
-	c_bind = c;
-	break;
-      case OMP_CLAUSE_NOHOST:
-	/* Don't bother with duplicate clauses at this point.  */
-	c_nohost = c;
-	break;
       default:
 	gcc_unreachable ();
       }
@@ -9547,14 +9535,6 @@ verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
 	    gcc_checking_assert (c_level_p == NULL_TREE);
 	    c_level_p = c;
 	    break;
-	  case OMP_CLAUSE_BIND:
-	    /* Don't bother with duplicate clauses at this point.  */
-	    c_bind_p = c;
-	    break;
-	  case OMP_CLAUSE_NOHOST:
-	    /* Don't bother with duplicate clauses at this point.  */
-	    c_nohost_p = c;
-	    break;
 	  default:
 	    gcc_unreachable ();
 	  }
@@ -9568,35 +9548,6 @@ verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
 	{
 	  c_diag = c_level;
 	  c_diag_p = c_level_p;
-	  goto incompatible;
-	}
-      /* Matching bind clauses?  */
-      if ((c_bind == NULL_TREE) != (c_bind_p == NULL_TREE))
-	{
-	  c_diag = c_bind;
-	  c_diag_p = c_bind_p;
-	  goto incompatible;
-	}
-      /* Matching bind clauses' names?  */
-      if ((c_bind != NULL_TREE) && (c_bind_p != NULL_TREE))
-	{
-	  tree c_bind_name = OMP_CLAUSE_BIND_NAME (c_bind);
-	  tree c_bind_name_p = OMP_CLAUSE_BIND_NAME (c_bind_p);
-	  /* TODO: will/should actually be the trees/strings/string pointers be
-	     identical?  */
-	  if (strcmp (TREE_STRING_POINTER (c_bind_name),
-		      TREE_STRING_POINTER (c_bind_name_p)) != 0)
-	    {
-	      c_diag = c_bind;
-	      c_diag_p = c_bind_p;
-	      goto incompatible;
-	    }
-	}
-      /* Matching nohost clauses?  */
-      if ((c_nohost == NULL_TREE) != (c_nohost_p == NULL_TREE))
-	{
-	  c_diag = c_nohost;
-	  c_diag_p = c_nohost_p;
 	  goto incompatible;
 	}
       /* Compatible.  */

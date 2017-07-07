@@ -328,8 +328,6 @@ unsigned const char omp_clause_num_ops[] =
   1, /* OMP_CLAUSE_VECTOR_LENGTH  */
   3, /* OMP_CLAUSE_TILE  */
   2, /* OMP_CLAUSE__GRIDDIM_  */
-  1, /* OMP_CLAUSE_BIND  */
-  0, /* OMP_CLAUSE_NOHOST  */
 };
 
 const char * const omp_clause_code_name[] =
@@ -401,9 +399,7 @@ const char * const omp_clause_code_name[] =
   "num_workers",
   "vector_length",
   "tile",
-  "_griddim_",
-  "bind",
-  "nohost",
+  "_griddim_"
 };
 
 
@@ -11999,7 +11995,6 @@ walk_tree_1 (tree *tp, walk_tree_fn func, void *data,
 	case OMP_CLAUSE__LOOPTEMP_:
 	case OMP_CLAUSE__SIMDUID_:
 	case OMP_CLAUSE__CILK_FOR_COUNT_:
-	case OMP_CLAUSE_BIND:
 	  WALK_SUBTREE (OMP_CLAUSE_OPERAND (*tp, 0));
 	  /* FALLTHRU */
 
@@ -12021,7 +12016,6 @@ walk_tree_1 (tree *tp, walk_tree_fn func, void *data,
 	case OMP_CLAUSE_DEFAULTMAP:
 	case OMP_CLAUSE_AUTO:
 	case OMP_CLAUSE_SEQ:
-	case OMP_CLAUSE_NOHOST:
 	case OMP_CLAUSE_TILE:
 	case OMP_CLAUSE__SIMT_:
 	  WALK_SUBTREE_TAIL (OMP_CLAUSE_CHAIN (*tp));
