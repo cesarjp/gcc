@@ -678,51 +678,6 @@ replace_oacc_fn_attrib (tree fn, tree dims)
   DECL_ATTRIBUTES (fn) = tree_cons (ident, dims, attribs);
 }
 
-/* Scan CLAUSES for launch dimensions and attach them to the oacc
-   function attribute.  Push any that are non-constant onto the ARGS
-   list, along with an appropriate GOMP_LAUNCH_DIM tag.  */
-
-static void
-set_oacc_fn_attrib (tree fn, tree clauses, vec<tree> *args)
-{
-  /* Must match GOMP_DIM ordering.  */
-  static const omp_clause_code ids[]
-    = { OMP_CLAUSE_NUM_GANGS, OMP_CLAUSE_NUM_WORKERS,
-	OMP_CLAUSE_VECTOR_LENGTH };
-  unsigned ix;
-  tree dims[GOMP_DIM_MAX];
-  tree attr = NULL_TREE;
-  unsigned non_const = 0;
-
-  for (ix = GOMP_DIM_MAX; ix--;)
-    {
-      tree clause = omp_find_clause (clauses, ids[ix]);
-      tree dim = NULL_TREE;
-
-      if (clause)
-	dim = OMP_CLAUSE_EXPR (clause, ids[ix]);
-      dims[ix] = dim;
-      if (dim && TREE_CODE (dim) != INTEGER_CST)
-	{
-	  dim = integer_zero_node;
-	  non_const |= GOMP_DIM_MASK (ix);
-	}
-      attr = tree_cons (NULL_TREE, dim, attr);
-    }
-
-  replace_oacc_fn_attrib (fn, attr);
-
-  if (non_const)
-    {
-      /* Push a dynamic argument set.  */
-      args->safe_push (oacc_launch_pack (GOMP_LAUNCH_DIM,
-					 NULL_TREE, non_const));
-      for (unsigned ix = 0; ix != GOMP_DIM_MAX; ix++)
-	if (non_const & GOMP_DIM_MASK (ix))
-	  args->safe_push (dims[ix]);
-    }
-}
-
 /* Verify OpenACC routine clauses.
 
    Returns 0 if FNDECL should be marked as an accelerator routine, 1 if it has
@@ -735,8 +690,6 @@ verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
 			     const char *routine_str)
 {
   tree c_level = NULL_TREE;
-  tree c_bind = NULL_TREE;
-  tree c_nohost = NULL_TREE;
   tree c_p = NULL_TREE;
   for (tree c = *clauses; c; c_p = c, c = OMP_CLAUSE_CHAIN (c))
     switch (OMP_CLAUSE_CODE (c))
@@ -797,8 +750,6 @@ verify_oacc_routine_clauses (tree fndecl, tree *clauses, location_t loc,
 	 this one for compatibility.  */
       /* Collect previous directive's clauses.  */
       tree c_level_p = NULL_TREE;
-      tree c_bind_p = NULL_TREE;
-      tree c_nohost_p = NULL_TREE;
       for (tree c = TREE_VALUE (attr); c; c = OMP_CLAUSE_CHAIN (c))
 	switch (OMP_CLAUSE_CODE (c))
 	  {
