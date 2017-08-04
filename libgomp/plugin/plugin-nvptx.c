@@ -699,6 +699,20 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	seen_zero = 1;
     }
 
+  /* Calculate the optimal number of gangs for the current device.  */
+  int reg_used = targ_fn->regs_per_thread;
+  int reg_per_warp = ((reg_used * warp_size + reg_unit_size - 1)
+		      / reg_unit_size) * reg_unit_size;
+  int threads_per_sm = (rf_size / reg_per_warp / reg_granularity)
+    * reg_granularity * warp_size;
+  int threads_per_block = threads_per_sm > block_size
+    ? block_size : threads_per_sm;
+
+  threads_per_block /= warp_size;
+
+  if (threads_per_sm > cpu_size)
+    threads_per_sm = cpu_size;
+
   /* See if the user provided GOMP_OPENACC_DIM environment variable to
      specify runtime defaults. */
   static int default_dims[GOMP_DIM_MAX];
@@ -738,7 +752,6 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
       int gang = 0, worker = 32, vector = 32;
 
       gang = (cpu_size / block_size) * dev_size;
-      worker = block_size / warp_size;
       vector = warp_size;
 
       /* If the user hasn't specified the number of gangs, determine
@@ -748,7 +761,7 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
       /* The worker size must not exceed the hardware.  */
       if (default_dims[GOMP_DIM_WORKER] < 1
 	  || (default_dims[GOMP_DIM_WORKER] > worker && gang))
-	default_dims[GOMP_DIM_WORKER] = worker;
+	default_dims[GOMP_DIM_WORKER] = -1;
       /* The vector size must exactly match the hardware.  */
       if (default_dims[GOMP_DIM_VECTOR] < 1
 	  || (default_dims[GOMP_DIM_VECTOR] != vector && gang))
@@ -760,16 +773,6 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 			 default_dims[GOMP_DIM_VECTOR]);
     }
   pthread_mutex_unlock (&ptx_dev_lock);
-
-  /* Calculate the optimal number of gangs for the current device.  */
-  int reg_used = targ_fn->regs_per_thread;
-  int reg_per_warp = ((reg_used * warp_size + reg_unit_size - 1)
-		      / reg_unit_size) * reg_unit_size;
-  int threads_per_sm = (rf_size / reg_per_warp / reg_granularity)
-    * reg_granularity * warp_size;
-
-  if (threads_per_sm > cpu_size)
-    threads_per_sm = cpu_size;
 
   if (seen_zero)
     {
@@ -790,6 +793,8 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 		  : 2 * dev_size;
 		break;
 	      case GOMP_DIM_WORKER:
+		dims[i] = threads_per_block;
+		break;
 	      case GOMP_DIM_VECTOR:
 		dims[i] = warp_size;
 		break;
@@ -803,11 +808,6 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
      launch the offloaded kernel.  */
   if (dims[GOMP_DIM_WORKER] > 1)
     {
-      int threads_per_block = threads_per_sm > block_size
-	? block_size : threads_per_sm;
-
-      threads_per_block /= warp_size;
-
       if (reg_granularity > 0 && dims[GOMP_DIM_WORKER] > threads_per_block)
 	GOMP_PLUGIN_fatal ("The Nvidia accelerator has insufficient resources "
 			   "to launch '%s'; recompile the program with "
