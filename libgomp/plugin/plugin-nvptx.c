@@ -547,7 +547,7 @@ nvptx_open_device (int n)
      adjusted on order to allow the nvptx_exec to select an
      appropriate num_workers.  */
   if (ptx_dev->compute_capability_major == 3
-      && ptx_dev->compute_capability_major == 7)
+      && ptx_dev->compute_capability_minor == 7)
     {
       ptx_dev->regs_per_sm /= 2;
       ptx_dev->max_shared_memory_per_multiprocessor /= 2;
