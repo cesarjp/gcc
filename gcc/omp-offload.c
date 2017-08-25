@@ -399,7 +399,7 @@ oacc_xform_loop (gcall *call)
       /* If we're at the gang level, we want each to execute a
 	 contiguous run of iterations.  Otherwise we want each element
 	 to stride.  */
-      if (!dynsched (outer_mask))
+      if (!dynsched (mask))
 	striding = !(outer_mask & GOMP_DIM_MASK (GOMP_DIM_GANG));
       else
 	/* For dynamic gang scheduling, the gang loop should be strided too.  */
@@ -516,7 +516,7 @@ oacc_xform_loop (gcall *call)
 	      r = build2 (PLUS_EXPR, diff_type, r, per);
 	    }
 	}
-      if (!dynsched (outer_mask))
+      if (!dynsched (mask))
 	{
 	  r = fold_build2 (MULT_EXPR, diff_type, r, step);
 	  if (type != diff_type)
