@@ -5596,7 +5596,11 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
   gsi_insert_after (&gsi, gimple_build_cond_empty (expr),
 		    GSI_CONTINUE_LINKING);
 
-  /* V assignment goes into body_bb.  */
+  /* V assignment goes into body_bb.
+
+     FIXME: there needs to be another GOACC_LOOP call to set offset as
+     appropriate.
+  */
   if (!gimple_in_ssa_p (cfun))
     {
       gsi = gsi_start_bb (body_bb);
@@ -5711,15 +5715,23 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 	}
 
       /* Increment offset.  */
-      if (gimple_in_ssa_p (cfun))
-	expr = build2 (plus_code, iter_type, offset,
-		       fold_convert (plus_type, step));
-      else
-	expr = build2 (PLUS_EXPR, diff_type, offset, step);
-      expr = force_gimple_operand_gsi (&gsi, expr, false, NULL_TREE,
-				       true, GSI_SAME_STMT);
-      ass = gimple_build_assign (offset_incr, expr);
-      gsi_insert_before (&gsi, ass, GSI_SAME_STMT);
+//       if (gimple_in_ssa_p (cfun))
+//	expr = build2 (plus_code, iter_type, offset,
+//		       fold_convert (plus_type, step));
+//      else
+//	expr = build2 (PLUS_EXPR, diff_type, offset, step);
+//      expr = force_gimple_operand_gsi (&gsi, expr, false, NULL_TREE,
+//				       true, GSI_SAME_STMT);
+//      ass = gimple_build_assign (offset_incr, expr);
+      call = gimple_build_call_internal (IFN_GOACC_LOOP, 7,
+					 build_int_cst (integer_type_node,
+						      IFN_GOACC_LOOP_NEWOFFSET),
+					 dir, range, step,
+					 chunk_size, gwv, offset);
+      gimple_call_set_lhs (call, offset_incr);
+      gimple_set_location (call, loc);
+
+      gsi_insert_before (&gsi, call, GSI_SAME_STMT);
       expr = build2 (cond_code, boolean_type_node, offset_incr, bound);
       gsi_insert_before (&gsi, gimple_build_cond_empty (expr), GSI_SAME_STMT);
 

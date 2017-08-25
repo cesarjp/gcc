@@ -49,6 +49,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "gomp-constants.h"
 #include "gimple-pretty-print.h"
 #include "intl.h"
+#include "varasm.h"
+#include "memmodel.h"
 
 /* Describe the OpenACC looping structure of a function.  The entire
    function is held in a 'NULL' loop.  */
@@ -277,13 +279,117 @@ oacc_thread_numbers (bool pos, int mask, gimple_seq *seq)
   return res;
 }
 
+tree dynsched_iv = NULL_TREE;
+
+static bool
+dynsched (unsigned mask)
+{
+  return getenv ("DYNSCHED") && mask == GOMP_DIM_MASK (GOMP_DIM_GANG);
+}
+
+static tree
+update_dynsched_offset (gcall *call)
+{
+  gimple_stmt_iterator gsi = gsi_for_stmt (call);
+  enum ifn_goacc_loop_kind code
+    = (enum ifn_goacc_loop_kind) TREE_INT_CST_LOW (gimple_call_arg (call, 0));
+  tree dir = gimple_call_arg (call, 1);
+  tree range = gimple_call_arg (call, 2);
+  tree step = gimple_call_arg (call, 3);
+  tree chunk_size = NULL_TREE;
+  unsigned mask = (unsigned) TREE_INT_CST_LOW (gimple_call_arg (call, 5));
+  tree lhs = gimple_call_lhs (call);
+  tree type = TREE_TYPE (lhs);
+  tree diff_type = TREE_TYPE (range);
+  tree r = NULL_TREE;
+  gimple_seq seq = NULL;
+  bool chunking = false, striding = true;
+  unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
+  unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
+
+#ifdef ACCEL_COMPILER
+  chunk_size = gimple_call_arg (call, 4);
+  if (integer_minus_onep (chunk_size)  /* Force static allocation.  */
+      || integer_zerop (chunk_size))   /* Default (also static).  */
+    {
+      /* If we're at the gang level, we want each to execute a
+	 contiguous run of iterations.  Otherwise we want each element
+	 to stride.  */
+      if (!dynsched (outer_mask))
+	striding = !(outer_mask & GOMP_DIM_MASK (GOMP_DIM_GANG));
+      else
+	/* For dynamic gang scheduling, the gang loop should be strided too.  */
+	striding = true;
+      chunking = false;
+    }
+  else
+    {
+      /* Chunk of size 1 is striding.  */
+      striding = integer_onep (chunk_size);
+      chunking = !striding;
+    }
+#endif
+
+  tree new_type = build_qualified_type (type, TYPE_QUAL_VOLATILE);
+  if (dynsched_iv == NULL_TREE)
+    {
+      dynsched_iv = create_tmp_var (new_type, ".oacc_dynsched");
+      DECL_ARTIFICIAL (dynsched_iv) = 1;
+      DECL_NAMELESS (dynsched_iv) = 1;
+      TREE_STATIC (dynsched_iv) = 1;
+      TREE_ADDRESSABLE (dynsched_iv) = 1;
+      varpool_node::finalize_decl (dynsched_iv);
+      TREE_THIS_VOLATILE (dynsched_iv);
+    }
+  tree iv = dynsched_iv;
+
+  /* Calculate the size of type of the IV in log2(#bits).  */
+  int index = tree_to_uhwi (TYPE_SIZE_UNIT (type));
+  index = exact_log2 (index) + 1;
+
+  enum built_in_function fcode, tmpbase;
+
+  fcode = BUILT_IN_ATOMIC_FETCH_ADD_N;
+
+  //	  tree cs = make_ssa_name (TREE_TYPE (chunk_size));
+  //	  gimplify_assign (cs, fold_build2 (MULT_EXPR, type,
+  //					    dir, chunk_size), &seq);
+
+  tmpbase = ((enum built_in_function) (fcode + index));
+  tree decl = builtin_decl_explicit (tmpbase);
+
+  /* Need to quit gracefully here.  */
+  gcc_assert (decl != NULL_TREE);
+
+  tree itype = TREE_TYPE (TREE_TYPE (decl));
+  machine_mode imode = TYPE_MODE (itype);
+
+  tree rhs = build_int_cst (type, 1);
+  //tree addr = make_ssa_name (build_pointer_type (TREE_TYPE (iv)));
+  //gimplify_assign (addr, build_fold_addr_expr (iv), &seq);
+  tree addr = build_fold_addr_expr (iv);
+
+  tree new_lhs = make_ssa_name (new_type);
+
+  tree new_call = build_call_expr (decl, 3, addr,
+				   fold_convert (itype, rhs),
+				   build_int_cst (NULL, MEMMODEL_RELAXED));
+  new_call = fold_convert (type, new_call);
+  new_call = build2 (MODIFY_EXPR, void_type_node, new_lhs, new_call);
+
+  return new_call;
+}
+
 /* Transform IFN_GOACC_LOOP calls to actual code.  See
    expand_oacc_for for where these are generated.  At the vector
    level, we stride loops, such that each member of a warp will
    operate on adjacent iterations.  At the worker and gang level,
    each gang/warp executes a set of contiguous iterations.  Chunking
    can override this such that each iteration engine executes a
-   contiguous chunk, and then moves on to stride to the next chunk.  */
+   contiguous chunk, and then moves on to stride to the next chunk.
+
+   FIXME: should worker loops stride like vectors?
+  */
 
 static void
 oacc_xform_loop (gcall *call)
@@ -313,7 +419,11 @@ oacc_xform_loop (gcall *call)
       /* If we're at the gang level, we want each to execute a
 	 contiguous run of iterations.  Otherwise we want each element
 	 to stride.  */
-      striding = !(outer_mask & GOMP_DIM_MASK (GOMP_DIM_GANG));
+      if (!dynsched (outer_mask))
+	striding = !(outer_mask & GOMP_DIM_MASK (GOMP_DIM_GANG));
+      else
+	/* For dynamic gang scheduling, the gang loop should be strided too.  */
+	striding = true;
       chunking = false;
     }
   else
@@ -363,17 +473,26 @@ oacc_xform_loop (gcall *call)
 
     case IFN_GOACC_LOOP_STEP:
       {
-	/* If striding, step by the entire compute volume, otherwise
-	   step by the inner volume.  */
-	unsigned volume = striding ? mask : inner_mask;
+	if (dynsched (outer_mask))
+	  r = build_int_cst (type, 1);
+	else
+	  {
+	    /* If striding, step by the entire compute volume, otherwise
+	       step by the inner volume.  */
+	    unsigned volume = striding ? mask : inner_mask;
 
-	r = oacc_thread_numbers (false, volume, &seq);
-	r = build2 (MULT_EXPR, type, fold_convert (type, r), step);
+	    r = oacc_thread_numbers (false, volume, &seq);
+	    r = build2 (MULT_EXPR, type, fold_convert (type, r), step);
+	  }
       }
       break;
 
     case IFN_GOACC_LOOP_OFFSET:
-      if (striding)
+      /* With dynamic scheduling, the loop offset is used to
+	 initialize gang's induction variable.  */
+      if (dynsched (outer_mask))
+	r = update_dynsched_offset (call);
+      else if (striding)
 	{
 	  r = oacc_thread_numbers (true, mask, &seq);
 	  r = fold_convert (diff_type, r);
@@ -417,13 +536,16 @@ oacc_xform_loop (gcall *call)
 	      r = build2 (PLUS_EXPR, diff_type, r, per);
 	    }
 	}
-      r = fold_build2 (MULT_EXPR, diff_type, r, step);
-      if (type != diff_type)
-	r = fold_convert (type, r);
+      if (!dynsched (outer_mask))
+	{
+	  r = fold_build2 (MULT_EXPR, diff_type, r, step);
+	  if (type != diff_type)
+	    r = fold_convert (type, r);
+	}
       break;
 
     case IFN_GOACC_LOOP_BOUND:
-      if (striding)
+      if (striding || dynsched (outer_mask))
 	r = range;
       else
 	{
@@ -457,6 +579,20 @@ oacc_xform_loop (gcall *call)
 	}
       if (diff_type != type)
 	r = fold_convert (type, r);
+      break;
+
+    case IFN_GOACC_LOOP_NEWOFFSET:
+      if (dynsched (outer_mask))
+	r = update_dynsched_offset (call);
+      else
+	{
+	  tree offset = gimple_call_arg (call, 6);
+	  tree diff_type = TREE_TYPE (lhs);
+	  if (POINTER_TYPE_P (diff_type) || TYPE_UNSIGNED (diff_type))
+	    diff_type = signed_type_for (diff_type);
+
+	  r = build2 (PLUS_EXPR, diff_type, offset, step);
+	}
       break;
     }
 

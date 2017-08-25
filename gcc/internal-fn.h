@@ -53,6 +53,7 @@ enum ifn_unique_kind {
      STEP = LOOP (CODE_STEP, DIR, RANGE, STEP, CHUNK_SIZE, MASK)
      OFFSET = LOOP (CODE_OFFSET, DIR, RANGE, STEP, CHUNK_SIZE, MASK, CHUNK_NO)
      BOUND = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK, OFFSET)
+     NEWOFFSET = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK, OFFSET)
 
      DIR - +1 for up loop, -1 for down loop
      RANGE - Range of loop (END - BASE)
@@ -62,7 +63,7 @@ enum ifn_unique_kind {
      MASK - partitioning mask.  */
 
 #define IFN_GOACC_LOOP_CODES \
-  DEF(CHUNKS), DEF(STEP), DEF(OFFSET), DEF(BOUND)
+  DEF(CHUNKS), DEF(STEP), DEF(OFFSET), DEF(BOUND), DEF(NEWOFFSET)
 enum ifn_goacc_loop_kind {
 #define DEF(X) IFN_GOACC_LOOP_##X
   IFN_GOACC_LOOP_CODES
