@@ -312,14 +312,8 @@ update_dynsched_offset (gcall *call)
   if (integer_minus_onep (chunk_size)  /* Force static allocation.  */
       || integer_zerop (chunk_size))   /* Default (also static).  */
     {
-      /* If we're at the gang level, we want each to execute a
-	 contiguous run of iterations.  Otherwise we want each element
-	 to stride.  */
-      if (!dynsched (outer_mask))
-	striding = !(outer_mask & GOMP_DIM_MASK (GOMP_DIM_GANG));
-      else
-	/* For dynamic gang scheduling, the gang loop should be strided too.  */
-	striding = true;
+      /* For dynamic gang scheduling, the gang loop should be strided too.  */
+      striding = true;
       chunking = false;
     }
   else
@@ -364,7 +358,6 @@ update_dynsched_offset (gcall *call)
   tree itype = TREE_TYPE (TREE_TYPE (decl));
   machine_mode imode = TYPE_MODE (itype);
 
-  tree rhs = build_int_cst (type, 1);
   //tree addr = make_ssa_name (build_pointer_type (TREE_TYPE (iv)));
   //gimplify_assign (addr, build_fold_addr_expr (iv), &seq);
   tree addr = build_fold_addr_expr (iv);
@@ -372,7 +365,7 @@ update_dynsched_offset (gcall *call)
   tree new_lhs = make_ssa_name (new_type);
 
   tree new_call = build_call_expr (decl, 3, addr,
-				   fold_convert (itype, rhs),
+				   fold_convert (itype, step),
 				   build_int_cst (NULL, MEMMODEL_RELAXED));
   new_call = fold_convert (type, new_call);
   new_call = build2 (MODIFY_EXPR, void_type_node, new_lhs, new_call);
