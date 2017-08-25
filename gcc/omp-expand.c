@@ -5574,11 +5574,12 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
   /* Loop offset & bound go into head_bb.  */
   gsi = gsi_start_bb (head_bb);
 
-  call = gimple_build_call_internal (IFN_GOACC_LOOP, 7,
+  call = gimple_build_call_internal (IFN_GOACC_LOOP, 8,
 				     build_int_cst (integer_type_node,
 						    IFN_GOACC_LOOP_OFFSET),
 				     dir, range, s,
-				     chunk_size, gwv, chunk_no);
+				     chunk_size, gwv, chunk_no,
+				     integer_one_node);
   gimple_call_set_lhs (call, offset_init);
   gimple_set_location (call, loc);
   gsi_insert_after (&gsi, call, GSI_CONTINUE_LINKING);
@@ -5723,11 +5724,12 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 //      expr = force_gimple_operand_gsi (&gsi, expr, false, NULL_TREE,
 //				       true, GSI_SAME_STMT);
 //      ass = gimple_build_assign (offset_incr, expr);
-      call = gimple_build_call_internal (IFN_GOACC_LOOP, 7,
+      call = gimple_build_call_internal (IFN_GOACC_LOOP, 8,
 					 build_int_cst (integer_type_node,
 						      IFN_GOACC_LOOP_NEWOFFSET),
 					 dir, range, step,
-					 chunk_size, gwv, offset);
+					 chunk_size, gwv, offset,
+					 integer_one_node);
       gimple_call_set_lhs (call, offset_incr);
       gimple_set_location (call, loc);
 

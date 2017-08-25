@@ -279,8 +279,6 @@ oacc_thread_numbers (bool pos, int mask, gimple_seq *seq)
   return res;
 }
 
-tree dynsched_iv = NULL_TREE;
-
 static bool
 dynsched (unsigned mask)
 {
@@ -306,6 +304,8 @@ update_dynsched_offset (gcall *call)
   bool chunking = false, striding = true;
   unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
   unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
+  tree iv = gimple_call_arg (call, 7);
+  tree new_type = TREE_TYPE (iv);
 
 #ifdef ACCEL_COMPILER
   chunk_size = gimple_call_arg (call, 4);
@@ -323,19 +323,6 @@ update_dynsched_offset (gcall *call)
       chunking = !striding;
     }
 #endif
-
-  tree new_type = build_qualified_type (type, TYPE_QUAL_VOLATILE);
-  if (dynsched_iv == NULL_TREE)
-    {
-      dynsched_iv = create_tmp_var (new_type, ".oacc_dynsched");
-      DECL_ARTIFICIAL (dynsched_iv) = 1;
-      DECL_NAMELESS (dynsched_iv) = 1;
-      TREE_STATIC (dynsched_iv) = 1;
-      TREE_ADDRESSABLE (dynsched_iv) = 1;
-      varpool_node::finalize_decl (dynsched_iv);
-      TREE_THIS_VOLATILE (dynsched_iv);
-    }
-  tree iv = dynsched_iv;
 
   /* Calculate the size of type of the IV in log2(#bits).  */
   int index = tree_to_uhwi (TYPE_SIZE_UNIT (type));
@@ -466,7 +453,7 @@ oacc_xform_loop (gcall *call)
 
     case IFN_GOACC_LOOP_STEP:
       {
-	if (dynsched (outer_mask))
+	if (dynsched (mask))
 	  r = build_int_cst (type, 1);
 	else
 	  {
@@ -483,7 +470,7 @@ oacc_xform_loop (gcall *call)
     case IFN_GOACC_LOOP_OFFSET:
       /* With dynamic scheduling, the loop offset is used to
 	 initialize gang's induction variable.  */
-      if (dynsched (outer_mask))
+      if (dynsched (mask))
 	r = update_dynsched_offset (call);
       else if (striding)
 	{
@@ -538,7 +525,7 @@ oacc_xform_loop (gcall *call)
       break;
 
     case IFN_GOACC_LOOP_BOUND:
-      if (striding || dynsched (outer_mask))
+      if (striding || dynsched (mask))
 	r = range;
       else
 	{
@@ -575,7 +562,7 @@ oacc_xform_loop (gcall *call)
       break;
 
     case IFN_GOACC_LOOP_NEWOFFSET:
-      if (dynsched (outer_mask))
+      if (dynsched (mask))
 	r = update_dynsched_offset (call);
       else
 	{
@@ -1217,12 +1204,29 @@ oacc_loop_xform_head_tail (gcall *from, int level)
     }
 }
 
+static tree
+create_new_iv (int count, tree type)
+{
+  tree new_type = build_qualified_type (type, TYPE_QUAL_VOLATILE);
+  char *name = xasprintf (".oacc_dynsched.%s.%d", get_name (cfun->decl), count);
+  tree iv = create_tmp_var (new_type, name);
+  DECL_ARTIFICIAL (iv) = 1;
+  DECL_NAMELESS (iv) = 1;
+  TREE_STATIC (iv) = 1;
+  TREE_ADDRESSABLE (iv) = 1;
+  varpool_node::finalize_decl (iv);
+  TREE_THIS_VOLATILE (iv);
+  return iv;
+}
+
 /* Process the discovered OpenACC loops, setting the correct
    partitioning level etc.  */
 
 static void
 oacc_loop_process (oacc_loop *loop)
 {
+  static int gang_loops = 0;
+
   if (loop->child)
     oacc_loop_process (loop->child);
 
@@ -1233,16 +1237,39 @@ oacc_loop_process (oacc_loop *loop)
       tree e_mask_arg = build_int_cst (unsigned_type_node, loop->e_mask);
       tree chunk_arg = loop->chunk_size;
       gcall *call;
+      tree global_ix = NULL_TREE;
       
       for (ix = 0; loop->ifns.iterate (ix, &call); ix++)
 	switch (gimple_call_internal_fn (call))
 	  {
 	  case IFN_GOACC_LOOP:
 	    {
+	      enum ifn_goacc_loop_kind code
+		= (enum ifn_goacc_loop_kind)
+		   TREE_INT_CST_LOW (gimple_call_arg (call, 0));
 	      bool is_e = gimple_call_arg (call, 5) == integer_minus_one_node;
 	      gimple_call_set_arg (call, 5, is_e ? e_mask_arg : mask_arg);
 	      if (!is_e)
 		gimple_call_set_arg (call, 4, chunk_arg);
+	      switch (code) {
+	      case IFN_GOACC_LOOP_OFFSET:
+	      case IFN_GOACC_LOOP_NEWOFFSET:
+		if (dynsched (tree_to_uhwi (gimple_call_arg (call, 5))))
+		  {
+		    /* Prepare and install a global variable for the gang
+		       loop.  */
+		    if (global_ix == NULL_TREE)
+		      {
+			tree type = TREE_TYPE (gimple_call_lhs (call));
+			global_ix = create_new_iv (gang_loops++, type);
+		      }
+
+		    gimple_call_set_arg (call, 7, global_ix);
+		  }
+		break;
+	      default:
+		break;
+	      }
 	    }
 	    break;
 

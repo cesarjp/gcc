@@ -51,16 +51,19 @@ enum ifn_unique_kind {
 
      CHUNK_MAX = LOOP (CODE_CHUNKS, DIR, RANGE, STEP, CHUNK_SIZE, MASK)
      STEP = LOOP (CODE_STEP, DIR, RANGE, STEP, CHUNK_SIZE, MASK)
-     OFFSET = LOOP (CODE_OFFSET, DIR, RANGE, STEP, CHUNK_SIZE, MASK, CHUNK_NO)
+     OFFSET = LOOP (CODE_OFFSET, DIR, RANGE, STEP, CHUNK_SIZE, MASK, CHUNK_NO,
+                    GLOBAL_IV)
      BOUND = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK, OFFSET)
-     NEWOFFSET = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK, OFFSET)
+     NEWOFFSET = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK, OFFSET,
+                       GLOBAL_IV)
 
      DIR - +1 for up loop, -1 for down loop
      RANGE - Range of loop (END - BASE)
      STEP - iteration step size
      CHUNKING - size of chunking, (constant zero for no chunking)
      CHUNK_NO - chunk number
-     MASK - partitioning mask.  */
+     MASK - partitioning mask.
+     GLOBAL_IV - optional global induction variable, if necessary.  */
 
 #define IFN_GOACC_LOOP_CODES \
   DEF(CHUNKS), DEF(STEP), DEF(OFFSET), DEF(BOUND), DEF(NEWOFFSET)
