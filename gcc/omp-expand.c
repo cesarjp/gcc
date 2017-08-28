@@ -5319,6 +5319,7 @@ expand_omp_taskloop_for_inner (struct omp_region *region,
      T DIR = LTGT == '<' ? +1 : -1;
      T chunk_max = GOACC_LOOP_CHUNK (dir, range, S, CHUNK_SIZE, GWV);
      T step = GOACC_LOOP_STEP (dir, range, S, CHUNK_SIZE, GWV);
+     GOACC_LOOP_INIT (b);
 
    <head_bb> [created by splitting end of entry_bb]
      T offset = GOACC_LOOP_OFFSET (dir, range, S, CHUNK_SIZE, GWV, chunk_no);
@@ -5330,7 +5331,8 @@ expand_omp_taskloop_for_inner (struct omp_region *region,
      {BODY}
 
    <cont_bb> [incoming, may == body_bb FALL->exit_bb, BRANCH->body_bb]
-     offset += step;
+     GOACC_LOOP_NEWOFFSET (dir, range, s, CHUNK_SIZE, GWV, offset);
+     //offset += step;
      if (offset LTGT bound) goto body_bb; [*]
 
    <bottom_bb> [created by splitting start of exit_bb] insert BRANCH->head_bb
@@ -5338,6 +5340,7 @@ expand_omp_taskloop_for_inner (struct omp_region *region,
      if (chunk < chunk_max) goto head_bb;
 
    <exit_bb> [incoming]
+     GOACC_LOOP_FINI ();
      V = B + ((range -/+ 1) / S +/- 1) * S [*]
 
    [*] Needed if V live at end of loop.  */
@@ -5542,6 +5545,15 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 						    IFN_GOACC_LOOP_STEP),
 				     dir, range, s, chunk_size, gwv);
   gimple_call_set_lhs (call, step);
+  gimple_set_location (call, loc);
+  gsi_insert_before (&gsi, call, GSI_SAME_STMT);
+
+  tree dummy_init = create_tmp_var (iter_type, ".dummy_init");
+  call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
+				     build_int_cst (integer_type_node,
+						    IFN_GOACC_LOOP_INIT),
+				     dir, range, s, b, gwv);
+  gimple_call_set_lhs (call, dummy_init);
   gimple_set_location (call, loc);
   gsi_insert_before (&gsi, call, GSI_SAME_STMT);
 
@@ -5779,6 +5791,15 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
   gsi = gsi_last_bb (exit_bb);
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
   loc = gimple_location (gsi_stmt (gsi));
+
+  /* Call GOACC_LOOP_FINI to clean up any dynamically scheduled loops.  */
+  tree dummy_fini = create_tmp_var (iter_type, ".dummy_fini");
+  call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
+				     build_int_cst (integer_type_node,
+						    IFN_GOACC_LOOP_FINI),
+				     dir, range, s, chunk_size, gwv);
+  gimple_call_set_lhs (call, dummy_fini);
+  gsi_insert_before (&gsi, call, GSI_SAME_STMT);
 
   if (!gimple_in_ssa_p (cfun))
     {

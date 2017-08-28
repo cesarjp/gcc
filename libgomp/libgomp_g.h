@@ -311,5 +311,7 @@ extern void GOACC_wait (int, int, ...);
 extern int GOACC_get_num_threads (int, int, int);
 extern int GOACC_get_thread_num (int, int, int);
 extern void GOACC_declare (int, size_t, void **, size_t *, unsigned short *);
+extern void GOACC_mutex_lock (int *);
+extern void GOACC_mutex_unlock (int *);
 
 #endif /* LIBGOMP_G_H */

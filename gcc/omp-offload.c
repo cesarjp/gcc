@@ -304,7 +304,18 @@ update_dynsched_offset (gcall *call)
   bool chunking = false, striding = true;
   unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
   unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
-  tree iv = gimple_call_arg (call, 7);
+
+  tree iv_object = gimple_call_arg (call, 7);
+  tree iv_fld = TYPE_FIELDS (TREE_TYPE (iv_object));
+  tree gangs_fld = TREE_CHAIN (iv_fld);
+  tree mutex_fld = TREE_CHAIN (gangs_fld);
+
+  tree iv = build3 (COMPONENT_REF, TREE_TYPE (iv_fld), iv_object, iv_fld, NULL);
+  tree gangs = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
+		       gangs_fld, NULL);
+  tree mutex = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
+		       mutex_fld, NULL);
+
   tree new_type = TREE_TYPE (iv);
 
 #ifdef ACCEL_COMPILER
@@ -390,6 +401,7 @@ oacc_xform_loop (gcall *call)
   bool chunking = false, striding = true;
   unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
   unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
+  tree lower_bound = NULL_TREE;
 
 #ifdef ACCEL_COMPILER
   chunk_size = gimple_call_arg (call, 4);
@@ -574,13 +586,31 @@ oacc_xform_loop (gcall *call)
 	  r = build2 (PLUS_EXPR, diff_type, offset, step);
 	}
       break;
+
+    case IFN_GOACC_LOOP_INIT:
+      lower_bound = gimple_call_arg (call, 4);
+      lhs = NULL_TREE;
+//      if (dynsched (mask))
+//	r = update_dynsched_offset (call);
+      break;
+
+    case IFN_GOACC_LOOP_FINI:
+      lhs = NULL_TREE;
+//      if (dynsched (mask))
+//	r = update_dynsched_offset (call);
+      break;
     }
 
-  gimplify_assign (lhs, r, &seq);
-
-  pop_gimplify_context (NULL);
-
-  gsi_replace_with_seq (&gsi, seq, true);
+  if (lhs == NULL_TREE)
+    {
+      gsi_remove (&gsi, true);
+    }
+  else
+    {
+      gimplify_assign (lhs, r, &seq);
+      pop_gimplify_context (NULL);
+      gsi_replace_with_seq (&gsi, seq, true);
+    }
 }
 
 /* Transform a GOACC_TILE call.  Determines the element loop span for
@@ -1205,7 +1235,7 @@ oacc_loop_xform_head_tail (gcall *from, int level)
 }
 
 static tree
-create_new_iv (int count, tree type)
+create_new_iv_scalar (int count, tree type)
 {
   tree new_type = build_qualified_type (type, TYPE_QUAL_VOLATILE);
   char *name = xasprintf (".oacc_dynsched.%s.%d", get_name (cfun->decl), count);
@@ -1216,6 +1246,56 @@ create_new_iv (int count, tree type)
   TREE_ADDRESSABLE (iv) = 1;
   varpool_node::finalize_decl (iv);
   TREE_THIS_VOLATILE (iv);
+  return iv;
+}
+
+static tree
+create_new_iv (int count, tree type)
+{
+  tree iv_type = lang_hooks.types.make_type (RECORD_TYPE);
+  tree type_name = create_tmp_var_name (".oacc_iv_type");
+  type_name = build_decl (UNKNOWN_LOCATION, TYPE_DECL, type_name, iv_type);
+  DECL_ARTIFICIAL (type_name) = 1;
+  DECL_NAMELESS (type_name) = 1;
+  TYPE_NAME (iv_type) = type_name;
+  TYPE_ARTIFICIAL (iv_type) = 1;
+
+  char *fldname;
+
+  /* Field 1: IV.  */
+  ASM_FORMAT_PRIVATE_NAME (fldname, "$iv", 0);
+  tree iv_fld = build_decl (UNKNOWN_LOCATION, FIELD_DECL,
+			    get_identifier (fldname), type);
+  DECL_CONTEXT (iv_fld) = iv_type;
+  TYPE_FIELDS (iv_type) = iv_fld;
+
+  /* FIELD 2: Gang counter field.  */
+  ASM_FORMAT_PRIVATE_NAME (fldname, "$gangs", 0);
+  tree gangs_fld = build_decl (UNKNOWN_LOCATION, FIELD_DECL,
+			       get_identifier (fldname), integer_type_node);
+  DECL_CONTEXT (gangs_fld) = iv_type;
+  DECL_CHAIN (iv_fld) = gangs_fld;
+
+  /* Field 3: Mutex field.  */
+  ASM_FORMAT_PRIVATE_NAME (fldname, "$mutex", 0);
+  tree mutex_fld = build_decl (UNKNOWN_LOCATION, FIELD_DECL,
+			       get_identifier (fldname), integer_type_node);
+  DECL_CONTEXT (mutex_fld) = iv_type;
+  DECL_CHAIN (gangs_fld) = mutex_fld;
+
+  layout_type (iv_type);
+
+  /* Create and return the IV object.  */
+  char *name = xasprintf (".oacc_dynsched.%s.%d", get_name (cfun->decl), count);
+  tree iv = create_tmp_var_raw (iv_type, name);
+  gimple_add_tmp_var (iv);
+  DECL_ARTIFICIAL (iv) = 1;
+  DECL_NAMELESS (iv) = 1;
+  TREE_STATIC (iv) = 1;
+  TREE_ADDRESSABLE (iv) = 1;
+  varpool_node::finalize_decl (iv);
+  TREE_THIS_VOLATILE (iv);
+
   return iv;
 }
 
@@ -1252,8 +1332,10 @@ oacc_loop_process (oacc_loop *loop)
 	      if (!is_e)
 		gimple_call_set_arg (call, 4, chunk_arg);
 	      switch (code) {
+	      case IFN_GOACC_LOOP_INIT:
 	      case IFN_GOACC_LOOP_OFFSET:
 	      case IFN_GOACC_LOOP_NEWOFFSET:
+	      case IFN_GOACC_LOOP_FINI:
 		if (dynsched (tree_to_uhwi (gimple_call_arg (call, 5))))
 		  {
 		    /* Prepare and install a global variable for the gang

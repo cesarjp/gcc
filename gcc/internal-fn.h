@@ -56,6 +56,8 @@ enum ifn_unique_kind {
      BOUND = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK, OFFSET)
      NEWOFFSET = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK, OFFSET,
                        GLOBAL_IV)
+     INIT = LOOP (LOWER_BOUND, GLOBAL_IV)
+     FINI = LOOP (GLOBAL_IV)
 
      DIR - +1 for up loop, -1 for down loop
      RANGE - Range of loop (END - BASE)
@@ -63,10 +65,12 @@ enum ifn_unique_kind {
      CHUNKING - size of chunking, (constant zero for no chunking)
      CHUNK_NO - chunk number
      MASK - partitioning mask.
-     GLOBAL_IV - optional global induction variable, if necessary.  */
+     GLOBAL_IV - optional global induction variable, if necessary.
+     LOWER_BOUND - lower boundary of the loop.
+*/
 
 #define IFN_GOACC_LOOP_CODES \
-  DEF(CHUNKS), DEF(STEP), DEF(OFFSET), DEF(BOUND), DEF(NEWOFFSET)
+  DEF(CHUNKS), DEF(STEP), DEF(OFFSET), DEF(BOUND), DEF(NEWOFFSET), DEF(INIT), DEF(FINI)
 enum ifn_goacc_loop_kind {
 #define DEF(X) IFN_GOACC_LOOP_##X
   IFN_GOACC_LOOP_CODES
