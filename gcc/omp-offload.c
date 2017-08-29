@@ -285,6 +285,111 @@ dynsched (unsigned mask)
   return getenv ("DYNSCHED") && mask == GOMP_DIM_MASK (GOMP_DIM_GANG);
 }
 
+/* This function generates code to initialize dynamically scheduled
+   gang loops as follows.  It replaces calls to the internal function
+   GOACC_LOOP_INIT into the following sequence:
+
+     struct dynloop dloop;
+     GOACC_mutex_lock (&dloop.mutex);
+     old_seen = atomic_add (dloop.seen, 1)
+     if (dloop.seen == 0)
+       dloop.ix = LOWER_BOUND;
+     GOACC_mutex_unlock (&dloop.mutex);
+
+   where struct dynloop is defined as
+
+      struct dynloop {
+        T ix;
+        int mutex;
+        int seen;
+      };
+
+  dloop is zero-initialized global variable. It is created during
+  oacc_loop_process.
+*/
+
+static void
+init_dynsched_loop (gcall *call)
+{
+  gimple_stmt_iterator gsi = gsi_for_stmt (call);
+  enum ifn_goacc_loop_kind code
+    = (enum ifn_goacc_loop_kind) TREE_INT_CST_LOW (gimple_call_arg (call, 0));
+  tree dir = gimple_call_arg (call, 1);
+  tree range = gimple_call_arg (call, 2);
+  tree step = gimple_call_arg (call, 3);
+  tree chunk_size = NULL_TREE;
+  unsigned mask = (unsigned) TREE_INT_CST_LOW (gimple_call_arg (call, 5));
+  tree lhs = gimple_call_lhs (call);
+  tree type = lhs ? TREE_TYPE (lhs) : TREE_TYPE (step);
+  tree diff_type = TREE_TYPE (range);
+  tree r = NULL_TREE;
+  gimple_seq seq = NULL;
+  bool chunking = false, striding = true;
+  unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
+  unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
+
+  tree iv_object = gimple_call_arg (call, 7);
+  tree iv_fld = TYPE_FIELDS (TREE_TYPE (iv_object));
+  tree gangs_fld = TREE_CHAIN (iv_fld);
+  tree mutex_fld = TREE_CHAIN (gangs_fld);
+
+  tree iv = build3 (COMPONENT_REF, TREE_TYPE (iv_fld), iv_object, iv_fld, NULL);
+  tree gangs = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
+		       gangs_fld, NULL);
+  tree mutex = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
+		       mutex_fld, NULL);
+
+  tree new_type = TREE_TYPE (iv);
+
+  /* Call GOACC_mutex_lock.  */
+  tree addr = build_fold_addr_expr (mutex);
+  tree decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_LOCK);
+  tree mutex_call = build_call_expr (decl, 1, addr);
+  gimplify_and_add (mutex_call, &seq);
+
+  /* Call GOACC_mutex_unlock.  */
+  addr = build_fold_addr_expr (mutex);
+  decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_UNLOCK);
+  mutex_call = build_call_expr (decl, 1, addr);
+  gimplify_and_add (mutex_call, &seq);
+
+  gsi_insert_seq_before (&gsi, seq, GSI_SAME_STMT);
+  return;
+
+  /* Calculate the size of type of the IV in log2(#bits).  */
+  int index = tree_to_uhwi (TYPE_SIZE_UNIT (type));
+  index = exact_log2 (index) + 1;
+
+  enum built_in_function fcode, tmpbase;
+
+  fcode = BUILT_IN_ATOMIC_FETCH_ADD_N;
+
+  //	  tree cs = make_ssa_name (TREE_TYPE (chunk_size));
+  //	  gimplify_assign (cs, fold_build2 (MULT_EXPR, type,
+  //					    dir, chunk_size), &seq);
+
+  tmpbase = ((enum built_in_function) (fcode + index));
+  decl = builtin_decl_explicit (tmpbase);
+
+  /* Need to quit gracefully here.  */
+  gcc_assert (decl != NULL_TREE);
+
+  tree itype = TREE_TYPE (TREE_TYPE (decl));
+  machine_mode imode = TYPE_MODE (itype);
+
+  //tree addr = make_ssa_name (build_pointer_type (TREE_TYPE (iv)));
+  //gimplify_assign (addr, build_fold_addr_expr (iv), &seq);
+  addr = build_fold_addr_expr (iv);
+
+  tree new_lhs = make_ssa_name (new_type);
+
+  tree new_call = build_call_expr (decl, 3, addr,
+				   fold_convert (itype, step),
+				   build_int_cst (NULL, MEMMODEL_RELAXED));
+  new_call = fold_convert (type, new_call);
+  new_call = build2 (MODIFY_EXPR, void_type_node, new_lhs, new_call);
+}
+
 static tree
 update_dynsched_offset (gcall *call)
 {
@@ -297,7 +402,7 @@ update_dynsched_offset (gcall *call)
   tree chunk_size = NULL_TREE;
   unsigned mask = (unsigned) TREE_INT_CST_LOW (gimple_call_arg (call, 5));
   tree lhs = gimple_call_lhs (call);
-  tree type = TREE_TYPE (lhs);
+  tree type = lhs ? TREE_TYPE (lhs) : TREE_TYPE (step);
   tree diff_type = TREE_TYPE (range);
   tree r = NULL_TREE;
   gimple_seq seq = NULL;
@@ -394,7 +499,7 @@ oacc_xform_loop (gcall *call)
   tree chunk_size = NULL_TREE;
   unsigned mask = (unsigned) TREE_INT_CST_LOW (gimple_call_arg (call, 5));
   tree lhs = gimple_call_lhs (call);
-  tree type = TREE_TYPE (lhs);
+  tree type = lhs ? TREE_TYPE (lhs) : TREE_TYPE (step);
   tree diff_type = TREE_TYPE (range);
   tree r = NULL_TREE;
   gimple_seq seq = NULL;
@@ -588,10 +693,9 @@ oacc_xform_loop (gcall *call)
       break;
 
     case IFN_GOACC_LOOP_INIT:
-      lower_bound = gimple_call_arg (call, 4);
+      if (dynsched (mask))
+	init_dynsched_loop (call);
       lhs = NULL_TREE;
-//      if (dynsched (mask))
-//	r = update_dynsched_offset (call);
       break;
 
     case IFN_GOACC_LOOP_FINI:
@@ -1249,6 +1353,15 @@ create_new_iv_scalar (int count, tree type)
   return iv;
 }
 
+/* Create a global struct dynloop for a loop iterator of type T.
+
+  struct dynloop {
+    T ix;
+    int mutex;
+    int seen;
+  };
+*/
+
 static tree
 create_new_iv (int count, tree type)
 {
@@ -1324,6 +1437,7 @@ oacc_loop_process (oacc_loop *loop)
 	  {
 	  case IFN_GOACC_LOOP:
 	    {
+	      tree type = NULL_TREE;
 	      enum ifn_goacc_loop_kind code
 		= (enum ifn_goacc_loop_kind)
 		   TREE_INT_CST_LOW (gimple_call_arg (call, 0));
@@ -1331,20 +1445,21 @@ oacc_loop_process (oacc_loop *loop)
 	      gimple_call_set_arg (call, 5, is_e ? e_mask_arg : mask_arg);
 	      if (!is_e)
 		gimple_call_set_arg (call, 4, chunk_arg);
+
 	      switch (code) {
 	      case IFN_GOACC_LOOP_INIT:
+	      case IFN_GOACC_LOOP_FINI:
+		type = TREE_TYPE (gimple_call_arg (call, 3));
 	      case IFN_GOACC_LOOP_OFFSET:
 	      case IFN_GOACC_LOOP_NEWOFFSET:
-	      case IFN_GOACC_LOOP_FINI:
+		if (type == NULL_TREE)
+		  type = TREE_TYPE (gimple_call_lhs (call));
 		if (dynsched (tree_to_uhwi (gimple_call_arg (call, 5))))
 		  {
 		    /* Prepare and install a global variable for the gang
 		       loop.  */
 		    if (global_ix == NULL_TREE)
-		      {
-			tree type = TREE_TYPE (gimple_call_lhs (call));
-			global_ix = create_new_iv (gang_loops++, type);
-		      }
+		      global_ix = create_new_iv (gang_loops++, type);
 
 		    gimple_call_set_arg (call, 7, global_ix);
 		  }

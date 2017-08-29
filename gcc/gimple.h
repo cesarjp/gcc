@@ -2918,7 +2918,8 @@ gimple_call_internal_fn (const gimple *gs)
 static inline bool
 gimple_call_internal_unique_p (const gcall *gs)
 {
-  return gimple_call_internal_fn (gs) == IFN_UNIQUE;
+  return gimple_call_internal_fn (gs) == IFN_UNIQUE
+    || gimple_call_internal_fn (gs) == IFN_GOACC_LOOP;
 }
 
 static inline bool

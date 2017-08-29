@@ -5549,10 +5549,13 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
   gsi_insert_before (&gsi, call, GSI_SAME_STMT);
 
   tree dummy_init = create_tmp_var (iter_type, ".dummy_init");
+  ass = gimple_build_assign (dummy_init, build_int_cst (iter_type, 0));
+  gsi_insert_before (&gsi, ass, GSI_SAME_STMT);
+
   call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
 				     build_int_cst (integer_type_node,
 						    IFN_GOACC_LOOP_INIT),
-				     dir, range, s, b, gwv);
+				     dir, range, dummy_init, b, gwv);
   gimple_call_set_lhs (call, dummy_init);
   gimple_set_location (call, loc);
   gsi_insert_before (&gsi, call, GSI_SAME_STMT);
