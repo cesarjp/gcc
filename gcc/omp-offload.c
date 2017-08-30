@@ -390,7 +390,9 @@ init_dynsched_loop (gcall *call)
 
      <head_bb>
      GOACC_mutex_lock (&dloop.mutex);
-     old_gangs = __atomic_fetch_add (&dloop.gangs, 1);
+     old_gangs = dloop.gangs;
+     new_gangs = old_gangs + 1;
+     dloop.gangs = new_gangs;
      if (old_gangs == 0)
        goto init_bb;
      else
@@ -439,6 +441,93 @@ init_dynsched_loop (gcall *call)
   gimplify_and_add (mutex_call, &post_seq);
 
   gsi_insert_seq_before (&gsi, post_seq, GSI_SAME_STMT);
+}
+
+/* This function generates code to finalize dynamically scheduled gang
+   loops.  Because parallel regions may be called multiple times by
+   the end user, init_dynsched_loop uses dloop.gangs as a counter to
+   indicate how many threads are actively executing the gang.  At the
+   completion of the gang loop, that gang counter gets decremented,
+   once for each gang.  Note that this does not solve the problem when
+   gangs are launched asynchrously; such gangs would need dynamically
+   allocated variables for the bakery counter.
+
+   In the following example, GOACC_LOOP_FINI
+
+     <exit_bb>
+       GOACC_LOOP_FINI ();
+       V = B + ((range -/+ 1) / S +/- 1) * S [*]
+
+   becomes
+
+     <exit_bb>
+       GOACC_mutex_lock (&dloop.mutex);
+       old_gangs = dloop.gangs;
+       new_gangs = old_gangs - 1;
+       dloop.gangs = new_gangs;
+       GOACC_mutex_unlock (&dloop.mutex);
+       V = B + ((range -/+ 1) / S +/- 1) * S [*]
+*/
+
+static void
+fini_dynsched_loop (gcall *call)
+{
+  gimple_stmt_iterator gsi = gsi_for_stmt (call);
+  enum ifn_goacc_loop_kind code
+    = (enum ifn_goacc_loop_kind) TREE_INT_CST_LOW (gimple_call_arg (call, 0));
+  tree dir = gimple_call_arg (call, 1);
+  tree range = gimple_call_arg (call, 2);
+  tree step = gimple_call_arg (call, 3);
+  tree chunk_size = NULL_TREE;
+  unsigned mask = (unsigned) TREE_INT_CST_LOW (gimple_call_arg (call, 5));
+  tree lhs = gimple_call_lhs (call);
+  tree type = lhs ? TREE_TYPE (lhs) : TREE_TYPE (step);
+  tree diff_type = TREE_TYPE (range);
+  tree r = NULL_TREE;
+  gimple_seq seq = NULL;
+  bool chunking = false, striding = true;
+  unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
+  unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
+
+  tree lower_bound = gimple_call_arg (call, 4);
+
+  tree iv_object = gimple_call_arg (call, 7);
+  tree iv_fld = TYPE_FIELDS (TREE_TYPE (iv_object));
+  tree gangs_fld = TREE_CHAIN (iv_fld);
+  tree mutex_fld = TREE_CHAIN (gangs_fld);
+
+  tree iv = build3 (COMPONENT_REF, TREE_TYPE (iv_fld), iv_object, iv_fld, NULL);
+  tree gangs = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
+		       gangs_fld, NULL);
+  tree mutex = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
+		       mutex_fld, NULL);
+
+  tree new_type = TREE_TYPE (iv);
+
+  /* Call GOACC_mutex_lock.  */
+  tree addr = build_fold_addr_expr (mutex);
+  tree decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_LOCK);
+  tree mutex_call = build_call_expr (decl, 1, addr);
+  gimplify_and_add (mutex_call, &seq);
+
+  /* dloop.gangs++  */
+  tree old_gangs = make_ssa_name (TREE_TYPE (gangs));
+  tree new_gangs = make_ssa_name (TREE_TYPE (gangs));
+
+  addr = build_fold_addr_expr (gangs);
+  gimplify_assign (old_gangs, gangs, &seq);
+  gimplify_assign (new_gangs, fold_build2 (MINUS_EXPR, integer_type_node,
+					    old_gangs, integer_one_node),
+		   &seq);
+  gimplify_assign (gangs, new_gangs, &seq);
+
+  /* Insert a call to GOACC_mutex_unlock at the beginning of post_bb.  */
+  addr = build_fold_addr_expr (mutex);
+  decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_UNLOCK);
+  mutex_call = build_call_expr (decl, 1, addr);
+  gimplify_and_add (mutex_call, &seq);
+
+  gsi_insert_seq_before (&gsi, seq, GSI_SAME_STMT);
 }
 
 static tree
@@ -753,9 +842,9 @@ oacc_xform_loop (gcall *call)
       break;
 
     case IFN_GOACC_LOOP_FINI:
+      if (dynsched (mask))
+	fini_dynsched_loop (call);
       lhs = NULL_TREE;
-//      if (dynsched (mask))
-//	r = update_dynsched_offset (call);
       break;
     }
 
