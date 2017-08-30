@@ -51,6 +51,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "intl.h"
 #include "varasm.h"
 #include "memmodel.h"
+#include "cfghooks.h"
+#include "cfgloop.h"
+#include "tree-into-ssa.h"
 
 /* Describe the OpenACC looping structure of a function.  The entire
    function is held in a 'NULL' loop.  */
@@ -328,6 +331,8 @@ init_dynsched_loop (gcall *call)
   unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
   unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
 
+  tree lower_bound = gimple_call_arg (call, 4);
+
   tree iv_object = gimple_call_arg (call, 7);
   tree iv_fld = TYPE_FIELDS (TREE_TYPE (iv_object));
   tree gangs_fld = TREE_CHAIN (iv_fld);
@@ -347,26 +352,13 @@ init_dynsched_loop (gcall *call)
   tree mutex_call = build_call_expr (decl, 1, addr);
   gimplify_and_add (mutex_call, &seq);
 
-  /* Call GOACC_mutex_unlock.  */
-  addr = build_fold_addr_expr (mutex);
-  decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_UNLOCK);
-  mutex_call = build_call_expr (decl, 1, addr);
-  gimplify_and_add (mutex_call, &seq);
-
-  gsi_insert_seq_before (&gsi, seq, GSI_SAME_STMT);
-  return;
-
-  /* Calculate the size of type of the IV in log2(#bits).  */
-  int index = tree_to_uhwi (TYPE_SIZE_UNIT (type));
+  /* Atomically increment dloop.gangs.  */
+  int index = tree_to_uhwi (TYPE_SIZE_UNIT (integer_type_node));
   index = exact_log2 (index) + 1;
 
   enum built_in_function fcode, tmpbase;
 
   fcode = BUILT_IN_ATOMIC_FETCH_ADD_N;
-
-  //	  tree cs = make_ssa_name (TREE_TYPE (chunk_size));
-  //	  gimplify_assign (cs, fold_build2 (MULT_EXPR, type,
-  //					    dir, chunk_size), &seq);
 
   tmpbase = ((enum built_in_function) (fcode + index));
   decl = builtin_decl_explicit (tmpbase);
@@ -377,17 +369,76 @@ init_dynsched_loop (gcall *call)
   tree itype = TREE_TYPE (TREE_TYPE (decl));
   machine_mode imode = TYPE_MODE (itype);
 
-  //tree addr = make_ssa_name (build_pointer_type (TREE_TYPE (iv)));
-  //gimplify_assign (addr, build_fold_addr_expr (iv), &seq);
-  addr = build_fold_addr_expr (iv);
+  addr = build_fold_addr_expr (gangs);
 
-  tree new_lhs = make_ssa_name (new_type);
+  tree old_gangs = make_ssa_name (TREE_TYPE (gangs));
 
-  tree new_call = build_call_expr (decl, 3, addr,
+  tree gangs_call = build_call_expr (decl, 3, addr,
 				   fold_convert (itype, step),
 				   build_int_cst (NULL, MEMMODEL_RELAXED));
-  new_call = fold_convert (type, new_call);
-  new_call = build2 (MODIFY_EXPR, void_type_node, new_lhs, new_call);
+  gangs_call = fold_convert (type, gangs_call);
+  gangs_call = build2 (MODIFY_EXPR, void_type_node, old_gangs, gangs_call);
+  gimplify_and_add (gangs_call, &seq);
+
+  /* Only allow the first gang that reaches this critical section to
+     initialize dloop.iv.
+
+     if (old_gangs == 0)
+        dloop.iv = lower_bound;
+
+     This gets lowered into:
+
+     <head_bb>
+     GOACC_mutex_lock (&dloop.mutex);
+     old_gangs = __atomic_fetch_add (&dloop.gangs, 1);
+     if (old_gangs == 0)
+       goto init_bb;
+     else
+       goto post_bb;
+
+     <init_bb>
+     dloop.iv = lower_bound;
+     goto post_bb;
+
+     <post_bb>
+     GOACC_mutex_unlock (&dloop.mutex);
+     GOACC_LOOP (INIT, ...);
+  */
+
+  gimple *cond_stmt = gimple_build_cond (EQ_EXPR, old_gangs, integer_zero_node,
+					 NULL_TREE, NULL_TREE);
+  gimple_seq_add_stmt (&seq, cond_stmt);
+  gsi_insert_seq_before (&gsi, seq, GSI_SAME_STMT);
+
+  /* Split the current BB before the call to GOACC_LOOP_INIT.  */
+  gsi_prev (&gsi);
+  edge fallthru_edge = split_block (gsi_bb (gsi), gsi_stmt (gsi));
+  basic_block head_bb = fallthru_edge->src;
+  basic_block post_bb = fallthru_edge->dest;
+  basic_block init_bb = create_empty_bb (head_bb);
+
+  fallthru_edge->flags ^= EDGE_FALLTHRU | EDGE_FALSE_VALUE;
+  make_edge (init_bb, post_bb, EDGE_FALLTHRU);
+  make_edge (head_bb, init_bb, EDGE_TRUE_VALUE);
+
+  gimple_seq init_seq = NULL;
+  gimplify_assign (iv, lower_bound, &init_seq);
+  gsi = gsi_start_bb (init_bb);
+  gsi_insert_seq_before (&gsi, init_seq, GSI_SAME_STMT);
+
+  /* Reset denominator of post_bb.  */
+  set_immediate_dominator (CDI_DOMINATORS, init_bb, head_bb);
+  add_bb_to_loop (init_bb, head_bb->loop_father);
+
+  /* Insert a call to GOACC_mutex_unlock at the beginning of post_bb.  */
+  gimple_seq post_seq = NULL;
+  gsi = gsi_start_bb (post_bb);
+  addr = build_fold_addr_expr (mutex);
+  decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_UNLOCK);
+  mutex_call = build_call_expr (decl, 1, addr);
+  gimplify_and_add (mutex_call, &post_seq);
+
+  gsi_insert_seq_before (&gsi, post_seq, GSI_SAME_STMT);
 }
 
 static tree
@@ -680,7 +731,10 @@ oacc_xform_loop (gcall *call)
 
     case IFN_GOACC_LOOP_NEWOFFSET:
       if (dynsched (mask))
-	r = update_dynsched_offset (call);
+	{
+	  r = update_dynsched_offset (call);
+	  gsi = gsi_for_stmt (call);
+	}
       else
 	{
 	  tree offset = gimple_call_arg (call, 6);
