@@ -372,13 +372,13 @@ init_dynsched_loop (gcall *call)
   addr = build_fold_addr_expr (gangs);
 
   tree old_gangs = make_ssa_name (TREE_TYPE (gangs));
+  tree new_gangs = make_ssa_name (TREE_TYPE (gangs));
 
-  tree gangs_call = build_call_expr (decl, 3, addr,
-				   fold_convert (itype, step),
-				   build_int_cst (NULL, MEMMODEL_RELAXED));
-  gangs_call = fold_convert (type, gangs_call);
-  gangs_call = build2 (MODIFY_EXPR, void_type_node, old_gangs, gangs_call);
-  gimplify_and_add (gangs_call, &seq);
+  gimplify_assign (old_gangs, gangs, &seq);
+  gimplify_assign (new_gangs, fold_build2 (PLUS_EXPR, integer_type_node,
+					    old_gangs, integer_one_node),
+		   &seq);
+  gimplify_assign (gangs, new_gangs, &seq);
 
   /* Only allow the first gang that reaches this critical section to
      initialize dloop.iv.
