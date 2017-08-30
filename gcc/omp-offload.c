@@ -285,6 +285,11 @@ oacc_thread_numbers (bool pos, int mask, gimple_seq *seq)
 static bool
 dynsched (unsigned mask)
 {
+  tree fn = current_function_decl;
+  
+  if (lookup_attribute ("oacc kernels", DECL_ATTRIBUTES (fn)))
+    return false;
+  
   return getenv ("DYNSCHED") && mask == GOMP_DIM_MASK (GOMP_DIM_GANG);
 }
 
