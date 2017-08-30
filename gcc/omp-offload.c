@@ -461,11 +461,7 @@ init_dynsched_loop (gcall *call)
    becomes
 
      <exit_bb>
-       GOACC_mutex_lock (&dloop.mutex);
-       old_gangs = dloop.gangs;
-       new_gangs = old_gangs - 1;
-       dloop.gangs = new_gangs;
-       GOACC_mutex_unlock (&dloop.mutex);
+       atomic_sub (&dloop.gangs, 1);
        V = B + ((range -/+ 1) / S +/- 1) * S [*]
 */
 
@@ -504,28 +500,25 @@ fini_dynsched_loop (gcall *call)
 
   tree new_type = TREE_TYPE (iv);
 
-  /* Call GOACC_mutex_lock.  */
-  tree addr = build_fold_addr_expr (mutex);
-  tree decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_LOCK);
-  tree mutex_call = build_call_expr (decl, 1, addr);
-  gimplify_and_add (mutex_call, &seq);
+  /* Atomically increment dloop.gangs.  */
+  int index = tree_to_uhwi (TYPE_SIZE_UNIT (integer_type_node));
+  index = exact_log2 (index) + 1;
 
-  /* dloop.gangs++  */
-  tree old_gangs = make_ssa_name (TREE_TYPE (gangs));
-  tree new_gangs = make_ssa_name (TREE_TYPE (gangs));
+  enum built_in_function fcode, tmpbase;
 
-  addr = build_fold_addr_expr (gangs);
-  gimplify_assign (old_gangs, gangs, &seq);
-  gimplify_assign (new_gangs, fold_build2 (MINUS_EXPR, integer_type_node,
-					    old_gangs, integer_one_node),
-		   &seq);
-  gimplify_assign (gangs, new_gangs, &seq);
+  fcode = BUILT_IN_ATOMIC_SUB_FETCH_N;
 
-  /* Insert a call to GOACC_mutex_unlock at the beginning of post_bb.  */
-  addr = build_fold_addr_expr (mutex);
-  decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_UNLOCK);
-  mutex_call = build_call_expr (decl, 1, addr);
-  gimplify_and_add (mutex_call, &seq);
+  tmpbase = ((enum built_in_function) (fcode + index));
+  tree decl = builtin_decl_explicit (tmpbase);
+
+  /* Need to quit gracefully here.  */
+  gcc_assert (decl != NULL_TREE);
+
+  machine_mode imode = TYPE_MODE (integer_type_node);
+  tree addr = build_fold_addr_expr (gangs);
+  tree new_call = build_call_expr (decl, 3, addr, integer_one_node,
+				   build_int_cst (NULL, MEMMODEL_RELAXED));
+  gimplify_and_add (new_call, &seq);
 
   gsi_insert_seq_before (&gsi, seq, GSI_SAME_STMT);
 }
