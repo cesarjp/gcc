@@ -295,7 +295,7 @@ dynsched (unsigned mask)
 
 /* This function generates code to initialize dynamically scheduled
    gang loops as follows.  It replaces calls to the internal function
-   GOACC_LOOP_INIT into the following sequence:
+   GOACC_LOOP_DYN_INIT into the following sequence:
 
      struct dynloop dloop;
      GOACC_mutex_lock (&dloop.mutex);
@@ -317,12 +317,11 @@ dynsched (unsigned mask)
 */
 
 static void
-init_dynsched_loop (gcall *call)
+init_dynsched_loop (gcall *call, bool striding)
 {
   gimple_stmt_iterator gsi = gsi_for_stmt (call);
   enum ifn_goacc_loop_kind code
     = (enum ifn_goacc_loop_kind) TREE_INT_CST_LOW (gimple_call_arg (call, 0));
-  tree dir = gimple_call_arg (call, 1);
   tree range = gimple_call_arg (call, 2);
   tree step = gimple_call_arg (call, 3);
   tree chunk_size = NULL_TREE;
@@ -332,7 +331,6 @@ init_dynsched_loop (gcall *call)
   tree diff_type = TREE_TYPE (range);
   tree r = NULL_TREE;
   gimple_seq seq = NULL;
-  bool chunking = false, striding = true;
   unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
   unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
 
@@ -350,6 +348,7 @@ init_dynsched_loop (gcall *call)
 		       mutex_fld, NULL);
 
   tree new_type = TREE_TYPE (iv);
+  tree initial_value = striding ? lower_bound : build_int_cst (new_type, 0);
 
   /* Call GOACC_mutex_lock.  */
   tree addr = build_fold_addr_expr (mutex);
@@ -389,7 +388,7 @@ init_dynsched_loop (gcall *call)
      initialize dloop.iv.
 
      if (old_gangs == 0)
-        dloop.iv = lower_bound;
+        dloop.iv = initial_value;
 
      This gets lowered into:
 
@@ -404,7 +403,7 @@ init_dynsched_loop (gcall *call)
        goto post_bb;
 
      <init_bb>
-     dloop.iv = lower_bound;
+     dloop.iv = initial_value;
      goto post_bb;
 
      <post_bb>
@@ -417,7 +416,7 @@ init_dynsched_loop (gcall *call)
   gimple_seq_add_stmt (&seq, cond_stmt);
   gsi_insert_seq_before (&gsi, seq, GSI_SAME_STMT);
 
-  /* Split the current BB before the call to GOACC_LOOP_INIT.  */
+  /* Split the current BB before the call to GOACC_LOOP_DYN_INIT.  */
   gsi_prev (&gsi);
   edge fallthru_edge = split_block (gsi_bb (gsi), gsi_stmt (gsi));
   basic_block head_bb = fallthru_edge->src;
@@ -429,7 +428,7 @@ init_dynsched_loop (gcall *call)
   make_edge (head_bb, init_bb, EDGE_TRUE_VALUE);
 
   gimple_seq init_seq = NULL;
-  gimplify_assign (iv, lower_bound, &init_seq);
+  gimplify_assign (iv, initial_value, &init_seq);
   gsi = gsi_start_bb (init_bb);
   gsi_insert_seq_before (&gsi, init_seq, GSI_SAME_STMT);
 
@@ -457,10 +456,10 @@ init_dynsched_loop (gcall *call)
    gangs are launched asynchrously; such gangs would need dynamically
    allocated variables for the bakery counter.
 
-   In the following example, GOACC_LOOP_FINI
+   In the following example, GOACC_LOOP_DYN_FINI
 
      <exit_bb>
-       GOACC_LOOP_FINI ();
+       GOACC_LOOP_DYN_FINI ();
        V = B + ((range -/+ 1) / S +/- 1) * S [*]
 
    becomes
@@ -529,7 +528,7 @@ fini_dynsched_loop (gcall *call)
 }
 
 static tree
-update_dynsched_offset (gcall *call)
+update_dynsched_offset (gcall *call, bool striding)
 {
   gimple_stmt_iterator gsi = gsi_for_stmt (call);
   enum ifn_goacc_loop_kind code
@@ -544,7 +543,6 @@ update_dynsched_offset (gcall *call)
   tree diff_type = TREE_TYPE (range);
   tree r = NULL_TREE;
   gimple_seq seq = NULL;
-  bool chunking = false, striding = true;
   unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
   unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
 
@@ -560,23 +558,6 @@ update_dynsched_offset (gcall *call)
 		       mutex_fld, NULL);
 
   tree new_type = TREE_TYPE (iv);
-
-#ifdef ACCEL_COMPILER
-  chunk_size = gimple_call_arg (call, 4);
-  if (integer_minus_onep (chunk_size)  /* Force static allocation.  */
-      || integer_zerop (chunk_size))   /* Default (also static).  */
-    {
-      /* For dynamic gang scheduling, the gang loop should be strided too.  */
-      striding = true;
-      chunking = false;
-    }
-  else
-    {
-      /* Chunk of size 1 is striding.  */
-      striding = integer_onep (chunk_size);
-      chunking = !striding;
-    }
-#endif
 
   /* Calculate the size of type of the IV in log2(#bits).  */
   int index = tree_to_uhwi (TYPE_SIZE_UNIT (type));
@@ -604,6 +585,9 @@ update_dynsched_offset (gcall *call)
   tree addr = build_fold_addr_expr (iv);
 
   tree new_lhs = make_ssa_name (new_type);
+
+  if (!striding)
+    step = build_int_cst (TREE_TYPE (step), 1);
 
   tree new_call = build_call_expr (decl, 3, addr,
 				   fold_convert (itype, step),
@@ -693,16 +677,30 @@ oacc_xform_loop (gcall *call)
 	r = build_int_cst (type, 1);
       else
 	{
-	  /* chunk_max
-	     = (range - dir) / (chunks * step * num_threads) + dir  */
-	  tree per = oacc_thread_numbers (false, mask, &seq);
-	  per = fold_convert (type, per);
-	  chunk_size = fold_convert (type, chunk_size);
-	  per = fold_build2 (MULT_EXPR, type, per, chunk_size);
-	  per = fold_build2 (MULT_EXPR, type, per, step);
-	  r = build2 (MINUS_EXPR, type, range, dir);
-	  r = build2 (PLUS_EXPR, type, r, per);
-	  r = build2 (TRUNC_DIV_EXPR, type, r, per);
+	  if (dynsched (mask))
+	    {
+	      /* chunk_max
+		 = (range - dir) / (step * num_threads) + dir  */
+	      tree per = oacc_thread_numbers (false, mask, &seq);
+	      per = fold_convert (type, per);
+	      per = fold_build2 (MULT_EXPR, type, per, step);
+	      r = build2 (MINUS_EXPR, type, range, dir);
+	      r = build2 (PLUS_EXPR, type, r, per);
+	      r = build2 (TRUNC_DIV_EXPR, type, r, per);
+	    }
+	  else
+	    {
+	      /* chunk_max
+		 = (range - dir) / (chunks * step * num_threads) + dir  */
+	      tree per = oacc_thread_numbers (false, mask, &seq);
+	      per = fold_convert (type, per);
+	      chunk_size = fold_convert (type, chunk_size);
+	      per = fold_build2 (MULT_EXPR, type, per, chunk_size);
+	      per = fold_build2 (MULT_EXPR, type, per, step);
+	      r = build2 (MINUS_EXPR, type, range, dir);
+	      r = build2 (PLUS_EXPR, type, r, per);
+	      r = build2 (TRUNC_DIV_EXPR, type, r, per);
+	    }
 	}
       break;
 
@@ -725,8 +723,8 @@ oacc_xform_loop (gcall *call)
     case IFN_GOACC_LOOP_OFFSET:
       /* With dynamic scheduling, the loop offset is used to
 	 initialize gang's induction variable.  */
-      if (dynsched (mask))
-	r = update_dynsched_offset (call);
+      if (dynsched (mask) && striding)
+	r = update_dynsched_offset (call, true);
       else if (striding)
 	{
 	  r = oacc_thread_numbers (true, mask, &seq);
@@ -816,10 +814,10 @@ oacc_xform_loop (gcall *call)
 	r = fold_convert (type, r);
       break;
 
-    case IFN_GOACC_LOOP_NEWOFFSET:
-      if (dynsched (mask))
+    case IFN_GOACC_LOOP_DYN_OFFSET:
+      if (dynsched (mask) && striding)
 	{
-	  r = update_dynsched_offset (call);
+	  r = update_dynsched_offset (call, true);
 	  gsi = gsi_for_stmt (call);
 	}
       else
@@ -833,13 +831,34 @@ oacc_xform_loop (gcall *call)
 	}
       break;
 
-    case IFN_GOACC_LOOP_INIT:
+    case IFN_GOACC_LOOP_DYN_CHUNK:
+      if (dynsched (mask) && chunking)
+	r = update_dynsched_offset (call, false);
+      else
+	{
+	  bool init = integer_zerop (gimple_call_arg (call, 1));
+
+	  if (init)
+	    r = build_int_cst (diff_type, 0);
+	  else
+	    {
+	      tree chunk_no = lhs;
+	      gsi_remove (&gsi, true);
+	      r = fold_build2 (PLUS_EXPR, diff_type, chunk_no,
+			       build_int_cst (diff_type, 1));
+	      gimple *new_call = gsi_stmt (gsi);
+	      lhs = gimple_call_lhs (new_call);
+	    }
+	}
+      break;
+
+    case IFN_GOACC_LOOP_DYN_INIT:
       if (dynsched (mask))
-	init_dynsched_loop (call);
+	init_dynsched_loop (call, striding);
       lhs = NULL_TREE;
       break;
 
-    case IFN_GOACC_LOOP_FINI:
+    case IFN_GOACC_LOOP_DYN_FINI:
       if (dynsched (mask))
 	fini_dynsched_loop (call);
       lhs = NULL_TREE;
@@ -1588,11 +1607,12 @@ oacc_loop_process (oacc_loop *loop)
 		gimple_call_set_arg (call, 4, chunk_arg);
 
 	      switch (code) {
-	      case IFN_GOACC_LOOP_INIT:
-	      case IFN_GOACC_LOOP_FINI:
+	      case IFN_GOACC_LOOP_DYN_INIT:
+	      case IFN_GOACC_LOOP_DYN_FINI:
+	      case IFN_GOACC_LOOP_DYN_CHUNK:
 		type = TREE_TYPE (gimple_call_arg (call, 3));
 	      case IFN_GOACC_LOOP_OFFSET:
-	      case IFN_GOACC_LOOP_NEWOFFSET:
+	      case IFN_GOACC_LOOP_DYN_OFFSET:
 		if (type == NULL_TREE)
 		  type = TREE_TYPE (gimple_call_lhs (call));
 		if (dynsched (tree_to_uhwi (gimple_call_arg (call, 5))))
@@ -2230,7 +2250,7 @@ execute_oacc_device_lower ()
       }
 
   free_oacc_loop (loops);
-
+  
   return 0;
 }
 

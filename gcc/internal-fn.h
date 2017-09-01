@@ -54,12 +54,14 @@ enum ifn_unique_kind {
      OFFSET = LOOP (CODE_OFFSET, DIR, RANGE, STEP, CHUNK_SIZE, MASK, CHUNK_NO,
                     GLOBAL_IV)
      BOUND = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK, OFFSET)
-     NEWOFFSET = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK, OFFSET,
-                       GLOBAL_IV)
-     INIT = LOOP (CODE_BOUND, DIR, RANGE, DEP, LOWER, MASK, OFFSET,
-                       GLOBAL_IV)
-     FINI = LOOP (CODE_BOUND, DIR, RANGE, DEP, CHUNK_SIZE, MASK, OFFSET,
-                       GLOBAL_IV)
+     DYN_INIT = LOOP (CODE_BOUND, DIR, RANGE, DEP, LOWER, MASK, OFFSET,
+                      GLOBAL_IV)
+     DYN_FINI = LOOP (CODE_BOUND, DIR, RANGE, DEP, CHUNK_SIZE, MASK, OFFSET,
+                      GLOBAL_IV)
+     DYN_OFFSET = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK,
+                        OFFSET, GLOBAL_IV)
+     DYN_CHUNK = LOOP (CODE_BOUND, DIR, RANGE, STEP, CHUNK_SIZE, MASK,
+                        OFFSET, GLOBAL_IV)
 
      DIR - +1 for up loop, -1 for down loop
      RANGE - Range of loop (END - BASE)
@@ -73,7 +75,8 @@ enum ifn_unique_kind {
 */
 
 #define IFN_GOACC_LOOP_CODES \
-  DEF(CHUNKS), DEF(STEP), DEF(OFFSET), DEF(BOUND), DEF(NEWOFFSET), DEF(INIT), DEF(FINI)
+  DEF(CHUNKS), DEF(STEP), DEF(OFFSET), DEF(BOUND), DEF(DYN_INIT), \
+  DEF(DYN_FINI), DEF(DYN_OFFSET), DEF(DYN_CHUNK)
 enum ifn_goacc_loop_kind {
 #define DEF(X) IFN_GOACC_LOOP_##X
   IFN_GOACC_LOOP_CODES

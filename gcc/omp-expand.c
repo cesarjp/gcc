@@ -5315,11 +5315,11 @@ expand_omp_taskloop_for_inner (struct omp_region *region,
    <entry_bb> [incoming FALL->body, BRANCH->exit]
      typedef signedintify (typeof (V)) T;  // underlying signed integral type
      T range = E - B;
-     T chunk_no = 0;
      T DIR = LTGT == '<' ? +1 : -1;
+     GOACC_LOOP_DYN_INIT (b);
+     T chunk_no = GOACC_LOOP_DYN_UPDATE ();
      T chunk_max = GOACC_LOOP_CHUNK (dir, range, S, CHUNK_SIZE, GWV);
      T step = GOACC_LOOP_STEP (dir, range, S, CHUNK_SIZE, GWV);
-     GOACC_LOOP_INIT (b);
 
    <head_bb> [created by splitting end of entry_bb]
      T offset = GOACC_LOOP_OFFSET (dir, range, S, CHUNK_SIZE, GWV, chunk_no);
@@ -5331,7 +5331,7 @@ expand_omp_taskloop_for_inner (struct omp_region *region,
      {BODY}
 
    <cont_bb> [incoming, may == body_bb FALL->exit_bb, BRANCH->body_bb]
-     GOACC_LOOP_NEWOFFSET (dir, range, s, CHUNK_SIZE, GWV, offset);
+     GOACC_LOOP_DYN_OFFSET (dir, range, s, CHUNK_SIZE, GWV, offset);
      //offset += step;
      if (offset LTGT bound) goto body_bb; [*]
 
@@ -5340,7 +5340,7 @@ expand_omp_taskloop_for_inner (struct omp_region *region,
      if (chunk < chunk_max) goto head_bb;
 
    <exit_bb> [incoming]
-     GOACC_LOOP_FINI ();
+     GOACC_LOOP_DYN_FINI ();
      V = B + ((range -/+ 1) / S +/- 1) * S [*]
 
    [*] Needed if V live at end of loop.  */
@@ -5523,7 +5523,7 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 
   call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
 				     build_int_cst (integer_type_node,
-						    IFN_GOACC_LOOP_INIT),
+						    IFN_GOACC_LOOP_DYN_INIT),
 				     dir, range, dummy_init, b, gwv);
   gimple_call_set_lhs (call, dummy_init);
   gimple_set_location (call, loc);
@@ -5538,9 +5538,15 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
       chunk_max = create_tmp_var (diff_type, ".chunk_max");
       chunk_no = create_tmp_var (diff_type, ".chunk_no");
 
-      ass = gimple_build_assign (chunk_no, expr);
-      gsi_insert_before (&gsi, ass, GSI_SAME_STMT);
-
+      call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
+					 build_int_cst (integer_type_node,
+					       	IFN_GOACC_LOOP_DYN_CHUNK),
+					 integer_zero_node, range, s,
+					 chunk_size, gwv);
+      gimple_call_set_lhs (call, chunk_no);
+      gimple_set_location (call, loc);
+      gsi_insert_before (&gsi, call, GSI_SAME_STMT);
+      
       call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
 					 build_int_cst (integer_type_node,
 							IFN_GOACC_LOOP_CHUNKS),
@@ -5741,7 +5747,7 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 //      ass = gimple_build_assign (offset_incr, expr);
       call = gimple_build_call_internal (IFN_GOACC_LOOP, 8,
 					 build_int_cst (integer_type_node,
-						      IFN_GOACC_LOOP_NEWOFFSET),
+						     IFN_GOACC_LOOP_DYN_OFFSET),
 					 dir, range, step,
 					 chunk_size, gwv, offset,
 					 integer_one_node);
@@ -5775,11 +5781,27 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 	  gsi = gsi_last_bb (bottom_bb);
 
 	  /* Chunk increment and test goes into bottom_bb.  */
-	  expr = build2 (PLUS_EXPR, diff_type, chunk_no,
-			 build_int_cst (diff_type, 1));
-	  ass = gimple_build_assign (chunk_no, expr);
-	  gsi_insert_after (&gsi, ass, GSI_CONTINUE_LINKING);
+	  /* FIXME: This is a hack that calls IFN_GOACC_LOOP_DYN_CHUNK twice,
+	     to get around the SSA ICEs involving chunk_no.  */
+	  call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
+					     build_int_cst (integer_type_node,
+						    IFN_GOACC_LOOP_DYN_CHUNK),
+					     integer_one_node, range, s,
+					     chunk_size, gwv);
+	  gimple_call_set_lhs (call, chunk_no);
+	  gimple_set_location (call, loc);
+	  gsi_insert_after (&gsi, call, GSI_CONTINUE_LINKING);
 
+	  call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
+					     build_int_cst (integer_type_node,
+						    IFN_GOACC_LOOP_DYN_CHUNK),
+					     chunk_no, range, s,
+					     chunk_size, gwv);
+	  gimple_call_set_lhs (call, chunk_no);
+	  gimple_set_location (call, loc);
+	  gsi_insert_after (&gsi, call, GSI_CONTINUE_LINKING);
+
+	  
 	  /* Chunk test at end of bottom_bb.  */
 	  expr = build2 (LT_EXPR, boolean_type_node, chunk_no, chunk_max);
 	  gsi_insert_after (&gsi, gimple_build_cond_empty (expr),
@@ -5799,7 +5821,7 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
   tree dummy_fini = create_tmp_var (iter_type, ".dummy_fini");
   call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
 				     build_int_cst (integer_type_node,
-						    IFN_GOACC_LOOP_FINI),
+						    IFN_GOACC_LOOP_DYN_FINI),
 				     dir, range, s, chunk_size, gwv);
   gimple_call_set_lhs (call, dummy_fini);
   gsi_insert_before (&gsi, call, GSI_SAME_STMT);
