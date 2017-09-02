@@ -708,7 +708,7 @@ oacc_xform_loop (gcall *call)
 
     case IFN_GOACC_LOOP_STEP:
       {
-	if (dynsched (mask))
+	if (dynsched (mask) && striding)
 	  r = build_int_cst (type, 1);
 	else
 	  {
@@ -725,7 +725,7 @@ oacc_xform_loop (gcall *call)
     case IFN_GOACC_LOOP_OFFSET:
       /* With dynamic scheduling, the loop offset is used to
 	 initialize gang's induction variable.  */
-      if (dynsched (mask))
+      if (dynsched (mask) && striding)
 	r = update_dynsched_offset (call);
       else if (striding)
 	{
@@ -771,7 +771,7 @@ oacc_xform_loop (gcall *call)
 	      r = build2 (PLUS_EXPR, diff_type, r, per);
 	    }
 	}
-      if (!dynsched (mask))
+      if (!(dynsched (mask) && striding))
 	{
 	  r = fold_build2 (MULT_EXPR, diff_type, r, step);
 	  if (type != diff_type)
@@ -817,7 +817,7 @@ oacc_xform_loop (gcall *call)
       break;
 
     case IFN_GOACC_LOOP_NEWOFFSET:
-      if (dynsched (mask))
+      if (dynsched (mask) && striding)
 	{
 	  r = update_dynsched_offset (call);
 	  gsi = gsi_for_stmt (call);
@@ -834,13 +834,13 @@ oacc_xform_loop (gcall *call)
       break;
 
     case IFN_GOACC_LOOP_INIT:
-      if (dynsched (mask))
+      if (dynsched (mask) && striding)
 	init_dynsched_loop (call);
       lhs = NULL_TREE;
       break;
 
     case IFN_GOACC_LOOP_FINI:
-      if (dynsched (mask))
+      if (dynsched (mask) && striding)
 	fini_dynsched_loop (call);
       lhs = NULL_TREE;
       break;
