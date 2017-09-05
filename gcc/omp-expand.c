@@ -5516,21 +5516,23 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
     expr = fold_build1 (NEGATE_EXPR, diff_type, expr);
   tree range = force_gimple_operand_gsi (&gsi, expr, true,
 					 NULL_TREE, true, GSI_SAME_STMT);
+
+  tree dummy_init = create_tmp_var (iter_type, ".dummy_init");
+  ass = gimple_build_assign (dummy_init, build_int_cst (iter_type, 0));
+  gsi_insert_before (&gsi, ass, GSI_SAME_STMT);
+
+  call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
+				     build_int_cst (integer_type_node,
+						    IFN_GOACC_LOOP_INIT),
+				     dir, range, dummy_init, b, gwv);
+  gimple_call_set_lhs (call, dummy_init);
+  gimple_set_location (call, loc);
+  gsi_insert_before (&gsi, call, GSI_SAME_STMT);
+
   chunk_no = build_int_cst (diff_type, 0);
   if (chunking)
     {
       gcc_assert (!gimple_in_ssa_p (cfun));
-
-      tree dummy_init = create_tmp_var (iter_type, ".dummy_init");
-      ass = gimple_build_assign (dummy_init, build_int_cst (iter_type, 0));
-      gsi_insert_before (&gsi, ass, GSI_SAME_STMT);
-      call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
-					 build_int_cst (integer_type_node,
-							IFN_GOACC_LOOP_INIT),
-					 b, range, dummy_init, chunk_size, gwv);
-      gimple_call_set_lhs (call, dummy_init);
-      gimple_set_location (call, loc);
-      gsi_insert_before (&gsi, call, GSI_SAME_STMT);
 
       expr = chunk_no;
       chunk_max = create_tmp_var (diff_type, ".chunk_max");
@@ -5729,28 +5731,22 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 	}
 
       /* Increment offset.  */
-      if (chunking)
-	{
-	  call = gimple_build_call_internal (IFN_GOACC_LOOP, 8,
-					     build_int_cst (integer_type_node,
-						    IFN_GOACC_LOOP_NEWOFFSET),
-					     dir, range, step,
-					     chunk_size, gwv, offset,
-					     integer_one_node);
-	  gimple_call_set_lhs (call, offset_incr);
-	  gimple_set_location (call, loc);
-	}
-      else
-	{
-	  if (gimple_in_ssa_p (cfun))
-	    expr = build2 (plus_code, iter_type, offset,
-			   fold_convert (plus_type, step));
-	  else
-	    expr = build2 (PLUS_EXPR, diff_type, offset, step);
-	  expr = force_gimple_operand_gsi (&gsi, expr, false, NULL_TREE,
-					   true, GSI_SAME_STMT);
-	  ass = gimple_build_assign (offset_incr, expr);
-	}
+//       if (gimple_in_ssa_p (cfun))
+//	expr = build2 (plus_code, iter_type, offset,
+//		       fold_convert (plus_type, step));
+//      else
+//	expr = build2 (PLUS_EXPR, diff_type, offset, step);
+//      expr = force_gimple_operand_gsi (&gsi, expr, false, NULL_TREE,
+//				       true, GSI_SAME_STMT);
+//      ass = gimple_build_assign (offset_incr, expr);
+      call = gimple_build_call_internal (IFN_GOACC_LOOP, 8,
+					 build_int_cst (integer_type_node,
+						      IFN_GOACC_LOOP_NEWOFFSET),
+					 dir, range, step,
+					 chunk_size, gwv, offset,
+					 integer_one_node);
+      gimple_call_set_lhs (call, offset_incr);
+      gimple_set_location (call, loc);
 
       gsi_insert_before (&gsi, call, GSI_SAME_STMT);
       expr = build2 (cond_code, boolean_type_node, offset_incr, bound);
@@ -5799,17 +5795,17 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
   loc = gimple_location (gsi_stmt (gsi));
 
+  /* Call GOACC_LOOP_FINI to clean up any dynamically scheduled loops.  */
+  tree dummy_fini = create_tmp_var (iter_type, ".dummy_fini");
+  call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
+				     build_int_cst (integer_type_node,
+						    IFN_GOACC_LOOP_FINI),
+				     dir, range, s, chunk_size, gwv);
+  gimple_call_set_lhs (call, dummy_fini);
+  gsi_insert_before (&gsi, call, GSI_SAME_STMT);
+
   if (!gimple_in_ssa_p (cfun))
     {
-      /* Call GOACC_LOOP_FINI to clean up any dynamically scheduled loops.  */
-      tree dummy_fini = create_tmp_var (iter_type, ".dummy_fini");
-      call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
-					 build_int_cst (integer_type_node,
-							IFN_GOACC_LOOP_FINI),
-					 dir, range, s, chunk_size, gwv);
-      gimple_call_set_lhs (call, dummy_fini);
-      gsi_insert_before (&gsi, call, GSI_SAME_STMT);
-
       /* Insert the final value of V, in case it is live.  This is the
 	 value for the only thread that survives past the join.  */
       expr = fold_build2 (MINUS_EXPR, diff_type, range, dir);

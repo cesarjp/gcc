@@ -1588,9 +1588,9 @@ oacc_loop_process (oacc_loop *loop)
 	      gimple_call_set_arg (call, 5, is_e ? e_mask_arg : mask_arg);
 	      if (!is_e)
 		gimple_call_set_arg (call, 4, chunk_arg);
-	      tree chunk_size = gimple_call_arg (call, 4);
-	      bool chunking = integer_minus_onep (chunk_size)
-			       || integer_onep (chunk_size);
+//	      tree chunk_size = gimple_call_arg (call, 4);
+//	      bool chunking = integer_minus_onep (chunk_size)
+//			       || integer_onep (chunk_size);
 
 	      switch (code) {
 	      case IFN_GOACC_LOOP_INIT:
@@ -1600,8 +1600,9 @@ oacc_loop_process (oacc_loop *loop)
 	      case IFN_GOACC_LOOP_NEWOFFSET:
 		if (type == NULL_TREE)
 		  type = TREE_TYPE (gimple_call_lhs (call));
-		if (dynsched (tree_to_uhwi (gimple_call_arg (call, 5)))
-		    && !chunking)
+//		if (dynsched (tree_to_uhwi (gimple_call_arg (call, 5)))
+//		    && !chunking)
+		if (dynsched (tree_to_uhwi (gimple_call_arg (call, 5))))
 		  {
 		    /* Prepare and install a global variable for the gang
 		       loop.  */
@@ -1610,8 +1611,8 @@ oacc_loop_process (oacc_loop *loop)
 
 		    gimple_call_set_arg (call, 7, global_ix);
 		  }
-		else
-		  gimple_call_set_arg (call, 7, NULL_TREE);
+//		else
+//		  gimple_call_set_arg (call, 7, NULL_TREE);
 		break;
 	      default:
 		break;
