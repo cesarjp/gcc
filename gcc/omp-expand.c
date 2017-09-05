@@ -5729,22 +5729,28 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
 	}
 
       /* Increment offset.  */
-//       if (gimple_in_ssa_p (cfun))
-//	expr = build2 (plus_code, iter_type, offset,
-//		       fold_convert (plus_type, step));
-//      else
-//	expr = build2 (PLUS_EXPR, diff_type, offset, step);
-//      expr = force_gimple_operand_gsi (&gsi, expr, false, NULL_TREE,
-//				       true, GSI_SAME_STMT);
-//      ass = gimple_build_assign (offset_incr, expr);
-      call = gimple_build_call_internal (IFN_GOACC_LOOP, 8,
-					 build_int_cst (integer_type_node,
-						      IFN_GOACC_LOOP_NEWOFFSET),
-					 dir, range, step,
-					 chunk_size, gwv, offset,
-					 integer_one_node);
-      gimple_call_set_lhs (call, offset_incr);
-      gimple_set_location (call, loc);
+      if (chunking)
+	{
+	  call = gimple_build_call_internal (IFN_GOACC_LOOP, 8,
+					     build_int_cst (integer_type_node,
+						    IFN_GOACC_LOOP_NEWOFFSET),
+					     dir, range, step,
+					     chunk_size, gwv, offset,
+					     integer_one_node);
+	  gimple_call_set_lhs (call, offset_incr);
+	  gimple_set_location (call, loc);
+	}
+      else
+	{
+	  if (gimple_in_ssa_p (cfun))
+	    expr = build2 (plus_code, iter_type, offset,
+			   fold_convert (plus_type, step));
+	  else
+	    expr = build2 (PLUS_EXPR, diff_type, offset, step);
+	  expr = force_gimple_operand_gsi (&gsi, expr, false, NULL_TREE,
+					   true, GSI_SAME_STMT);
+	  ass = gimple_build_assign (offset_incr, expr);
+	}
 
       gsi_insert_before (&gsi, call, GSI_SAME_STMT);
       expr = build2 (cond_code, boolean_type_node, offset_incr, bound);
