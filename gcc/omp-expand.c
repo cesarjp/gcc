@@ -5799,17 +5799,17 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
   gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
   loc = gimple_location (gsi_stmt (gsi));
 
-  /* Call GOACC_LOOP_FINI to clean up any dynamically scheduled loops.  */
-  tree dummy_fini = create_tmp_var (iter_type, ".dummy_fini");
-  call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
-				     build_int_cst (integer_type_node,
-						    IFN_GOACC_LOOP_FINI),
-				     dir, range, s, chunk_size, gwv);
-  gimple_call_set_lhs (call, dummy_fini);
-  gsi_insert_before (&gsi, call, GSI_SAME_STMT);
-
   if (!gimple_in_ssa_p (cfun))
     {
+      /* Call GOACC_LOOP_FINI to clean up any dynamically scheduled loops.  */
+      tree dummy_fini = create_tmp_var (iter_type, ".dummy_fini");
+      call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
+					 build_int_cst (integer_type_node,
+							IFN_GOACC_LOOP_FINI),
+					 dir, range, s, chunk_size, gwv);
+      gimple_call_set_lhs (call, dummy_fini);
+      gsi_insert_before (&gsi, call, GSI_SAME_STMT);
+
       /* Insert the final value of V, in case it is live.  This is the
 	 value for the only thread that survives past the join.  */
       expr = fold_build2 (MINUS_EXPR, diff_type, range, dir);
