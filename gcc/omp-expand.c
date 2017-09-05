@@ -5527,7 +5527,7 @@ expand_oacc_for (struct omp_region *region, struct omp_for_data *fd)
       call = gimple_build_call_internal (IFN_GOACC_LOOP, 6,
 					 build_int_cst (integer_type_node,
 							IFN_GOACC_LOOP_INIT),
-					 dir, range, dummy_init, b, gwv);
+					 b, range, dummy_init, chunk_size, gwv);
       gimple_call_set_lhs (call, dummy_init);
       gimple_set_location (call, loc);
       gsi_insert_before (&gsi, call, GSI_SAME_STMT);

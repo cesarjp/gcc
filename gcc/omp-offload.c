@@ -382,7 +382,9 @@ init_dynsched_loop (gcall *call)
   gimplify_assign (gangs, new_gangs, &seq);
 
   /* Only allow the first gang that reaches this critical section to
-     initialize dloop.iv.
+     initialize dloop.iv to zero (because expand_oacc_for increments
+     the private induction variable V = B + offset, were B is the
+     lower bound.
 
      if (old_gangs == 0)
         dloop.iv = lower_bound;
@@ -400,7 +402,7 @@ init_dynsched_loop (gcall *call)
        goto post_bb;
 
      <init_bb>
-     dloop.iv = lower_bound;
+     dloop.iv = 0;
      goto post_bb;
 
      <post_bb>
@@ -425,7 +427,7 @@ init_dynsched_loop (gcall *call)
   make_edge (head_bb, init_bb, EDGE_TRUE_VALUE);
 
   gimple_seq init_seq = NULL;
-  gimplify_assign (iv, lower_bound, &init_seq);
+  gimplify_assign (iv, build_int_cst (type, 0), &init_seq);
   gsi = gsi_start_bb (init_bb);
   gsi_insert_seq_before (&gsi, init_seq, GSI_SAME_STMT);
 
