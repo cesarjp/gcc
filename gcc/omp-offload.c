@@ -320,32 +320,18 @@ static void
 init_dynsched_loop (gcall *call)
 {
   gimple_stmt_iterator gsi = gsi_for_stmt (call);
-  enum ifn_goacc_loop_kind code
-    = (enum ifn_goacc_loop_kind) TREE_INT_CST_LOW (gimple_call_arg (call, 0));
-  tree lower_bound = gimple_call_arg (call, 1);
   tree dummy = gimple_call_arg (call, 3);
-  tree chunk_size = NULL_TREE;
-  unsigned mask = (unsigned) TREE_INT_CST_LOW (gimple_call_arg (call, 5));
-  tree lhs = gimple_call_lhs (call);
   tree type = TREE_TYPE (dummy);
-  tree r = NULL_TREE;
   gimple_seq seq = NULL;
-  bool chunking = false, striding = true;
-  unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
-  unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
-
   tree iv_object = gimple_call_arg (call, 7);
   tree iv_fld = TYPE_FIELDS (TREE_TYPE (iv_object));
   tree gangs_fld = TREE_CHAIN (iv_fld);
   tree mutex_fld = TREE_CHAIN (gangs_fld);
-
   tree iv = build3 (COMPONENT_REF, TREE_TYPE (iv_fld), iv_object, iv_fld, NULL);
   tree gangs = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
 		       gangs_fld, NULL);
   tree mutex = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
 		       mutex_fld, NULL);
-
-  tree new_type = TREE_TYPE (iv);
 
   /* Call GOACC_mutex_lock.  */
   tree addr = build_fold_addr_expr (mutex);
@@ -366,9 +352,6 @@ init_dynsched_loop (gcall *call)
 
   /* Need to quit gracefully here.  */
   gcc_assert (decl != NULL_TREE);
-
-  tree itype = TREE_TYPE (TREE_TYPE (decl));
-  machine_mode imode = TYPE_MODE (itype);
 
   addr = build_fold_addr_expr (gangs);
 
@@ -472,36 +455,12 @@ static void
 fini_dynsched_loop (gcall *call)
 {
   gimple_stmt_iterator gsi = gsi_for_stmt (call);
-  enum ifn_goacc_loop_kind code
-    = (enum ifn_goacc_loop_kind) TREE_INT_CST_LOW (gimple_call_arg (call, 0));
-  tree dir = gimple_call_arg (call, 1);
-  tree range = gimple_call_arg (call, 2);
-  tree step = gimple_call_arg (call, 3);
-  tree chunk_size = NULL_TREE;
-  unsigned mask = (unsigned) TREE_INT_CST_LOW (gimple_call_arg (call, 5));
-  tree lhs = gimple_call_lhs (call);
-  tree type = lhs ? TREE_TYPE (lhs) : TREE_TYPE (step);
-  tree diff_type = TREE_TYPE (range);
-  tree r = NULL_TREE;
   gimple_seq seq = NULL;
-  bool chunking = false, striding = true;
-  unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
-  unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
-
-  tree lower_bound = gimple_call_arg (call, 4);
-
   tree iv_object = gimple_call_arg (call, 7);
   tree iv_fld = TYPE_FIELDS (TREE_TYPE (iv_object));
   tree gangs_fld = TREE_CHAIN (iv_fld);
-  tree mutex_fld = TREE_CHAIN (gangs_fld);
-
-  tree iv = build3 (COMPONENT_REF, TREE_TYPE (iv_fld), iv_object, iv_fld, NULL);
   tree gangs = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
 		       gangs_fld, NULL);
-  tree mutex = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
-		       mutex_fld, NULL);
-
-  tree new_type = TREE_TYPE (iv);
 
   /* Atomically increment dloop.gangs.  */
   int index = tree_to_uhwi (TYPE_SIZE_UNIT (integer_type_node));
@@ -517,7 +476,6 @@ fini_dynsched_loop (gcall *call)
   /* Need to quit gracefully here.  */
   gcc_assert (decl != NULL_TREE);
 
-  machine_mode imode = TYPE_MODE (integer_type_node);
   tree addr = build_fold_addr_expr (gangs);
   tree new_call = build_call_expr (decl, 3, addr, integer_one_node,
 				   build_int_cst (NULL, MEMMODEL_RELAXED));
@@ -529,52 +487,15 @@ fini_dynsched_loop (gcall *call)
 static tree
 update_dynsched_offset (gcall *call)
 {
-  gimple_stmt_iterator gsi = gsi_for_stmt (call);
-  enum ifn_goacc_loop_kind code
-    = (enum ifn_goacc_loop_kind) TREE_INT_CST_LOW (gimple_call_arg (call, 0));
-  tree dir = gimple_call_arg (call, 1);
-  tree range = gimple_call_arg (call, 2);
   tree step = gimple_call_arg (call, 3);
-  tree chunk_size = NULL_TREE;
-  unsigned mask = (unsigned) TREE_INT_CST_LOW (gimple_call_arg (call, 5));
   tree lhs = gimple_call_lhs (call);
   tree type = lhs ? TREE_TYPE (lhs) : TREE_TYPE (step);
-  tree diff_type = TREE_TYPE (range);
-  tree r = NULL_TREE;
-  gimple_seq seq = NULL;
-  bool chunking = false, striding = true;
-  unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
-  unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
-
   tree iv_object = gimple_call_arg (call, 7);
   tree iv_fld = TYPE_FIELDS (TREE_TYPE (iv_object));
   tree gangs_fld = TREE_CHAIN (iv_fld);
-  tree mutex_fld = TREE_CHAIN (gangs_fld);
 
   tree iv = build3 (COMPONENT_REF, TREE_TYPE (iv_fld), iv_object, iv_fld, NULL);
-  tree gangs = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
-		       gangs_fld, NULL);
-  tree mutex = build3 (COMPONENT_REF, TREE_TYPE (gangs_fld), iv_object,
-		       mutex_fld, NULL);
-
   tree new_type = TREE_TYPE (iv);
-
-#ifdef ACCEL_COMPILER
-  chunk_size = gimple_call_arg (call, 4);
-  if (integer_minus_onep (chunk_size)  /* Force static allocation.  */
-      || integer_zerop (chunk_size))   /* Default (also static).  */
-    {
-      /* For dynamic gang scheduling, the gang loop should be strided too.  */
-      striding = true;
-      chunking = false;
-    }
-  else
-    {
-      /* Chunk of size 1 is striding.  */
-      striding = integer_onep (chunk_size);
-      chunking = !striding;
-    }
-#endif
 
   /* Calculate the size of type of the IV in log2(#bits).  */
   int index = tree_to_uhwi (TYPE_SIZE_UNIT (type));
@@ -584,10 +505,6 @@ update_dynsched_offset (gcall *call)
 
   fcode = BUILT_IN_ATOMIC_FETCH_ADD_N;
 
-  //	  tree cs = make_ssa_name (TREE_TYPE (chunk_size));
-  //	  gimplify_assign (cs, fold_build2 (MULT_EXPR, type,
-  //					    dir, chunk_size), &seq);
-
   tmpbase = ((enum built_in_function) (fcode + index));
   tree decl = builtin_decl_explicit (tmpbase);
 
@@ -595,14 +512,8 @@ update_dynsched_offset (gcall *call)
   gcc_assert (decl != NULL_TREE);
 
   tree itype = TREE_TYPE (TREE_TYPE (decl));
-  machine_mode imode = TYPE_MODE (itype);
-
-  //tree addr = make_ssa_name (build_pointer_type (TREE_TYPE (iv)));
-  //gimplify_assign (addr, build_fold_addr_expr (iv), &seq);
   tree addr = build_fold_addr_expr (iv);
-
   tree new_lhs = make_ssa_name (new_type);
-
   tree new_call = build_call_expr (decl, 3, addr,
 				   fold_convert (itype, step),
 				   build_int_cst (NULL, MEMMODEL_RELAXED));
@@ -642,8 +553,6 @@ oacc_xform_loop (gcall *call)
   bool chunking = false, striding = true;
   unsigned outer_mask = mask & (~mask + 1); // Outermost partitioning
   unsigned inner_mask = mask & ~outer_mask; // Inner partitioning (if any)
-  tree lower_bound = NULL_TREE;
-  location_t loc = gimple_location (call);
 
 #ifdef ACCEL_COMPILER
   chunk_size = gimple_call_arg (call, 4);
@@ -1479,21 +1388,6 @@ oacc_loop_xform_head_tail (gcall *from, int level)
       while (gsi_end_p (gsi))
 	gsi = gsi_start_bb (single_succ (gsi_bb (gsi)));
     }
-}
-
-static tree
-create_new_iv_scalar (int count, tree type)
-{
-  tree new_type = build_qualified_type (type, TYPE_QUAL_VOLATILE);
-  char *name = xasprintf (".oacc_dynsched.%s.%d", get_name (cfun->decl), count);
-  tree iv = create_tmp_var (new_type, name);
-  DECL_ARTIFICIAL (iv) = 1;
-  DECL_NAMELESS (iv) = 1;
-  TREE_STATIC (iv) = 1;
-  TREE_ADDRESSABLE (iv) = 1;
-  varpool_node::finalize_decl (iv);
-  TREE_THIS_VOLATILE (iv);
-  return iv;
 }
 
 /* Create a global struct dynloop for a loop iterator of type T.
