@@ -467,6 +467,9 @@ GOACC_2.5.OPENACC_GCC_7_BRANCH {
   global:
 	GOACC_mutex_lock;
 	GOACC_mutex_unlock;
+	GOACC_threadpool_init;
+	GOACC_threadpool_fork;
+	GOACC_threadpool_join;
 } GOACC_2.0.1;
 
 GOMP_PLUGIN_1.0 {

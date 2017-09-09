@@ -313,5 +313,8 @@ extern int GOACC_get_thread_num (int, int, int);
 extern void GOACC_declare (int, size_t, void **, size_t *, unsigned short *);
 extern void GOACC_mutex_lock (int *);
 extern void GOACC_mutex_unlock (int *);
+extern void GOACC_threadpool_init ();
+extern void GOACC_threadpool_fork ();
+extern void GOACC_threadpool_join ();
 
 #endif /* LIBGOMP_G_H */

@@ -1153,3 +1153,18 @@ GOACC_mutex_unlock (int *mutex)
 {
   gomp_mutex_unlock (mutex);
 }
+
+void
+GOACC_threadpool_init ()
+{
+}
+
+void
+GOACC_threadpool_fork ()
+{
+}
+
+void
+GOACC_threadpool_join ()
+{
+}
