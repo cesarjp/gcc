@@ -297,12 +297,9 @@ dynsched (unsigned mask)
    gang loops as follows.  It replaces calls to the internal function
    GOACC_LOOP_INIT into the following sequence:
 
-     struct dynloop dloop;
-     GOACC_mutex_lock (&dloop.mutex);
-     old_seen = atomic_add (dloop.seen, 1)
-     if (dloop.seen == 0)
-       dloop.ix = LOWER_BOUND;
-     GOACC_mutex_unlock (&dloop.mutex);
+     GOACC_threadpool_init ();
+     dloop.ix = LOWER_BOUND;
+     GOACC_threadpool_fork ();
 
    where struct dynloop is defined as
 
@@ -335,34 +332,9 @@ init_dynsched_loop (gcall *call)
 
   /* Call GOACC_mutex_lock.  */
   tree addr = build_fold_addr_expr (mutex);
-  tree decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_LOCK);
-  tree mutex_call = build_call_expr (decl, 1, addr);
-  gimplify_and_add (mutex_call, &seq);
-
-  /* Atomically increment dloop.gangs.  */
-  int index = tree_to_uhwi (TYPE_SIZE_UNIT (integer_type_node));
-  index = exact_log2 (index) + 1;
-
-  enum built_in_function fcode, tmpbase;
-
-  fcode = BUILT_IN_ATOMIC_FETCH_ADD_N;
-
-  tmpbase = ((enum built_in_function) (fcode + index));
-  decl = builtin_decl_explicit (tmpbase);
-
-  /* Need to quit gracefully here.  */
-  gcc_assert (decl != NULL_TREE);
-
-  addr = build_fold_addr_expr (gangs);
-
-  tree old_gangs = make_ssa_name (TREE_TYPE (gangs));
-  tree new_gangs = make_ssa_name (TREE_TYPE (gangs));
-
-  gimplify_assign (old_gangs, gangs, &seq);
-  gimplify_assign (new_gangs, fold_build2 (PLUS_EXPR, integer_type_node,
-					    old_gangs, integer_one_node),
-		   &seq);
-  gimplify_assign (gangs, new_gangs, &seq);
+  tree decl = builtin_decl_explicit (BUILT_IN_GOACC_THREADPOOL_INIT);
+  tree tp_init = build_call_expr (decl, 0);
+  gimplify_and_add (tp_init, &seq);
 
   /* Only allow the first gang that reaches this critical section to
      initialize dloop.iv to zero (because expand_oacc_for increments
@@ -393,6 +365,8 @@ init_dynsched_loop (gcall *call)
      GOACC_LOOP (INIT, ...);
   */
 
+  tree old_gangs = oacc_thread_numbers (true, GOMP_DIM_MASK (GOMP_DIM_GANG),
+					&seq);
   gimple *cond_stmt = gimple_build_cond (EQ_EXPR, old_gangs, integer_zero_node,
 					 NULL_TREE, NULL_TREE);
   gimple_seq_add_stmt (&seq, cond_stmt);
@@ -422,9 +396,9 @@ init_dynsched_loop (gcall *call)
   gimple_seq post_seq = NULL;
   gsi = gsi_start_bb (post_bb);
   addr = build_fold_addr_expr (mutex);
-  decl = builtin_decl_explicit (BUILT_IN_GOACC_MUTEX_UNLOCK);
-  mutex_call = build_call_expr (decl, 1, addr);
-  gimplify_and_add (mutex_call, &post_seq);
+  decl = builtin_decl_explicit (BUILT_IN_GOACC_THREADPOOL_FORK);
+  tree tp_fork = build_call_expr (decl, 0);
+  gimplify_and_add (tp_fork, &post_seq);
 
   gsi_insert_seq_before (&gsi, post_seq, GSI_SAME_STMT);
 }
@@ -454,6 +428,8 @@ init_dynsched_loop (gcall *call)
 static void
 fini_dynsched_loop (gcall *call)
 {
+  return;
+
   gimple_stmt_iterator gsi = gsi_for_stmt (call);
   gimple_seq seq = NULL;
   tree iv_object = gimple_call_arg (call, 7);

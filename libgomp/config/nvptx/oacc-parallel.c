@@ -13,6 +13,7 @@ GOACC_mutex_unlock (int *mutex)
 
 }
 
+extern int Printf (const char *, ...) __asm__ ("vprintf");
 int threadpool_count = 0;
 
 void
@@ -24,7 +25,9 @@ GOACC_threadpool_init ()
   __asm__ volatile ("mov.u32 %0,%%ctaid.x;" : "=r" (ctaid));
   __asm__ volatile ("mov.u32 %0,%%nctaid.x;" : "=r" (nctaid));
 
-  (void) __atomic_add_fetch (&threadpool_count, 1, MEMMODEL_RELEASE);
+  (void) __atomic_add_fetch (&threadpool_count, 1, MEMMODEL_ACQUIRE);
+
+  Printf ("threadpool_count = %d\n", threadpool_count);
 
   while (threadpool_count != nctaid)
     ;
