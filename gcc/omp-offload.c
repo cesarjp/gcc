@@ -49,6 +49,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gomp-constants.h"
 #include "gimple-pretty-print.h"
 #include "intl.h"
+#include "cfgloop.h"
 
 /* Describe the OpenACC looping structure of a function.  The entire
    function is held in a 'NULL' loop.  */
@@ -373,6 +374,32 @@ oacc_xform_loop (gcall *call)
       break;
 
     case IFN_GOACC_LOOP_OFFSET:
+      /* Enable vectorization on non-SIMT targets.  */
+      if (!targetm.simt.vf
+	  && outer_mask == GOMP_DIM_MASK (GOMP_DIM_VECTOR)
+	  && (flag_tree_loop_vectorize
+	      || (!global_options_set.x_flag_tree_loop_vectorize
+		  && !global_options_set.x_flag_tree_vectorize))
+	  && flag_tree_loop_optimize)
+	{
+	  basic_block bb = gsi_bb (gsi);
+	  struct loop *parent = bb->loop_father;
+	  struct loop *body = parent->inner;
+
+	  parent->force_vectorize = true;
+	  parent->marked_independent = true;
+	  parent->safelen = INT_MAX;
+
+	  /* "Chunking loops" may have inner loops.  */
+	  if (parent->inner)
+	    {
+	      body->force_vectorize = true;
+	      body->marked_independent = true;
+	      body->safelen = INT_MAX;
+	    }
+
+	  cfun->has_force_vectorize_loops = true;
+	}
       if (striding)
 	{
 	  r = oacc_thread_numbers (true, mask, &seq);
