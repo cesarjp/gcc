@@ -7459,7 +7459,7 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
   ctx = new_omp_context (region_type);
   ctx->clauses = *list_p;
   outer_ctx = ctx->outer_context;
-  if (code == OMP_TARGET)
+  if (code == OMP_TARGET || code == OACC_PARALLEL)
     {
       if (!lang_GNU_Fortran () || (region_type & ORT_ACC))
 	ctx->target_map_pointers_as_0len_arrays = true;
