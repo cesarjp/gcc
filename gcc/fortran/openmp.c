@@ -2144,7 +2144,7 @@ static match
 match_acc (gfc_exec_op op, const omp_mask mask, const omp_mask dtype_mask)
 {
   gfc_omp_clauses *c;
-  if (gfc_match_omp_clauses (&c, mask, dtype_mask, false, false, true)
+  if (gfc_match_omp_clauses (&c, mask, dtype_mask, false, false, true, true)
       != MATCH_YES)
     return MATCH_ERROR;
   new_st.op = op;

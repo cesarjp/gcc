@@ -167,6 +167,8 @@ omp_finish_file (void)
   if (num_funcs == 0 && num_vars == 0)
     return;
 
+  printf (">>> omp_finish_file: %d\n", num_funcs);
+  //gcc_assert (vec_safe_length (offload_funcs) == -1);
   if (targetm_common.have_named_sections)
     {
       vec<constructor_elt, va_gc> *v_f, *v_v;

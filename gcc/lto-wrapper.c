@@ -864,6 +864,7 @@ find_crtoffloadtable (void)
 	char *crtoffloadtable = make_temp_file (".crtoffloadtable.o");
 	copy_file (crtoffloadtable, paths[i]);
 	printf ("%s\n", crtoffloadtable);
+	fprintf (stderr, "%s\n", crtoffloadtable);
 	XDELETEVEC (crtoffloadtable);
 	break;
       }
@@ -947,6 +948,9 @@ find_and_merge_options (int fd, off_t file_offset, const char *prefix,
 static void
 run_gcc (unsigned argc, char *argv[])
 {
+  save_temps = 1;
+  verbose = 1;
+
   unsigned i, j;
   const char **new_argv;
   const char **argv_ptr;
@@ -1128,6 +1132,8 @@ run_gcc (unsigned argc, char *argv[])
 
   if (have_offload)
     {
+      //sleep (10);
+      //raise(SIGINT);
       unsigned i, num_offload_files;
       char **offload_argv;
       FILE *f;
@@ -1214,7 +1220,10 @@ cont1:
 	{
 	  find_crtoffloadtable ();
 	  for (i = 0; offload_names[i]; i++)
-	    printf ("%s\n", offload_names[i]);
+	    {
+	      printf ("%s\n", offload_names[i]);
+	      fprintf (stderr, "%s\n", offload_names[i]);
+	    }
 	  free_array_of_ptrs ((void **) offload_names, i);
 	}
     }
