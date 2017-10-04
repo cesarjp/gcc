@@ -855,6 +855,9 @@ goacc_wait (int async, int num_waits, va_list *ap)
     {
       int qid = va_arg (*ap, int);
       goacc_aq aq = get_goacc_asyncqueue (qid);
+      /* There's nothing to do if an async queue doesn't exit.  */
+      if (aq == NULL)
+	return;
       if (acc_dev->openacc.async.test_func (aq))
 	continue;
       if (async == acc_async_sync)
