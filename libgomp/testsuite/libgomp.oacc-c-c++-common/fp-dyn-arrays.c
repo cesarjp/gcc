@@ -15,7 +15,7 @@ main ()
   a = (int *) malloc (sizeof (int) * n);
   b = (int *) malloc (sizeof (int) * n);
   c = (int *) malloc (sizeof (int) * n);
-  
+
   for (i = 0; i < n; i++)
     {
       a[i] = -1;
@@ -33,7 +33,7 @@ main ()
 
   for (i = 0; i < n; i++)
     assert (a[i] == 3*(i+1) + 12345);
-  
+
   free (a);
   free (b);
   free (c);
