@@ -412,7 +412,6 @@ new_omp_context (enum omp_region_type region_type)
   c->location = input_location;
   c->region_type = region_type;
   c->clauses = NULL_TREE;
-  c->ptr_arrays = new hash_set<tree>;
   if ((region_type & ORT_TASK) == 0)
     c->default_kind = OMP_CLAUSE_DEFAULT_SHARED;
   else
@@ -429,7 +428,6 @@ delete_omp_context (struct gimplify_omp_ctx *c)
   splay_tree_delete (c->variables);
   delete c->privatized_types;
   c->loop_iter_var.release ();
-  delete c->ptr_arrays;
   XDELETE (c);
 }
 
@@ -7107,16 +7105,11 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
       if (n == NULL)
 	{
 	  unsigned nflags = flags;
-	  if (!(gimplify_omp_ctxp->region_type & ORT_ACC)
-	      && (ctx->target_map_pointers_as_0len_arrays
-		  || ctx->target_map_scalars_firstprivate))
+	  if (ctx->target_map_pointers_as_0len_arrays
+	      || ctx->target_map_scalars_firstprivate)
 	    {
 	      bool is_declare_target = false;
 	      bool is_scalar = false;
-	      bool maybe_0len_array = true;
-	      if (gimplify_omp_ctxp->region_type & ORT_ACC)
-		maybe_0len_array
-		  = gimplify_omp_ctxp->ptr_arrays->contains (decl);
 	      if (is_global_var (decl)
 		  && varpool_node::get_create (decl)->offloadable)
 		{
@@ -7138,7 +7131,6 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
 	      if (is_declare_target)
 		;
 	      else if (ctx->target_map_pointers_as_0len_arrays
-		       && maybe_0len_array
 		       && (TREE_CODE (TREE_TYPE (decl)) == POINTER_TYPE
 			   || (TREE_CODE (TREE_TYPE (decl)) == REFERENCE_TYPE
 			       && TREE_CODE (TREE_TYPE (TREE_TYPE (decl)))
@@ -7472,7 +7464,7 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
   ctx = new_omp_context (region_type);
   ctx->clauses = *list_p;
   outer_ctx = ctx->outer_context;
-  if (code == OMP_TARGET || code == OACC_PARALLEL)
+  if (code == OMP_TARGET)
     {
       if (!lang_GNU_Fortran () || (region_type & ORT_ACC))
 	ctx->target_map_pointers_as_0len_arrays = true;
@@ -12198,18 +12190,12 @@ gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
 	case POINTER_PLUS_EXPR:
 	  {
 	    enum gimplify_status r0, r1;
-	    bool seen_omp_ctx = gimplify_omp_ctxp;
-	    tree base_ptr = TREE_OPERAND (*expr_p, 0);
-	    if (seen_omp_ctx)
-	      gimplify_omp_ctxp->ptr_arrays->add (base_ptr);
 	    r0 = gimplify_expr (&TREE_OPERAND (*expr_p, 0), pre_p,
 				post_p, is_gimple_val, fb_rvalue);
 	    r1 = gimplify_expr (&TREE_OPERAND (*expr_p, 1), pre_p,
 				post_p, is_gimple_val, fb_rvalue);
 	    recalculate_side_effects (*expr_p);
 	    ret = MIN (r0, r1);
-	    if (seen_omp_ctx)
-	      gimplify_omp_ctxp->ptr_arrays->remove (base_ptr);
 	    break;
 	  }
 
