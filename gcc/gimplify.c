@@ -6997,7 +6997,11 @@ oacc_default_clause (struct gimplify_omp_ctx *ctx, tree decl, unsigned flags)
     case ORT_ACC_PARALLEL:
       rkind = "parallel";
 
-      if (is_private)
+      if (TREE_CODE (type) == POINTER_TYPE
+	  || (TREE_CODE (type) == REFERENCE_TYPE
+	      && TREE_CODE (TREE_TYPE (type)) == POINTER_TYPE))
+	flags |= GOVD_MAP | GOVD_MAP_0LEN_ARRAY;
+      else if (is_private)
 	flags |= GOVD_FIRSTPRIVATE;
       else if (on_device || declared)
 	flags |= GOVD_MAP;
@@ -7103,8 +7107,9 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
       if (n == NULL)
 	{
 	  unsigned nflags = flags;
-	  if (ctx->target_map_pointers_as_0len_arrays
-	      || ctx->target_map_scalars_firstprivate)
+	  if (!(gimplify_omp_ctxp->region_type & ORT_ACC)
+	      && (ctx->target_map_pointers_as_0len_arrays
+		  || ctx->target_map_scalars_firstprivate))
 	    {
 	      bool is_declare_target = false;
 	      bool is_scalar = false;
