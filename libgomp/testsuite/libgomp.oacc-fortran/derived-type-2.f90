@@ -17,7 +17,7 @@ program main
   type (dtype), dimension(n) :: d1
   type (dtype) :: d2
   external process
-  
+
   allocate (d2%ary(n))
 
   !$acc enter data create (d2%ary)
@@ -35,7 +35,7 @@ program main
   do i = 1, n
      if (d2%ary(i) /= i + 1) call abort
   end do
-  
+
   !$acc data copy(d1(1:n))
   !$acc parallel loop
   do i = 1, n
