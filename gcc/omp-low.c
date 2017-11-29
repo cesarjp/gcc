@@ -1800,10 +1800,13 @@ omp_maybe_offloaded_ctx (omp_context *ctx)
 }
 
 /* Build a decl for the omp child function.  It'll not contain a body
-   yet, just the bare decl.  */
+   yet, just the bare decl.  Unlike omp child functions, acc child
+   functions for parallel regions have one argument per data
+   mapping.  */
 
 static void
-create_omp_child_function (omp_context *ctx, bool task_copy)
+create_omp_child_function (omp_context *ctx, bool task_copy,
+			   unsigned int map_cnt = 0)
 {
   tree decl, type, name, t;
 
@@ -1824,6 +1827,13 @@ create_omp_child_function (omp_context *ctx, bool task_copy)
       cilk_var_type = cilk_for_check_loop_diff_type (type);
       type = build_function_type_list (void_type_node, ptr_type_node,
 				       cilk_var_type, cilk_var_type, NULL_TREE);
+    }
+  else if (is_oacc_parallel (ctx))
+    {
+      tree *arg_types = (tree *) alloca (sizeof (tree) * map_cnt);
+      for (unsigned int i = 0; i < map_cnt; i++)
+	arg_types[i] = ptr_type_node;
+      type = build_function_type_array (void_type_node, map_cnt, arg_types);
     }
   else
     type = build_function_type_list (void_type_node, ptr_type_node, NULL_TREE);
@@ -2621,9 +2631,6 @@ scan_omp_target (gomp_target *stmt, omp_context *outer_ctx)
   bool base_pointers_restrict = false;
   if (offloaded)
     {
-      create_omp_child_function (ctx, false);
-      gimple_omp_target_set_child_fn (stmt, ctx->cb.dst_fn);
-
       base_pointers_restrict = omp_target_base_pointers_restrict_p (clauses);
       if (base_pointers_restrict
 	  && dump_file && (dump_flags & TDF_DETAILS))
@@ -7980,7 +7987,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
     }
   else if (data_region)
     tgt_body = gimple_omp_body (stmt);
-  child_fn = ctx->cb.dst_fn;
 
   push_gimplify_context ();
   fplist = NULL;
@@ -8256,6 +8262,10 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 
   if (offloaded)
     {
+      create_omp_child_function (ctx, false, map_cnt);
+      gimple_omp_target_set_child_fn (stmt, ctx->cb.dst_fn);
+      child_fn = ctx->cb.dst_fn;
+
       /* Declare all the variables created by mapping and the variables
 	 declared in the scope of the target body.  */
       record_vars_into (ctx->block_vars, child_fn);
