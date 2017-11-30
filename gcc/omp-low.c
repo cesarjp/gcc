@@ -322,6 +322,14 @@ maybe_lookup_decl (const_tree var, omp_context *ctx)
 }
 
 static inline tree
+lookup_parm (const_tree var, omp_context *ctx)
+{
+  splay_tree_node n;
+  n = splay_tree_lookup (ctx->parm_map, (splay_tree_key) var);
+  return (tree) n->value;
+}
+
+static inline tree
 lookup_field (tree var, omp_context *ctx)
 {
   splay_tree_node n;
@@ -500,17 +508,24 @@ omp_build_component_ref (tree obj, tree field)
 static tree
 build_receiver_ref (tree var, bool by_ref, omp_context *ctx)
 {
+  bool offloaded = is_gimple_omp_offloaded (ctx->stmt);
   tree x, field = lookup_field (var, ctx);
 
-  /* If the receiver record type was remapped in the child function,
-     remap the field into the new record type.  */
-  x = maybe_lookup_field (field, ctx);
-  if (x != NULL)
-    field = x;
+  if (offloaded)
+    x = lookup_parm (var, ctx);
+  else
+    {
+      /* If the receiver record type was remapped in the child function,
+	 remap the field into the new record type.  */
+      x = maybe_lookup_field (field, ctx);
+      if (x != NULL)
+	field = x;
 
-  x = build_simple_mem_ref (ctx->receiver_decl);
-  TREE_THIS_NOTRAP (x) = 1;
-  x = omp_build_component_ref (x, field);
+      x = build_simple_mem_ref (ctx->receiver_decl);
+      TREE_THIS_NOTRAP (x) = 1;
+      x = omp_build_component_ref (x, field);
+    }
+
   if (by_ref)
     {
       x = build_simple_mem_ref (x);
@@ -528,6 +543,7 @@ static tree
 build_outer_var_ref (tree var, omp_context *ctx,
 		     enum omp_clause_code code = OMP_CLAUSE_ERROR)
 {
+  /* TODO: use the parm decl for receiver vars.  */
   tree x;
 
   if (is_global_var (maybe_lookup_decl_in_outer_ctx (var, ctx)))
@@ -648,6 +664,9 @@ build_sender_ref (tree var, omp_context *ctx)
 static void
 install_parm_decl (tree var, omp_context *ctx)
 {
+  if (!is_gimple_omp_offloaded (ctx->stmt))
+    return;
+
   splay_tree_key key = (splay_tree_key) var;
   tree decl_name = get_identifier (get_name (var));
   tree t = build_decl (DECL_SOURCE_LOCATION (var), PARM_DECL, decl_name,
