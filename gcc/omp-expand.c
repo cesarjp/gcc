@@ -7171,7 +7171,7 @@ expand_omp_target (struct omp_region *region)
 	 .OMP_DATA_I may have been converted into a different local
 	 variable.  In which case, we need to keep the assignment.  */
       tree data_arg = gimple_omp_target_data_arg (entry_stmt);
-      if (data_arg)
+      if (data_arg && 0)
 	{
 	  basic_block entry_succ_bb = single_succ (entry_bb);
 	  gimple_stmt_iterator gsi;

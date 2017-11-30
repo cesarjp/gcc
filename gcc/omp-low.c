@@ -512,7 +512,11 @@ build_receiver_ref (tree var, bool by_ref, omp_context *ctx)
   tree x, field = lookup_field (var, ctx);
 
   if (offloaded)
-    x = lookup_parm (var, ctx);
+    {
+      //tree type = build_pointer_type (TREE_TYPE (var));
+      x = lookup_parm (var, ctx);
+      //x = fold_build1 (VIEW_CONVERT_EXPR, type, x);
+    }
   else
     {
       /* If the receiver record type was remapped in the child function,
@@ -669,11 +673,15 @@ install_parm_decl (tree var, omp_context *ctx)
 
   splay_tree_key key = (splay_tree_key) var;
   tree decl_name = get_identifier (get_name (var));
+  tree type = build_pointer_type (TREE_TYPE (var));
+//  tree t = build_decl (DECL_SOURCE_LOCATION (var), PARM_DECL, decl_name,
+//		  ptr_type_node);
   tree t = build_decl (DECL_SOURCE_LOCATION (var), PARM_DECL, decl_name,
-		  ptr_type_node);
+		       type);
   DECL_ARTIFICIAL (t) = 1;
   DECL_NAMELESS (t) = 1;
-  DECL_ARG_TYPE (t) = ptr_type_node;
+  //DECL_ARG_TYPE (t) = ptr_type_node;
+  DECL_ARG_TYPE (t) = type;
   DECL_CONTEXT (t) = current_function_decl;
   TREE_USED (t) = 1;
   TREE_READONLY (t) = 1;
@@ -8414,6 +8422,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
       vec_alloc (vsize, map_cnt);
       vec_alloc (vkind, map_cnt);
       unsigned int map_idx = 0;
+      tree decl_args = NULL_TREE, temp;
 
       for (c = clauses; c ; c = OMP_CLAUSE_CHAIN (c))
 	switch (OMP_CLAUSE_CODE (c))
@@ -8611,6 +8620,12 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    if (s == NULL_TREE)
 	      s = integer_one_node;
 	    s = fold_convert (size_type_node, s);
+	    if (offloaded)
+	      {
+		temp = lookup_parm (ovar, ctx);
+		DECL_CHAIN (temp) = decl_args;
+		decl_args = temp;
+	      }
 	    purpose = size_int (map_idx++);
 	    CONSTRUCTOR_APPEND_ELT (vsize, purpose, s);
 	    if (TREE_CODE (s) != INTEGER_CST)
@@ -8751,6 +8766,12 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    else
 	      s = TYPE_SIZE_UNIT (TREE_TYPE (ovar));
 	    s = fold_convert (size_type_node, s);
+	    if (offloaded)
+	      {
+		temp = lookup_parm (ovar, ctx);
+		DECL_CHAIN (temp) = decl_args;
+		decl_args = temp;
+	      }
 	    purpose = size_int (map_idx++);
 	    CONSTRUCTOR_APPEND_ELT (vsize, purpose, s);
 	    if (TREE_CODE (s) != INTEGER_CST)
@@ -8790,6 +8811,12 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	      }
 	    gimplify_assign (x, var, &ilist);
 	    s = size_int (0);
+	    if (offloaded)
+	      {
+		temp = lookup_parm (ovar, ctx);
+		DECL_CHAIN (temp) = decl_args;
+		decl_args = temp;
+	      }
 	    purpose = size_int (map_idx++);
 	    CONSTRUCTOR_APPEND_ELT (vsize, purpose, s);
 	    gcc_checking_assert (tkind
@@ -8802,6 +8829,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	  }
 
       gcc_assert (map_idx == map_cnt);
+      DECL_ARGUMENTS (child_fn) = nreverse (decl_args);
 
       DECL_INITIAL (TREE_VEC_ELT (t, 1))
 	= build_constructor (TREE_TYPE (TREE_VEC_ELT (t, 1)), vsize);
