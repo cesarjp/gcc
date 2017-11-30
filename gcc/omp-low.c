@@ -7941,7 +7941,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
   gimple_seq tgt_body, olist, ilist, fplist, new_body;
   location_t loc = gimple_location (stmt);
   bool offloaded, data_region;
-  unsigned int map_cnt = 0;
+  unsigned int map_cnt = 0, init_cnt = 0;
 
   offloaded = is_gimple_omp_offloaded (stmt);
   switch (gimple_omp_target_kind (stmt))
@@ -7990,6 +7990,77 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 
   push_gimplify_context ();
   fplist = NULL;
+
+  /* Determine init_cnt to finish initialize ctx.  */
+
+  if (offloaded)
+    {
+      for (c = clauses; c ; c = OMP_CLAUSE_CHAIN (c))
+	switch (OMP_CLAUSE_CODE (c))
+	  {
+	    tree var;
+
+	  default:
+	    break;
+	  case OMP_CLAUSE_MAP:
+	  case OMP_CLAUSE_TO:
+	  case OMP_CLAUSE_FROM:
+	  init_oacc_firstprivate:
+	    var = OMP_CLAUSE_DECL (c);
+	    if (!DECL_P (var))
+	      {
+		if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP
+		    || (!OMP_CLAUSE_MAP_ZERO_BIAS_ARRAY_SECTION (c)
+			&& (OMP_CLAUSE_MAP_KIND (c)
+			    != GOMP_MAP_FIRSTPRIVATE_POINTER)))
+		  init_cnt++;
+		continue;
+	      }
+
+	    if (DECL_SIZE (var)
+		&& TREE_CODE (DECL_SIZE (var)) != INTEGER_CST)
+	      {
+		tree var2 = DECL_VALUE_EXPR (var);
+		gcc_assert (TREE_CODE (var2) == INDIRECT_REF);
+		var2 = TREE_OPERAND (var2, 0);
+		gcc_assert (DECL_P (var2));
+		var = var2;
+	      }
+
+	    if (offloaded
+		&& OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
+		&& (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER
+		    || (OMP_CLAUSE_MAP_KIND (c)
+			== GOMP_MAP_FIRSTPRIVATE_REFERENCE)))
+	      {
+		continue;
+	      }
+
+	    if (!maybe_lookup_field (var, ctx))
+	      continue;
+
+	    init_cnt++;
+	    break;
+
+	  case OMP_CLAUSE_FIRSTPRIVATE:
+	    if (is_oacc_parallel (ctx))
+	      goto init_oacc_firstprivate;
+	    init_cnt++;
+	    break;
+
+	  case OMP_CLAUSE_USE_DEVICE_PTR:
+	  case OMP_CLAUSE_IS_DEVICE_PTR:
+	    init_cnt++;
+	    break;
+	  }
+
+      /* Initialize the offloaded child function.  */
+
+      create_omp_child_function (ctx, false, map_cnt);
+      gimple_omp_target_set_child_fn (stmt, ctx->cb.dst_fn);
+    }
+
+  child_fn = ctx->cb.dst_fn;
 
   for (c = clauses; c ; c = OMP_CLAUSE_CHAIN (c))
     switch (OMP_CLAUSE_CODE (c))
@@ -8253,6 +8324,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 
   if (offloaded)
     {
+      gcc_assert (init_cnt == map_cnt);
       target_nesting_level++;
       lower_omp (&tgt_body, ctx);
       target_nesting_level--;
@@ -8262,10 +8334,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 
   if (offloaded)
     {
-      create_omp_child_function (ctx, false, map_cnt);
-      gimple_omp_target_set_child_fn (stmt, ctx->cb.dst_fn);
-      child_fn = ctx->cb.dst_fn;
-
       /* Declare all the variables created by mapping and the variables
 	 declared in the scope of the target body.  */
       record_vars_into (ctx->block_vars, child_fn);
