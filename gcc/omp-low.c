@@ -8056,7 +8056,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 
       /* Initialize the offloaded child function.  */
 
-      create_omp_child_function (ctx, false, map_cnt);
+      create_omp_child_function (ctx, false, init_cnt);
       gimple_omp_target_set_child_fn (stmt, ctx->cb.dst_fn);
     }
 
