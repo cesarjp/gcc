@@ -89,6 +89,7 @@ struct omp_context
   /* Map variables to fields in a structure that allows communication
      between sending and receiving threads.  */
   splay_tree field_map;
+  splay_tree parm_map;
   tree record_type;
   tree sender_decl;
   tree receiver_decl;
@@ -644,6 +645,23 @@ build_sender_ref (tree var, omp_context *ctx)
   return build_sender_ref ((splay_tree_key) var, ctx);
 }
 
+static void
+install_parm_decl (tree var, omp_context *ctx)
+{
+  splay_tree_key key = (splay_tree_key) var;
+  tree decl_name = get_identifier (get_name (var));
+  tree t = build_decl (DECL_SOURCE_LOCATION (var), PARM_DECL, decl_name,
+		  ptr_type_node);
+  DECL_ARTIFICIAL (t) = 1;
+  DECL_NAMELESS (t) = 1;
+  DECL_ARG_TYPE (t) = ptr_type_node;
+  DECL_CONTEXT (t) = current_function_decl;
+  TREE_USED (t) = 1;
+  TREE_READONLY (t) = 1;
+
+  splay_tree_insert (ctx->parm_map, key, (splay_tree_value) t);
+}
+
 /* Add a new field for VAR inside the structure CTX->SENDER_DECL.  If
    BASE_POINTERS_RESTRICT, declare the field with restrict.  */
 
@@ -764,7 +782,10 @@ install_var_field (tree var, bool by_ref, int mask, omp_context *ctx,
     }
 
   if (mask & 1)
-    splay_tree_insert (ctx->field_map, key, (splay_tree_value) field);
+    {
+      splay_tree_insert (ctx->field_map, key, (splay_tree_value) field);
+      install_parm_decl (var, ctx);
+    }
   if ((mask & 2) && ctx->sfield_map)
     splay_tree_insert (ctx->sfield_map, key, (splay_tree_value) sfield);
 }
@@ -1068,6 +1089,8 @@ delete_omp_context (splay_tree_value value)
     splay_tree_delete (ctx->field_map);
   if (ctx->sfield_map)
     splay_tree_delete (ctx->sfield_map);
+  if (ctx->parm_map)
+    splay_tree_delete (ctx->parm_map);
 
   /* We hijacked DECL_ABSTRACT_ORIGIN earlier.  We need to clear it before
      it produces corrupt debug information.  */
@@ -2618,6 +2641,7 @@ scan_omp_target (gomp_target *stmt, omp_context *outer_ctx)
 
   ctx = new_omp_context (stmt, outer_ctx);
   ctx->field_map = splay_tree_new (splay_tree_compare_pointers, 0, 0);
+  ctx->parm_map = splay_tree_new (splay_tree_compare_pointers, 0, 0);
   ctx->default_kind = OMP_CLAUSE_DEFAULT_SHARED;
   ctx->record_type = lang_hooks.types.make_type (RECORD_TYPE);
   name = create_tmp_var_name (".omp_data_t");
@@ -8389,6 +8413,8 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    oacc_firstprivate_int = false;
 	    nc = c;
 	    ovar = OMP_CLAUSE_DECL (c);
+	    /* DEBUG: nothing to do for FIRSTPRIVATE pointer and reference
+	       mappings.  */
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 		&& (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER
 		    || (OMP_CLAUSE_MAP_KIND (c)
