@@ -1959,35 +1959,37 @@ create_omp_child_function (omp_context *ctx, bool task_copy,
       DECL_ARGUMENTS (decl) = t;
     }
 
-  tree data_name = get_identifier (".omp_data_i");
-  t = build_decl (DECL_SOURCE_LOCATION (decl), PARM_DECL, data_name,
-		  ptr_type_node);
-  DECL_ARTIFICIAL (t) = 1;
-  DECL_NAMELESS (t) = 1;
-  DECL_ARG_TYPE (t) = ptr_type_node;
-  DECL_CONTEXT (t) = current_function_decl;
-  TREE_USED (t) = 1;
-  TREE_READONLY (t) = 1;
-  if (cilk_for_count)
-    DECL_CHAIN (t) = DECL_ARGUMENTS (decl);
-  DECL_ARGUMENTS (decl) = t;
-  if (!task_copy)
-    ctx->receiver_decl = t;
-  else
+  if (!is_oacc_parallel (ctx))
     {
-      t = build_decl (DECL_SOURCE_LOCATION (decl),
-		      PARM_DECL, get_identifier (".omp_data_o"),
+      tree data_name = get_identifier (".omp_data_i");
+      t = build_decl (DECL_SOURCE_LOCATION (decl), PARM_DECL, data_name,
 		      ptr_type_node);
       DECL_ARTIFICIAL (t) = 1;
       DECL_NAMELESS (t) = 1;
       DECL_ARG_TYPE (t) = ptr_type_node;
       DECL_CONTEXT (t) = current_function_decl;
       TREE_USED (t) = 1;
-      TREE_ADDRESSABLE (t) = 1;
-      DECL_CHAIN (t) = DECL_ARGUMENTS (decl);
+      TREE_READONLY (t) = 1;
+      if (cilk_for_count)
+	DECL_CHAIN (t) = DECL_ARGUMENTS (decl);
       DECL_ARGUMENTS (decl) = t;
+      if (!task_copy)
+	ctx->receiver_decl = t;
+      else
+	{
+	  t = build_decl (DECL_SOURCE_LOCATION (decl),
+			  PARM_DECL, get_identifier (".omp_data_o"),
+			  ptr_type_node);
+	  DECL_ARTIFICIAL (t) = 1;
+	  DECL_NAMELESS (t) = 1;
+	  DECL_ARG_TYPE (t) = ptr_type_node;
+	  DECL_CONTEXT (t) = current_function_decl;
+	  TREE_USED (t) = 1;
+	  TREE_ADDRESSABLE (t) = 1;
+	  DECL_CHAIN (t) = DECL_ARGUMENTS (decl);
+	  DECL_ARGUMENTS (decl) = t;
+	}
     }
-
   /* Allocate memory for the function structure.  The call to
      allocate_struct_function clobbers CFUN, so we need to restore
      it afterward.  */
@@ -8868,9 +8870,9 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
     {
       t = build_fold_addr_expr_loc (loc, ctx->sender_decl);
       /* fixup_child_record_type might have changed receiver_decl's type.  */
-      t = fold_convert_loc (loc, TREE_TYPE (ctx->receiver_decl), t);
-      gimple_seq_add_stmt (&new_body,
-	  		   gimple_build_assign (ctx->receiver_decl, t));
+//      t = fold_convert_loc (loc, TREE_TYPE (ctx->receiver_decl), t);
+//      gimple_seq_add_stmt (&new_body,
+//	  		   gimple_build_assign (ctx->receiver_decl, t));
     }
   gimple_seq_add_seq (&new_body, fplist);
 
