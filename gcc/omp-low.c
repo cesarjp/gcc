@@ -685,6 +685,7 @@ install_parm_decl (tree var, omp_context *ctx)
   DECL_CONTEXT (t) = current_function_decl;
   TREE_USED (t) = 1;
   TREE_READONLY (t) = 1;
+  DECL_NONLOCAL (t) = 1;
 
   splay_tree_insert (ctx->parm_map, key, (splay_tree_value) t);
 }

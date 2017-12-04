@@ -69,6 +69,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-propagate.h"
 #include "gimple-fold.h"
 
+bool inside_pass_dce = false;
+
 static struct stmt_stats
 {
   int total;
@@ -282,6 +284,21 @@ mark_stmt_if_obviously_necessary (gimple *stmt, bool aggressive)
 
     default:
       break;
+    }
+
+  if (inside_pass_dce && 0)
+    {
+      debug_gimple_stmt (stmt);
+      int gv = gimple_has_volatile_ops (stmt);
+      printf ("\tgimple_has_volatile_ops = %d\n", gv);
+
+      int ctrl = is_ctrl_altering_stmt (stmt);
+      printf ("\tis_ctrl_altering_stmt = %d\n", ctrl);
+
+      int clobber = stmt_may_clobber_global_p (stmt);
+      printf ("\tstmt_may_clobber_global_p = %d\n", clobber);
+
+      //gcc_assert (gv == 0 && ctrl == 0 && clobber == 0);
     }
 
   /* If the statement has volatile operands, it needs to be preserved.
@@ -1653,7 +1670,11 @@ tree_ssa_dce (void)
 static unsigned int
 tree_ssa_cd_dce (void)
 {
-  return perform_tree_ssa_dce (/*aggressive=*/optimize >= 2);
+  unsigned int t;
+  inside_pass_dce = true;
+  t = perform_tree_ssa_dce (/*aggressive=*/optimize >= 2);
+  inside_pass_dce = false;
+  return t;
 }
 
 namespace {

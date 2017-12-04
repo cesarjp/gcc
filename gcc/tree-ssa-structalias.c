@@ -40,6 +40,7 @@
 #include "params.h"
 #include "gimple-walk.h"
 #include "varasm.h"
+#include "omp-general.h"
 
 
 /* The idea behind this analyzer is to generate set constraints from the
@@ -5787,6 +5788,7 @@ create_function_info_for (tree decl, const char *name, bool add_id,
   arg = DECL_ARGUMENTS (decl);
   for (i = 0; i < num_args; i++)
     {
+      /* CJP: Analyze this.  */
       varinfo_t argvi;
       const char *newname;
       char *tempname;
@@ -6485,6 +6487,11 @@ find_what_p_points_to (tree fndecl, tree p)
       && (TREE_CODE (SSA_NAME_VAR (p)) == PARM_DECL
 	  || TREE_CODE (SSA_NAME_VAR (p)) == RESULT_DECL))
     lookup_p = SSA_NAME_VAR (p);
+
+//  if (TREE_CODE (lookup_p) == PARM_DECL
+//      && current_function_decl
+//      && oacc_get_fn_attrib (current_function_decl) != NULL)
+//    nonnull = true;
 
   vi = lookup_vi_for_tree (lookup_p);
   if (!vi)
