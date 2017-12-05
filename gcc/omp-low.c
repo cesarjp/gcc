@@ -676,7 +676,7 @@ install_parm_decl (tree var, omp_context *ctx)
   tree type = build_pointer_type (TREE_TYPE (var));
   location_t loc = UNKNOWN_LOCATION;
 
-  if (TREE_CODE (var) != MEM_REF)
+  if (DECL_P (var))
     {
       decl_name = get_identifier (get_name (var));
       loc = DECL_SOURCE_LOCATION (var);
