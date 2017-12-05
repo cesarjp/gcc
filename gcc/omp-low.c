@@ -672,15 +672,18 @@ install_parm_decl (tree var, omp_context *ctx)
     return;
 
   splay_tree_key key = (splay_tree_key) var;
-  tree decl_name = get_identifier (get_name (var));
+  tree decl_name = NULL_TREE, t;
   tree type = build_pointer_type (TREE_TYPE (var));
-//  tree t = build_decl (DECL_SOURCE_LOCATION (var), PARM_DECL, decl_name,
-//		  ptr_type_node);
-  tree t = build_decl (DECL_SOURCE_LOCATION (var), PARM_DECL, decl_name,
-		       type);
+  location_t loc = UNKNOWN_LOCATION;
+
+  if (TREE_CODE (var) != MEM_REF)
+    {
+      decl_name = get_identifier (get_name (var));
+      loc = DECL_SOURCE_LOCATION (var);
+    }
+  t = build_decl (loc, PARM_DECL, decl_name, type);
   DECL_ARTIFICIAL (t) = 1;
   DECL_NAMELESS (t) = 1;
-  //DECL_ARG_TYPE (t) = ptr_type_node;
   DECL_ARG_TYPE (t) = type;
   DECL_CONTEXT (t) = current_function_decl;
   TREE_USED (t) = 1;
@@ -1557,6 +1560,7 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 		  insert_field_into_struct (ctx->record_type, field);
 		  splay_tree_insert (ctx->field_map, (splay_tree_key) decl,
 				     (splay_tree_value) field);
+		  install_parm_decl (decl, ctx);
 		}
 	    }
 	  break;
@@ -7982,6 +7986,21 @@ convert_from_firstprivate_int (tree var, tree orig_type, bool is_ref,
   return var;
 }
 
+static tree
+append_decl_arg (tree var, tree decl_args, omp_context *ctx)
+{
+  if (!is_gimple_omp_offloaded (ctx->stmt))
+    return NULL_TREE;
+
+  tree temp = lookup_parm (var, ctx);
+  DECL_CHAIN (temp) = decl_args;
+
+//  print_generic_expr (stdout, decl_args, 0);
+//  print_generic_expr (stdout, temp, 0);
+
+  return temp;
+}
+
 /* Lower the GIMPLE_OMP_TARGET in the current statement
    in GSI_P.  CTX holds context information for the directive.  */
 
@@ -8116,6 +8135,8 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 
   child_fn = ctx->cb.dst_fn;
 
+  /* Clause Pass 1: Scan and prepare sender decls VALUE_EXPRs for
+     usage on the child function.  */
   for (c = clauses; c ; c = OMP_CLAUSE_CHAIN (c))
     switch (OMP_CLAUSE_CODE (c))
       {
@@ -8174,6 +8195,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
       case OMP_CLAUSE_FROM:
       oacc_firstprivate:
 	var = OMP_CLAUSE_DECL (c);
+	/* Skip any mem_refs.  */
 	if (!DECL_P (var))
 	  {
 	    if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP
@@ -8184,6 +8206,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    continue;
 	  }
 
+	/* TODO: What type of decls are variable sized?  */
 	if (DECL_SIZE (var)
 	    && TREE_CODE (DECL_SIZE (var)) != INTEGER_CST)
 	  {
@@ -8194,6 +8217,8 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    var = var2;
 	  }
 
+	/* Install local reference, via DECL_VALUE_EXPR, to the sender field
+	   decl as needed.  This is only for firstprivate pointers.  */
 	if (offloaded
 	    && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 	    && (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER
@@ -8425,8 +8450,9 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
       vec_alloc (vsize, map_cnt);
       vec_alloc (vkind, map_cnt);
       unsigned int map_idx = 0;
-      tree decl_args = NULL_TREE, temp;
+      tree decl_args = NULL_TREE;
 
+      /* Set up sender decls.  */
       for (c = clauses; c ; c = OMP_CLAUSE_CHAIN (c))
 	switch (OMP_CLAUSE_CODE (c))
 	  {
@@ -8623,12 +8649,9 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    if (s == NULL_TREE)
 	      s = integer_one_node;
 	    s = fold_convert (size_type_node, s);
-	    if (offloaded)
-	      {
-		temp = lookup_parm (ovar, ctx);
-		DECL_CHAIN (temp) = decl_args;
-		decl_args = temp;
-	      }
+	    /* FIXME: Something is wrong here for array MEM_REF data
+	       mappings.  */
+	    decl_args = append_decl_arg (ovar, decl_args, ctx);
 	    purpose = size_int (map_idx++);
 	    CONSTRUCTOR_APPEND_ELT (vsize, purpose, s);
 	    if (TREE_CODE (s) != INTEGER_CST)
@@ -8769,12 +8792,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    else
 	      s = TYPE_SIZE_UNIT (TREE_TYPE (ovar));
 	    s = fold_convert (size_type_node, s);
-	    if (offloaded)
-	      {
-		temp = lookup_parm (ovar, ctx);
-		DECL_CHAIN (temp) = decl_args;
-		decl_args = temp;
-	      }
+	    decl_args = append_decl_arg (ovar, decl_args, ctx);
 	    purpose = size_int (map_idx++);
 	    CONSTRUCTOR_APPEND_ELT (vsize, purpose, s);
 	    if (TREE_CODE (s) != INTEGER_CST)
@@ -8814,12 +8832,7 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	      }
 	    gimplify_assign (x, var, &ilist);
 	    s = size_int (0);
-	    if (offloaded)
-	      {
-		temp = lookup_parm (ovar, ctx);
-		DECL_CHAIN (temp) = decl_args;
-		decl_args = temp;
-	      }
+	    decl_args = append_decl_arg (ovar, decl_args, ctx);
 	    purpose = size_int (map_idx++);
 	    CONSTRUCTOR_APPEND_ELT (vsize, purpose, s);
 	    gcc_checking_assert (tkind

@@ -1638,7 +1638,7 @@ GOMP_OFFLOAD_openacc_exec (void (*fn) (void *), size_t mapnum,
 
   if (mapnum > 0)
     for (int i = 0; i < mapnum; i++)
-      hp[i] = (devaddrs[i] ? &devaddrs[i] : hostaddrs[i]);
+      hp[i] = (devaddrs[i] ? &devaddrs[i] : &hostaddrs[i]);
 
   /* Copy the (device) pointers to arguments to the device (dp and hp might in
      fact have the same value on a unified-memory system).  */
