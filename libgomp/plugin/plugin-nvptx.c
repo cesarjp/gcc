@@ -149,6 +149,13 @@ init_cuda_lib (void)
 #define CU_JIT_NEW_SM3X_OPT 15
 #endif
 
+/* It's not clear if cuLaunchKernel caches the kernel launch
+   parameters when that function is called.  If it does not, then the
+   runtime will need to.  Settin cache_kernel_args to 1 caches those
+   arguments, otherwise it does not.  */
+
+static const int cache_kernel_args = 0;
+
 /* Convenience macros for the frequently used CUDA library call and
    error handling sequence as well as CUDA library calls that
    do the error checking themselves or don't do it at all.  */
@@ -1640,7 +1647,7 @@ GOMP_OFFLOAD_openacc_exec (void (*fn) (void *), size_t mapnum,
     for (int i = 0; i < mapnum; i++)
       hp[i] = (devaddrs[i] ? &devaddrs[i] : &hostaddrs[i]);
 
-  /* Copy the (device) pointers to arguments to the device (dp and hp might in
+  /* Copy the (device) pointers to arguments to the device (hp might in
      fact have the same value on a unified-memory system).  */
   struct goacc_thread *thr = GOMP_PLUGIN_goacc_thread ();
   acc_prof_info *prof_info = thr->prof_info;
@@ -1689,6 +1696,14 @@ GOMP_OFFLOAD_openacc_exec (void (*fn) (void *), size_t mapnum,
     GOMP_PLUGIN_fatal ("cuStreamSynchronize error: %s", cuda_error (r));
 }
 
+static void
+cuda_free_argmem (void *ptr)
+{
+  void **block = (void **) ptr;
+  free (block[0]);
+  free (block);
+}
+
 void
 GOMP_OFFLOAD_openacc_async_exec (void (*fn) (void *), size_t mapnum,
 				 void **hostaddrs, void **devaddrs,
@@ -1702,13 +1717,19 @@ GOMP_OFFLOAD_openacc_async_exec (void (*fn) (void *), size_t mapnum,
 
   if (mapnum > 0)
     {
-      block = (void **) GOMP_PLUGIN_malloc ((mapnum + 2) * sizeof (void *));
-      hp = block + 2;
+      if (cache_kernel_args > 0)
+	{
+	  block = (void **) GOMP_PLUGIN_malloc ((mapnum + 2) * sizeof (void *));
+	  hp = block + 2;
+	}
+      else
+	hp = alloca (sizeof (void *) * mapnum);
+
       for (int i = 0; i < mapnum; i++)
-	hp[i] = (devaddrs[i] ? devaddrs[i] : hostaddrs[i]);
+	hp[i] = (devaddrs[i] ? &devaddrs[i] : &hostaddrs[i]);
     }
 
-  /* Copy the (device) pointers to arguments to the device (dp and hp might in
+  /* Copy the (device) pointers to arguments to the device (hp might in
      fact have the same value on a unified-memory system).  */
   struct goacc_thread *thr = GOMP_PLUGIN_goacc_thread ();
   acc_prof_info *prof_info = thr->prof_info;
@@ -1737,6 +1758,15 @@ GOMP_OFFLOAD_openacc_async_exec (void (*fn) (void *), size_t mapnum,
 					    api_info);
     }
 
+  if (cache_kernel_args && mapnum > 0)
+    {
+      block[0] = hp;
+
+      struct goacc_thread *thr = GOMP_PLUGIN_goacc_thread ();
+      struct nvptx_thread *nvthd = (struct nvptx_thread *) thr->target_tls;
+      block[1] = (void *) nvthd->ptx_dev;
+    }
+
   if (profiling_dispatch_p)
     {
       prof_info->event_type = acc_ev_enqueue_upload_end;
@@ -1747,6 +1777,9 @@ GOMP_OFFLOAD_openacc_async_exec (void (*fn) (void *), size_t mapnum,
   
   nvptx_exec (fn, mapnum, hostaddrs, devaddrs, dims, targ_mem_desc,
 	      hp, aq->cuda_stream);
+
+  if (cache_kernel_args && mapnum > 0)
+    GOMP_OFFLOAD_openacc_async_queue_callback (aq, cuda_free_argmem, block);
 }
 
 void *
