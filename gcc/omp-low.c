@@ -1883,7 +1883,7 @@ create_omp_child_function (omp_context *ctx, bool task_copy,
       type = build_function_type_list (void_type_node, ptr_type_node,
 				       cilk_var_type, cilk_var_type, NULL_TREE);
     }
-  else if (is_oacc_parallel (ctx))
+  else if (is_gimple_omp_offloaded (ctx->stmt))
     {
       tree *arg_types = (tree *) alloca (sizeof (tree) * map_cnt);
       for (unsigned int i = 0; i < map_cnt; i++)
@@ -1964,7 +1964,7 @@ create_omp_child_function (omp_context *ctx, bool task_copy,
       DECL_ARGUMENTS (decl) = t;
     }
 
-  if (!is_oacc_parallel (ctx))
+  if (!is_gimple_omp_offloaded (ctx->stmt))
     {
       tree data_name = get_identifier (".omp_data_i");
       t = build_decl (DECL_SOURCE_LOCATION (decl), PARM_DECL, data_name,
