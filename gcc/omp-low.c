@@ -688,7 +688,7 @@ install_parm_decl (tree var, omp_context *ctx)
   DECL_CONTEXT (t) = current_function_decl;
   TREE_USED (t) = 1;
   TREE_READONLY (t) = 1;
-  DECL_NONLOCAL (t) = 1;
+  //DECL_NONLOCAL (t) = 1;
 
   splay_tree_insert (ctx->parm_map, key, (splay_tree_value) t);
 }
@@ -8001,6 +8001,19 @@ append_decl_arg (tree var, tree decl_args, omp_context *ctx)
   return temp;
 }
 
+static int
+clobber_target_parms (splay_tree_node n, void *data)
+{
+  gimple_seq *olist = (gimple_seq *) data;
+  tree sender = (tree) n->key;
+  tree clobber = build_constructor (TREE_TYPE (sender), NULL);
+
+  TREE_THIS_VOLATILE (clobber) = 1;
+  gimple_seq_add_stmt (olist, gimple_build_assign (sender, clobber));
+
+  return 0;
+}
+
 /* Lower the GIMPLE_OMP_TARGET in the current statement
    in GSI_P.  CTX holds context information for the directive.  */
 
@@ -8872,6 +8885,9 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
       TREE_THIS_VOLATILE (clobber) = 1;
       gimple_seq_add_stmt (&olist, gimple_build_assign (ctx->sender_decl,
 							clobber));
+      /* Clobber all of the offloaded parameters.  */
+      if (offloaded)
+	splay_tree_foreach (ctx->parm_map, clobber_target_parms, &olist);
     }
 
   /* Once all the expansions are done, sequence all the different
