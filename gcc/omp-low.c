@@ -8885,7 +8885,12 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
       TREE_THIS_VOLATILE (clobber) = 1;
       gimple_seq_add_stmt (&olist, gimple_build_assign (ctx->sender_decl,
 							clobber));
-      /* Clobber all of the offloaded parameters.  */
+      /* Clobber all of the offloaded parameters.
+
+	 This might be too conservative, because maybe copyin and
+	 firstprivate variables might need to be clobbered?  Then
+	 again, without this cprop might try to do wrong things inside
+	 the offloaded region.  */
       if (offloaded)
 	splay_tree_foreach (ctx->parm_map, clobber_target_parms, &olist);
     }
