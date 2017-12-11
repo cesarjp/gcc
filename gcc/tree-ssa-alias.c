@@ -140,11 +140,6 @@ ptr_deref_may_alias_global_p (tree ptr)
 
   pi = SSA_NAME_PTR_INFO (ptr);
 
-//  FIXME:
-//  tree base = SSA_NAME_VAR (ptr);
-//  if (base && DECL_NONLOCAL (base))
-//    return true;
-
   /* If we do not have points-to information for this variable,
      we have to punt.  */
   if (!pi)

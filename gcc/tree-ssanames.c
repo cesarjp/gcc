@@ -405,10 +405,6 @@ get_ptr_nonnull (const_tree name)
   struct ptr_info_def *pi = SSA_NAME_PTR_INFO (name);
   if (pi == NULL)
     return false;
-
-  /* FIXME: maybe install a hack to check if the decl is a PARM_DECL
-     on an OpenACC offloaded function.  If so, return nonnull.  */
-
   /* TODO Now pt->null is conservatively set to true in PTA
      analysis. vrp is the only pass (including ipa-vrp)
      that clears pt.null via set_ptr_nonull when it knows
