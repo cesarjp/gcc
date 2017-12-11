@@ -8001,19 +8001,6 @@ append_decl_arg (tree var, tree decl_args, omp_context *ctx)
   return temp;
 }
 
-static int
-clobber_target_parms (splay_tree_node n, void *data)
-{
-  gimple_seq *olist = (gimple_seq *) data;
-  tree sender = (tree) n->key;
-  tree clobber = build_constructor (TREE_TYPE (sender), NULL);
-
-  TREE_THIS_VOLATILE (clobber) = 1;
-  gimple_seq_add_stmt (olist, gimple_build_assign (sender, clobber));
-
-  return 0;
-}
-
 /* Lower the GIMPLE_OMP_TARGET in the current statement
    in GSI_P.  CTX holds context information for the directive.  */
 
@@ -8885,14 +8872,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
       TREE_THIS_VOLATILE (clobber) = 1;
       gimple_seq_add_stmt (&olist, gimple_build_assign (ctx->sender_decl,
 							clobber));
-      /* Clobber all of the offloaded parameters.
-
-	 This might be too conservative, because maybe copyin and
-	 firstprivate variables might need to be clobbered?  Then
-	 again, without this cprop might try to do wrong things inside
-	 the offloaded region.  */
-//      if (offloaded)
-//	splay_tree_foreach (ctx->parm_map, clobber_target_parms, &olist);
     }
 
   /* Once all the expansions are done, sequence all the different
