@@ -8891,8 +8891,8 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	 firstprivate variables might need to be clobbered?  Then
 	 again, without this cprop might try to do wrong things inside
 	 the offloaded region.  */
-      if (offloaded)
-	splay_tree_foreach (ctx->parm_map, clobber_target_parms, &olist);
+//      if (offloaded)
+//	splay_tree_foreach (ctx->parm_map, clobber_target_parms, &olist);
     }
 
   /* Once all the expansions are done, sequence all the different
