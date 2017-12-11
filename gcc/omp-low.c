@@ -8845,7 +8845,8 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	  }
 
       gcc_assert (map_idx == map_cnt);
-      DECL_ARGUMENTS (child_fn) = nreverse (decl_args);
+      if (offloaded)
+	DECL_ARGUMENTS (child_fn) = nreverse (decl_args);
 
       DECL_INITIAL (TREE_VEC_ELT (t, 1))
 	= build_constructor (TREE_TYPE (TREE_VEC_ELT (t, 1)), vsize);
