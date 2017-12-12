@@ -110,13 +110,12 @@ static void goacc_wait (int async, int num_waits, va_list *ap);
    blocks to be copied to/from the device.  Varadic arguments are
    keyed optional parameters terminated with a zero.  */
 
-void
-GOACC_parallel_keyed (int device, void (*fn) (void *),
-		      size_t mapnum, void **hostaddrs, size_t *sizes,
-		      unsigned short *kinds, ...)
+static void
+GOACC_parallel_keyed_internal (int device, int args, void (*fn) (void *),
+			       size_t mapnum, void **hostaddrs, size_t *sizes,
+			       unsigned short *kinds, va_list *ap)
 {
   bool host_fallback = device == GOMP_DEVICE_HOST_FALLBACK;
-  va_list ap;
   struct goacc_thread *thr;
   struct gomp_device_descr *acc_dev;
   struct target_mem_desc *tgt;
@@ -222,9 +221,8 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
   for (i = 0; i != GOMP_DIM_MAX; i++)
     dims[i] = 0;
 
-  va_start (ap, kinds);
   /* TODO: This will need amending when device_type is implemented.  */
-  while ((tag = va_arg (ap, unsigned)) != 0)
+  while ((tag = va_arg (*ap, unsigned)) != 0)
     {
       if (GOMP_LAUNCH_DEVICE (tag))
 	gomp_fatal ("device_type '%d' offload parameters, libgomp is too old",
@@ -238,7 +236,7 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
 
 	    for (i = 0; i != GOMP_DIM_MAX; i++)
 	      if (mask & GOMP_DIM_MASK (i))
-		dims[i] = va_arg (ap, unsigned);
+		dims[i] = va_arg (*ap, unsigned);
 	  }
 	  break;
 
@@ -248,7 +246,7 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
 	    async = GOMP_LAUNCH_OP (tag);
 
 	    if (async == GOMP_LAUNCH_OP_MAX)
-	      async = va_arg (ap, unsigned);
+	      async = va_arg (*ap, unsigned);
 
 	    if (profiling_dispatch_p)
 	      {
@@ -267,7 +265,7 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
 	    int num_waits = ((signed short) GOMP_LAUNCH_OP (tag));
 
 	    if (num_waits > 0)
-	      goacc_wait (async, num_waits, &ap);
+	      goacc_wait (async, num_waits, ap);
 	    else if (num_waits == acc_async_noval)
 	      acc_wait_all_async (async);
 	    break;
@@ -278,7 +276,6 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
 		      " libgomp is too old", GOMP_LAUNCH_CODE (tag));
 	}
     }
-  va_end (ap);
   
   if (!(acc_dev->capabilities & GOMP_OFFLOAD_CAP_NATIVE_EXEC))
     {
@@ -379,6 +376,30 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
       thr->prof_info = NULL;
       thr->api_info = NULL;
     }
+}
+
+void
+GOACC_parallel_keyed (int device, void (*fn) (void *),
+		      size_t mapnum, void **hostaddrs, size_t *sizes,
+		      unsigned short *kinds, ...)
+{
+  va_list ap;
+  va_start (ap, kinds);
+  GOACC_parallel_keyed_internal (device, 1, fn, mapnum, hostaddrs, sizes,
+				 kinds, &ap);
+  va_end (ap);
+}
+
+void
+GOACC_parallel_keyed_v2 (int device, int args, void (*fn) (void *),
+			 size_t mapnum, void **hostaddrs, size_t *sizes,
+			 unsigned short *kinds, ...)
+{
+  va_list ap;
+  va_start (ap, kinds);
+  GOACC_parallel_keyed_internal (device, args, fn, mapnum, hostaddrs, sizes,
+				 kinds, &ap);
+  va_end (ap);
 }
 
 /* Legacy entry point, only provide host execution.  */
