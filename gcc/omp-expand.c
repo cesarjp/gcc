@@ -7489,6 +7489,13 @@ expand_omp_target (struct omp_region *region)
   /* The maximum number used by any start_ix, without varargs.  */
   auto_vec<tree, 11> args;
   args.quick_push (device);
+  if (start_ix == BUILT_IN_GOACC_PARALLEL)
+    {
+      tree use_params = lookup_attribute ("oacc kernels",
+					   DECL_ATTRIBUTES (child_fn))
+	? integer_zero_node : integer_one_node;
+      args.quick_push (use_params);
+    }
   if (offloaded)
     args.quick_push (build_fold_addr_expr (child_fn));
   args.quick_push (t1);

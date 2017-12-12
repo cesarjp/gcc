@@ -111,7 +111,7 @@ static void goacc_wait (int async, int num_waits, va_list *ap);
    keyed optional parameters terminated with a zero.  */
 
 static void
-GOACC_parallel_keyed_internal (int device, int args, void (*fn) (void *),
+GOACC_parallel_keyed_internal (int device, int params, void (*fn) (void *),
 			       size_t mapnum, void **hostaddrs, size_t *sizes,
 			       unsigned short *kinds, va_list *ap)
 {
@@ -335,8 +335,12 @@ GOACC_parallel_keyed_internal (int device, int args, void (*fn) (void *),
 
   if (aq == NULL)
     {
-      acc_dev->openacc.exec_func (tgt_fn, mapnum, hostaddrs, devaddrs,
-				  dims, tgt);
+      if (params)
+	acc_dev->openacc.exec_params_func (tgt_fn, mapnum, hostaddrs, devaddrs,
+					   dims, tgt);
+      else
+	acc_dev->openacc.exec_func (tgt_fn, mapnum, hostaddrs, devaddrs,
+				    dims, tgt);
       if (profiling_dispatch_p)
 	{
 	  prof_info.event_type = acc_ev_exit_data_start;
@@ -359,8 +363,12 @@ GOACC_parallel_keyed_internal (int device, int args, void (*fn) (void *),
     }
   else
     {
-      acc_dev->openacc.async.exec_func (tgt_fn, mapnum, hostaddrs, devaddrs,
-					dims, tgt, aq);
+      if (params)
+	acc_dev->openacc.async.exec_params_func (tgt_fn, mapnum, hostaddrs,
+						 devaddrs, dims, tgt, aq);
+      else
+	acc_dev->openacc.async.exec_func (tgt_fn, mapnum, hostaddrs,
+					  devaddrs, dims, tgt, aq);
       goacc_async_copyout_unmap_vars (tgt, aq);
     }
 
