@@ -7097,19 +7097,21 @@ expand_omp_target (struct omp_region *region)
   gomp_target *entry_stmt;
   gimple *stmt;
   edge e;
-  bool offloaded, data_region;
+  bool offloaded, data_region, oacc_parallel;
 
   entry_stmt = as_a <gomp_target *> (last_stmt (region->entry));
   new_bb = region->entry;
+  oacc_parallel = false;
 
   offloaded = is_gimple_omp_offloaded (entry_stmt);
   switch (gimple_omp_target_kind (entry_stmt))
     {
+    case GF_OMP_TARGET_KIND_OACC_PARALLEL:
+      oacc_parallel = true;
     case GF_OMP_TARGET_KIND_REGION:
     case GF_OMP_TARGET_KIND_UPDATE:
     case GF_OMP_TARGET_KIND_ENTER_DATA:
     case GF_OMP_TARGET_KIND_EXIT_DATA:
-    case GF_OMP_TARGET_KIND_OACC_PARALLEL:
     case GF_OMP_TARGET_KIND_OACC_KERNELS:
     case GF_OMP_TARGET_KIND_OACC_UPDATE:
     case GF_OMP_TARGET_KIND_OACC_ENTER_EXIT_DATA:
@@ -7171,7 +7173,7 @@ expand_omp_target (struct omp_region *region)
 	 .OMP_DATA_I may have been converted into a different local
 	 variable.  In which case, we need to keep the assignment.  */
       tree data_arg = gimple_omp_target_data_arg (entry_stmt);
-      if (data_arg && 0)
+      if (data_arg && !oacc_parallel)
 	{
 	  basic_block entry_succ_bb = single_succ (entry_bb);
 	  gimple_stmt_iterator gsi;
@@ -7491,9 +7493,7 @@ expand_omp_target (struct omp_region *region)
   args.quick_push (device);
   if (start_ix == BUILT_IN_GOACC_PARALLEL)
     {
-      tree use_params = lookup_attribute ("oacc kernels",
-					   DECL_ATTRIBUTES (child_fn))
-	? integer_zero_node : integer_one_node;
+      tree use_params = oacc_parallel ? integer_one_node : integer_zero_node;
       args.quick_push (use_params);
     }
   if (offloaded)
