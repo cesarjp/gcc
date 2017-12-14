@@ -4633,7 +4633,7 @@ find_func_aliases_for_builtin_call (struct function *fn, gcall *t)
 		  /* __builtin_GOACC_parallel (device, fn, mapnum, hostaddrs,
 					       sizes, kinds, ...).  */
 		  fnpos = 2;
-		  argpos = 3;
+		  argpos = 4;
 		  oacc_parallel = gimple_call_arg (t, 1) == integer_one_node;
 		  break;
 		default:
@@ -5212,7 +5212,7 @@ find_func_clobbers (struct function *fn, gimple *origt)
 		  /* __builtin_GOACC_parallel (device, fn, mapnum, hostaddrs,
 					       sizes, kinds, ...).  */
 		  fnpos = 2;
-		  argpos = 3;
+		  argpos = 4;
 		  implicit_use_args[num_implicit_use_args++] = 5;
 		  implicit_use_args[num_implicit_use_args++] = 6;
 		  oacc_parallel = gimple_call_arg (t, 1) == integer_one_node;
