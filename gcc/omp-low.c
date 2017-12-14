@@ -1881,7 +1881,7 @@ create_omp_child_function (omp_context *ctx, bool task_copy,
       type = build_function_type_list (void_type_node, ptr_type_node,
 				       cilk_var_type, cilk_var_type, NULL_TREE);
     }
-  else if (is_gimple_omp_offloaded (ctx->stmt))
+  else if (is_oacc_parallel (ctx))
     {
       tree *arg_types = (tree *) alloca (sizeof (tree) * map_cnt);
       for (unsigned int i = 0; i < map_cnt; i++)
