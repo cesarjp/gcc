@@ -1756,8 +1756,9 @@ GOMP_OFFLOAD_openacc_exec (void (*fn) (void *), size_t mapnum,
 					    api_info);
     }
 
+  void *kargs[1] = { &dp };
   nvptx_exec (fn, mapnum, hostaddrs, devaddrs, dims, targ_mem_desc,
-	      (void *)dp, NULL);
+	      kargs, NULL);
 
   CUresult r = cuStreamSynchronize (NULL);
   const char *maybe_abort_msg = "(perhaps abort was called)";
@@ -1933,8 +1934,9 @@ GOMP_OFFLOAD_openacc_async_exec (void (*fn) (void *), size_t mapnum,
 					    api_info);
     }
 
+  void *kargs[1] = { &dp };
   nvptx_exec (fn, mapnum, hostaddrs, devaddrs, dims, targ_mem_desc,
-	      (void *) dp, aq->cuda_stream);
+	      kargs, aq->cuda_stream);
 
   if (mapnum > 0)
     GOMP_OFFLOAD_openacc_async_queue_callback (aq, cuda_free_argmem, block);

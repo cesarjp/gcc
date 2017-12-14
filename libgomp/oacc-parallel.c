@@ -393,7 +393,7 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
 {
   va_list ap;
   va_start (ap, kinds);
-  GOACC_parallel_keyed_internal (device, 1, fn, mapnum, hostaddrs, sizes,
+  GOACC_parallel_keyed_internal (device, 0, fn, mapnum, hostaddrs, sizes,
 				 kinds, &ap);
   va_end (ap);
 }
