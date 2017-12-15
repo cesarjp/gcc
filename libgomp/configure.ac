@@ -28,7 +28,6 @@ LIBGOMP_ENABLE(generated-files-in-srcdir, no, ,
 AC_MSG_RESULT($enable_generated_files_in_srcdir)
 AM_CONDITIONAL(GENINSRC, test "$enable_generated_files_in_srcdir" = yes)
 
-
 # -------
 # -------
 
@@ -214,6 +213,40 @@ if test x$libgomp_offloaded_only = xyes; then
   AC_DEFINE(LIBGOMP_OFFLOADED_ONLY, 1,
             [Define to 1 if building libgomp for an accelerator-only target.])
 fi
+
+# Check if libffi is necessary.
+
+case "$host" in
+  *-*-rtems*)
+    # RTEMS supports Pthreads, but the library is not available at GCC build time.
+    ;;
+  nvptx*-*-*)
+    # NVPTX does not require libffi.
+    libgomp_use_libffi=no
+    ;;
+  *)
+    libgomp_use_libffi=yes
+    ;;
+esac
+
+# See if the user wants to configure without libffi.  Some
+# architectures don't support it.
+AC_ARG_WITH(libffi,
+  AS_HELP_STRING([--without-libffi],
+                 [don't use libffi]),
+  [:],
+  [with_libffi=${libgomp_use_libffi}])
+
+LIBFFI=
+LIBFFIINCS=
+if test "$with_libffi" != no; then
+   AC_DEFINE(USE_LIBFFI, 1, [Define if we're to use libffi.])
+   LIBFFI=../libffi/libffi_convenience.la
+   LIBFFIINCS='-I$(top_srcdir)/../libffi/include -I../libffi/include'
+fi
+AC_SUBST(LIBFFI)
+AC_SUBST(LIBFFIINCS)
+AM_CONDITIONAL(USE_LIBFFI, test "$with_liffi" != "no")
 
 m4_include([plugin/configfrag.ac])
 
