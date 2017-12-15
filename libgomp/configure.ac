@@ -214,39 +214,18 @@ if test x$libgomp_offloaded_only = xyes; then
             [Define to 1 if building libgomp for an accelerator-only target.])
 fi
 
-# Check if libffi is necessary.
-
-case "$host" in
-  *-*-rtems*)
-    # RTEMS supports Pthreads, but the library is not available at GCC build time.
-    ;;
-  nvptx*-*-*)
-    # NVPTX does not require libffi.
-    libgomp_use_libffi=no
-    ;;
-  *)
-    libgomp_use_libffi=yes
-    ;;
-esac
-
-# See if the user wants to configure without libffi.  Some
-# architectures don't support it.
-AC_ARG_WITH(libffi,
-  AS_HELP_STRING([--without-libffi],
-                 [don't use libffi]),
-  [:],
-  [with_libffi=${libgomp_use_libffi}])
+# Prepare libffi when necessary.
 
 LIBFFI=
 LIBFFIINCS=
-if test "$with_libffi" != no; then
+if test -d ../libffi; then
    AC_DEFINE(USE_LIBFFI, 1, [Define if we're to use libffi.])
    LIBFFI=../libffi/libffi_convenience.la
    LIBFFIINCS='-I$(top_srcdir)/../libffi/include -I../libffi/include'
 fi
 AC_SUBST(LIBFFI)
 AC_SUBST(LIBFFIINCS)
-AM_CONDITIONAL(USE_LIBFFI, test "$with_liffi" != "no")
+AM_CONDITIONAL([USE_LIBFFI], [test -d ../libffi])
 
 m4_include([plugin/configfrag.ac])
 

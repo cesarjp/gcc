@@ -31,6 +31,9 @@
 #include "libgomp_g.h"
 #include "gomp-constants.h"
 #include "oacc-int.h"
+#if USE_LIBFFI
+# include "ffi.h"
+#endif
 #ifdef HAVE_INTTYPES_H
 # include <inttypes.h>  /* For PRIu64.  */
 #endif
@@ -104,6 +107,27 @@ handle_ftn_pointers (size_t mapnum, void **hostaddrs, size_t *sizes,
 
 static void goacc_wait (int async, int num_waits, va_list *ap);
 
+static void
+goacc_call_host_fn (void (*fn) (void *), size_t mapnum, void **hostaddrs)
+{
+#ifdef USE_LIBFFI
+  ffi_cif cif;
+  ffi_type *args[mapnum];
+  ffi_arg rc;
+  int i;
+
+  for (i = 0; i < mapnum; i++)
+    args[i] = &ffi_type_pointer;
+
+  if (ffi_prep_cif (&cif, FFI_DEFAULT_ABI, mapnum,
+		    &ffi_type_void, args) == FFI_OK)
+    ffi_call (&cif, (void *)fn, &rc, (void **)&hostaddrs);
+  else
+    abort ();
+#else
+  fn (hostaddrs);
+#endif
+}
 
 /* Launch a possibly offloaded function on DEVICE.  FN is the host fn
    address.  MAPNUM, HOSTADDRS, SIZES & KINDS  describe the memory
@@ -205,13 +229,13 @@ GOACC_parallel_keyed_internal (int device, int params, void (*fn) (void *),
       prof_info.device_type = acc_device_host;
       api_info.device_type = prof_info.device_type;
       goacc_save_and_set_bind (acc_device_host);
-      fn (hostaddrs);
+      goacc_call_host_fn (fn, mapnum, hostaddrs);
       goacc_restore_bind ();
       goto out;
     }
   else if (acc_device_type (acc_dev->type) == acc_device_host)
     {
-      fn (hostaddrs);
+      goacc_call_host_fn (fn, mapnum, hostaddrs);
       goto out;
     }
   else if (profiling_dispatch_p)
