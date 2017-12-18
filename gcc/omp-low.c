@@ -8193,7 +8193,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
       case OMP_CLAUSE_FROM:
       oacc_firstprivate:
 	var = OMP_CLAUSE_DECL (c);
-	/* Skip any mem_refs.  */
 	if (!DECL_P (var))
 	  {
 	    if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP
@@ -8204,7 +8203,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    continue;
 	  }
 
-	/* TODO: What type of decls are variable sized?  */
 	if (DECL_SIZE (var)
 	    && TREE_CODE (DECL_SIZE (var)) != INTEGER_CST)
 	  {
@@ -8215,8 +8213,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    var = var2;
 	  }
 
-	/* Install local reference, via DECL_VALUE_EXPR, to the sender field
-	   decl as needed.  This is only for firstprivate pointers.  */
 	if (offloaded
 	    && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 	    && (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER
@@ -8451,7 +8447,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
       unsigned int map_idx = 0;
       tree decl_args = NULL_TREE;
 
-      /* Set up sender decls.  */
       for (c = clauses; c ; c = OMP_CLAUSE_CHAIN (c))
 	switch (OMP_CLAUSE_CODE (c))
 	  {
@@ -8469,8 +8464,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    oacc_firstprivate_int = false;
 	    nc = c;
 	    ovar = OMP_CLAUSE_DECL (c);
-	    /* DEBUG: nothing to do for FIRSTPRIVATE pointer and reference
-	       mappings.  */
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 		&& (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER
 		    || (OMP_CLAUSE_MAP_KIND (c)
@@ -8648,8 +8641,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    if (s == NULL_TREE)
 	      s = integer_one_node;
 	    s = fold_convert (size_type_node, s);
-	    /* FIXME: Something is wrong here for array MEM_REF data
-	       mappings.  */
 	    decl_args = append_decl_arg (ovar, decl_args, ctx);
 	    purpose = size_int (map_idx++);
 	    CONSTRUCTOR_APPEND_ELT (vsize, purpose, s);
