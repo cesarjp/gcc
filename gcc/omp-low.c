@@ -7993,9 +7993,6 @@ append_decl_arg (tree var, tree decl_args, omp_context *ctx)
   tree temp = lookup_parm (var, ctx);
   DECL_CHAIN (temp) = decl_args;
 
-//  print_generic_expr (stdout, decl_args, 0);
-//  print_generic_expr (stdout, temp, 0);
-
   return temp;
 }
 
