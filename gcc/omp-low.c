@@ -511,11 +511,7 @@ build_receiver_ref (tree var, bool by_ref, omp_context *ctx)
   tree x, field = lookup_field (var, ctx);
 
   if (is_oacc_parallel (ctx))
-    {
-      //tree type = build_pointer_type (TREE_TYPE (var));
-      x = lookup_parm (var, ctx);
-      //x = fold_build1 (VIEW_CONVERT_EXPR, type, x);
-    }
+    x = lookup_parm (var, ctx);
   else
     {
       /* If the receiver record type was remapped in the child function,
@@ -664,14 +660,13 @@ build_sender_ref (tree var, omp_context *ctx)
 }
 
 static void
-install_parm_decl (tree var, omp_context *ctx)
+install_parm_decl (tree var, tree type, omp_context *ctx)
 {
   if (!is_oacc_parallel (ctx))
     return;
 
   splay_tree_key key = (splay_tree_key) var;
   tree decl_name = NULL_TREE, t;
-  tree type = build_pointer_type (TREE_TYPE (var));
   location_t loc = UNKNOWN_LOCATION;
 
   if (DECL_P (var))
@@ -686,7 +681,6 @@ install_parm_decl (tree var, omp_context *ctx)
   DECL_CONTEXT (t) = current_function_decl;
   TREE_USED (t) = 1;
   TREE_READONLY (t) = 1;
-  //DECL_NONLOCAL (t) = 1;
 
   splay_tree_insert (ctx->parm_map, key, (splay_tree_value) t);
 }
@@ -813,7 +807,7 @@ install_var_field (tree var, bool by_ref, int mask, omp_context *ctx,
   if (mask & 1)
     {
       splay_tree_insert (ctx->field_map, key, (splay_tree_value) field);
-      install_parm_decl (var, ctx);
+      install_parm_decl (var, type, ctx);
     }
   if ((mask & 2) && ctx->sfield_map)
     splay_tree_insert (ctx->sfield_map, key, (splay_tree_value) sfield);
@@ -1558,7 +1552,7 @@ scan_sharing_clauses (tree clauses, omp_context *ctx,
 		  insert_field_into_struct (ctx->record_type, field);
 		  splay_tree_insert (ctx->field_map, (splay_tree_key) decl,
 				     (splay_tree_value) field);
-		  install_parm_decl (decl, ctx);
+		  install_parm_decl (decl, ptr_type_node, ctx);
 		}
 	    }
 	  break;
