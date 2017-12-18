@@ -112,16 +112,20 @@ goacc_call_host_fn (void (*fn) (void *), size_t mapnum, void **hostaddrs)
 {
 #ifdef USE_LIBFFI
   ffi_cif cif;
-  ffi_type *args[mapnum];
-  ffi_arg rc;
+  ffi_type *arg_types[mapnum];
+  void *arg_values[mapnum];
+  ffi_arg result;
   int i;
 
   for (i = 0; i < mapnum; i++)
-    args[i] = &ffi_type_pointer;
+    {
+      arg_types[i] = &ffi_type_pointer;
+      arg_values[i] = &hostaddrs[i];
+    }
 
   if (ffi_prep_cif (&cif, FFI_DEFAULT_ABI, mapnum,
-		    &ffi_type_void, args) == FFI_OK)
-    ffi_call (&cif, (void *)fn, &rc, (void **)&hostaddrs);
+		    &ffi_type_void, arg_types) == FFI_OK)
+    ffi_call (&cif, FFI_FN (fn), &result, arg_values);
   else
     abort ();
 #else
