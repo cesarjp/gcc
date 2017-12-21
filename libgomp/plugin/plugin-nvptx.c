@@ -149,13 +149,6 @@ init_cuda_lib (void)
 #define CU_JIT_NEW_SM3X_OPT 15
 #endif
 
-/* It's not clear if cuLaunchKernel caches the kernel launch
-   parameters when that function is called.  If it does not, then the
-   runtime will need to.  Settin cache_kernel_args to 1 caches those
-   arguments, otherwise it does not.  */
-
-static const int cache_kernel_args = 0;
-
 /* Convenience macros for the frequently used CUDA library call and
    error handling sequence as well as CUDA library calls that
    do the error checking themselves or don't do it at all.  */
@@ -1740,92 +1733,6 @@ GOMP_OFFLOAD_openacc_exec (void (*fn) (void *), size_t mapnum,
 {
   openacc_exec_internal (fn, 0, mapnum, hostaddrs, devaddrs, dims,
 			 targ_mem_desc);
-}
-
-static void
-cuda_free_argmem_params (void *ptr)
-{
-  void **block = (void **) ptr;
-  free (block[0]);
-  free (block);
-}
-
-void
-GOMP_OFFLOAD_openacc_async_exec_params (void (*fn) (void *), size_t mapnum,
-				 void **hostaddrs, void **devaddrs,
-				 unsigned *dims, void *targ_mem_desc,
-				 struct goacc_asyncqueue *aq)
-{
-  GOMP_PLUGIN_debug (0, "  %s: prepare mappings\n", __FUNCTION__);
-
-  void **hp = NULL;
-  void **block = NULL;
-
-  if (mapnum > 0)
-    {
-      if (cache_kernel_args > 0)
-	{
-	  block = (void **) GOMP_PLUGIN_malloc ((mapnum + 2) * sizeof (void *));
-	  hp = block + 2;
-	}
-      else
-	hp = alloca (sizeof (void *) * mapnum);
-
-      for (int i = 0; i < mapnum; i++)
-	hp[i] = (devaddrs[i] ? &devaddrs[i] : &hostaddrs[i]);
-    }
-
-  /* Copy the (device) pointers to arguments to the device (hp might in
-     fact have the same value on a unified-memory system).  */
-  struct goacc_thread *thr = GOMP_PLUGIN_goacc_thread ();
-  acc_prof_info *prof_info = thr->prof_info;
-  acc_event_info data_event_info;
-  acc_api_info *api_info = thr->api_info;
-  bool profiling_dispatch_p = __builtin_expect (prof_info != NULL, false);
-  if (profiling_dispatch_p)
-    {
-      prof_info->event_type = acc_ev_enqueue_upload_start;
-
-      data_event_info.data_event.event_type = prof_info->event_type;
-      data_event_info.data_event.valid_bytes
-	= _ACC_DATA_EVENT_INFO_VALID_BYTES;
-      data_event_info.data_event.parent_construct
-	= acc_construct_parallel; //TODO
-      /* Always implicit for "data mapping arguments for cuLaunchKernel".  */
-      data_event_info.data_event.implicit = 1;
-      data_event_info.data_event.tool_info = NULL;
-      data_event_info.data_event.var_name = NULL; //TODO
-      data_event_info.data_event.bytes = mapnum * sizeof (void *);
-      data_event_info.data_event.host_ptr = hp;
-
-      api_info->device_api = acc_device_api_cuda;
-
-      GOMP_PLUGIN_goacc_profiling_dispatch (prof_info, &data_event_info,
-					    api_info);
-    }
-
-  if (cache_kernel_args && mapnum > 0)
-    {
-      block[0] = hp;
-
-      struct goacc_thread *thr = GOMP_PLUGIN_goacc_thread ();
-      struct nvptx_thread *nvthd = (struct nvptx_thread *) thr->target_tls;
-      block[1] = (void *) nvthd->ptx_dev;
-    }
-
-  if (profiling_dispatch_p)
-    {
-      prof_info->event_type = acc_ev_enqueue_upload_end;
-      data_event_info.data_event.event_type = prof_info->event_type;
-      GOMP_PLUGIN_goacc_profiling_dispatch (prof_info, &data_event_info,
-					    api_info);
-    }
-  
-  nvptx_exec (fn, mapnum, hostaddrs, devaddrs, dims, targ_mem_desc,
-	      hp, aq->cuda_stream);
-
-  if (cache_kernel_args && mapnum > 0)
-    GOMP_OFFLOAD_openacc_async_queue_callback (aq, cuda_free_argmem_params, block);
 }
 
 static void
