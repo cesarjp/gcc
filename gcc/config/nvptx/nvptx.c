@@ -3957,6 +3957,7 @@ bb_first_real_insn (basic_block bb)
 static void
 nvptx_single (unsigned mask, basic_block from, basic_block to)
 {
+  bitmap live = DF_LIVE_IN (from);
   rtx_insn *head = BB_HEAD (from);
   rtx_insn *tail = BB_END (to);
   unsigned skip_mask = mask;
@@ -4126,8 +4127,9 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	     There is nothing in the PTX spec to suggest that this is wrong, or
 	     to explain why the extra initialization is needed.  So, we classify
 	     it as a JIT bug, and the extra initialization as workaround.  */
-	  emit_insn_before (gen_movbi (pvar, const0_rtx),
-			    bb_first_real_insn (from));
+	  if (!bitmap_bit_p (live, REGNO (pvar)))
+	    emit_insn_before (gen_movbi (pvar, const0_rtx),
+			      bb_first_real_insn (from));
 #endif
 	  emit_insn_before (nvptx_gen_vcast (pvar), tail);
 	}
