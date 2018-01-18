@@ -3957,7 +3957,6 @@ bb_first_real_insn (basic_block bb)
 static void
 nvptx_single (unsigned mask, basic_block from, basic_block to)
 {
-  bitmap live = DF_LIVE_IN (from);
   rtx_insn *head = BB_HEAD (from);
   rtx_insn *tail = BB_END (to);
   unsigned skip_mask = mask;
@@ -4105,8 +4104,11 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 		    mov.u32 %x,%tid.x;
 		    setp.ne.u32 %rnotvzero,%x,0;
 		 }
+		 reg.pred %rcond2; // Scratch copy of the original rcond.
 
+		 mov.pred %rcond2, %rcond;
 		 @%rnotvzero bra Lskip;
+		 mov.pred %rcond, %rcond2
 		 setp.<op>.<type> %rcond,op1,op2;
 		 Lskip:
 		 selp.u32 %rcondu32,1,0,%rcond;
@@ -4127,9 +4129,11 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	     There is nothing in the PTX spec to suggest that this is wrong, or
 	     to explain why the extra initialization is needed.  So, we classify
 	     it as a JIT bug, and the extra initialization as workaround.  */
-	  if (!bitmap_bit_p (live, REGNO (pvar)))
-	    emit_insn_before (gen_movbi (pvar, const0_rtx),
-			      bb_first_real_insn (from));
+	  rtx_insn *from_insn = bb_first_real_insn (from);
+	  rtx ptmp = gen_reg_rtx (GET_MODE (pvar));
+	  emit_insn_before (gen_rtx_SET (ptmp, pvar), from_insn);
+	  emit_insn_before (gen_movbi (pvar, const0_rtx), from_insn);
+	  emit_insn_before (gen_rtx_SET (pvar, ptmp), tail);
 #endif
 	  emit_insn_before (nvptx_gen_vcast (pvar), tail);
 	}
