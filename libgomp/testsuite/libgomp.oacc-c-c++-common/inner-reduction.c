@@ -1,9 +1,9 @@
-#include <stdio.h>
+#include <assert.h>
 
 int
 main ()
 {
-  const int n = 10;
+  const int n = 1000;
   int i, j, temp, a[n];
 
 #pragma acc parallel loop
@@ -17,7 +17,7 @@ main ()
     }
 
   for (i = 0; i < n; i++)
-    printf ("a[%d] = %d\n", i, a[i]);
+    assert (a[i] == i+n);
 
   return 0;
 }
