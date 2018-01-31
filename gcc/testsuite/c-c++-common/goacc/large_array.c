@@ -1,6 +1,8 @@
 /* Ensure that alloca'ed arrays can be transferred to the
    accelerator. */
 
+/* { dg-require-effective-target alloca } */
+
 int
 main ()
 {
