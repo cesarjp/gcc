@@ -2809,6 +2809,16 @@ nvptx_propagate_unified (rtx_insn *unified)
   gcc_assert (ok);
 }
 
+/* Offloading function attributes.  */
+
+struct offload_attrs
+{
+  unsigned mask;
+  int num_gangs;
+  int num_workers;
+  int vector_length;
+};
+
 /* Loop structure of the function.  The entire function is described as
    a NULL loop.  */
 
@@ -4314,7 +4324,7 @@ nvptx_process_pars (parallel *par)
    the partitioning of the parallels we are contained in.  */
 
 static void
-nvptx_neuter_pars (parallel *par, unsigned modes, unsigned outer)
+nvptx_neuter_pars (parallel *par, struct offload_attrs *oa, unsigned outer)
 {
   unsigned me = (par->mask
 		 & (GOMP_DIM_MASK (GOMP_DIM_WORKER)
@@ -4322,13 +4332,13 @@ nvptx_neuter_pars (parallel *par, unsigned modes, unsigned outer)
   unsigned  skip_mask = 0, neuter_mask = 0;
   
   if (par->inner)
-    nvptx_neuter_pars (par->inner, modes, outer | me);
+    nvptx_neuter_pars (par->inner, oa, outer | me);
 
   for (unsigned mode = GOMP_DIM_WORKER; mode <= GOMP_DIM_VECTOR; mode++)
     {
       if ((outer | me) & GOMP_DIM_MASK (mode))
 	{} /* Mode is partitioned: no neutering.  */
-      else if (!(modes & GOMP_DIM_MASK (mode)))
+      else if (!(oa->mask & GOMP_DIM_MASK (mode)))
 	{} /* Mode is not used: nothing to do.  */
       else if (par->inner_mask & GOMP_DIM_MASK (mode)
 	       || !par->forked_insn)
@@ -4383,7 +4393,7 @@ nvptx_neuter_pars (parallel *par, unsigned modes, unsigned outer)
       nvptx_skip_par (skip_mask, par);
   
   if (par->next)
-    nvptx_neuter_pars (par->next, modes, outer);
+    nvptx_neuter_pars (par->next, oa, outer);
 }
 
 /* PTX-specific reorganization
@@ -4435,9 +4445,11 @@ nvptx_reorg (void)
     {
       /* If we determined this mask before RTL expansion, we could
 	 elide emission of some levels of forks and joins.  */
-      unsigned mask = 0;
+      struct offload_attrs oa;
       tree dims = TREE_VALUE (attr);
       unsigned ix;
+
+      oa.mask = 0;
 
       for (ix = 0; ix != GOMP_DIM_MAX; ix++, dims = TREE_CHAIN (dims))
 	{
@@ -4445,17 +4457,32 @@ nvptx_reorg (void)
 	  tree allowed = TREE_PURPOSE (dims);
 
 	  if (size != 1 && !(allowed && integer_zerop (allowed)))
-	    mask |= GOMP_DIM_MASK (ix);
+	    oa.mask |= GOMP_DIM_MASK (ix);
+
+	  switch (ix)
+	    {
+	    case GOMP_DIM_GANG:
+	      oa.num_gangs = size;
+	      break;
+
+	    case GOMP_DIM_WORKER:
+	      oa.num_workers = size;
+	      break;
+
+	    case GOMP_DIM_VECTOR:
+	      oa.vector_length = size;
+	      break;
+	    }
 	}
       /* If there is worker neutering, there must be vector
 	 neutering.  Otherwise the hardware will fail.  */
-      gcc_assert (!(mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
-		  || (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)));
+      gcc_assert (!(oa.mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+		  || (oa.mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)));
 
       /* Discover & process partitioned regions.  */
       parallel *pars = nvptx_discover_pars (&bb_insn_map);
       nvptx_process_pars (pars);
-      nvptx_neuter_pars (pars, mask, 0);
+      nvptx_neuter_pars (pars, &oa, 0);
       delete pars;
     }
 
