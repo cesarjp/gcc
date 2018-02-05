@@ -82,6 +82,7 @@
 #define PTX_WORKER_LENGTH 32
 #define PTX_DEFAULT_RUNTIME_DIM 0 /* Defer to runtime.  */
 #define PTX_WARP_SIZE 32
+#define PTX_CTA_SIZE 1024
 
 /* The various PTX memory areas an object might reside in.  */
 enum nvptx_data_area
@@ -131,6 +132,7 @@ static GTY((cache)) hash_table<tree_hasher> *needed_fndecls_htab;
    memory.  It'd be nice if PTX supported common blocks, because then
    this could be shared across TUs (taking the largest size).  */
 static unsigned oacc_bcast_size;
+static unsigned oacc_bcast_partition;
 static unsigned oacc_bcast_align;
 static GTY(()) rtx oacc_bcast_sym;
 
@@ -1092,6 +1094,13 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
   fprintf (file, "\t\t.reg.u32\t%%%s;\n", name);
   fprintf (file, "\t\tmov.u32\t%%%s, %%tid.%s;\n", name, name);
   fprintf (file, "\t\tsetp.ne.u32\t%%r%d, %%%s, 0;\n", regno, name);
+  if (strcmp (name, "y") == 0 && cfun->machine->tid_y)
+    {
+      fprintf (file, "\t\tmov.u32\t%%r%d, %%r%d;\n",
+	       REGNO (cfun->machine->tid_y), regno);
+      fprintf (file, "\t\tmov.u32\t%%r%d, %d;\n",
+	       REGNO (cfun->machine->bcast_partition), oacc_bcast_partition);
+    }
   fprintf (file, "\t}\n");
 }
 
@@ -2825,6 +2834,7 @@ struct offload_attrs
   int num_gangs;
   int num_workers;
   int vector_length;
+  int max_workers;
 };
 
 /* Loop structure of the function.  The entire function is described as
@@ -3909,7 +3919,7 @@ shared_prop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
 
 static bool
 nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
-			rtx_insn *insn)
+			rtx_insn *insn, offload_attrs *oa)
 {
   broadcast_data_t data;
 
@@ -3927,8 +3937,11 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
       rtx init = gen_rtx_SET (data.base, oacc_bcast_sym);
       emit_insn_after (init, insn);
 
-      if (oacc_bcast_size < data.offset)
-	oacc_bcast_size = data.offset;
+      if (oacc_bcast_partition < data.offset)
+	{
+	  oacc_bcast_partition = data.offset;
+	  oacc_bcast_size = oa->max_workers * data.offset;
+	}
     }
   return empty;
 }
@@ -3977,7 +3990,8 @@ bb_first_real_insn (basic_block bb)
    loop.  We could do more if we detected superblocks.  */
 
 static void
-nvptx_single (unsigned mask, basic_block from, basic_block to)
+nvptx_single (unsigned mask, basic_block from, basic_block to,
+	      offload_attrs *oa)
 {
   rtx_insn *head = BB_HEAD (from);
   rtx_insn *tail = BB_END (to);
@@ -4182,12 +4196,16 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	  /* Includes worker mode, do spill & fill.  By construction
 	     we should never have worker mode only. */
 	  broadcast_data_t data;
+	  unsigned size = GET_MODE_SIZE (SImode);
 
 	  data.base = oacc_bcast_sym;
 	  data.ptr = 0;
 
-	  if (oacc_bcast_size < GET_MODE_SIZE (SImode))
-	    oacc_bcast_size = GET_MODE_SIZE (SImode);
+	  if (oacc_bcast_partition < size)
+	    {
+	      oacc_bcast_partition = size;
+	      oacc_bcast_size = oa->max_workers * size;
+	    }
 
 	  data.offset = 0;
 	  emit_insn_before (nvptx_gen_shared_bcast (pvar, PM_read, 0, &data),
@@ -4215,7 +4233,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
    and ending at joining.  */
 
 static void
-nvptx_skip_par (unsigned mask, parallel *par)
+nvptx_skip_par (unsigned mask, parallel *par, offload_attrs *oa)
 {
   basic_block tail = par->join_block;
   gcc_assert (tail->preds->length () == 1);
@@ -4223,7 +4241,7 @@ nvptx_skip_par (unsigned mask, parallel *par)
   basic_block pre_tail = (*tail->preds)[0]->src;
   gcc_assert (pre_tail->succs->length () == 1);
 
-  nvptx_single (mask, par->forked_block, pre_tail);
+  nvptx_single (mask, par->forked_block, pre_tail, oa);
 }
 
 /* If PAR has a single inner parallel and PAR itself only contains
@@ -4313,9 +4331,10 @@ nvptx_process_pars (parallel *par, offload_attrs *oa)
   if (par->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
     {
       nvptx_shared_propagate (false, is_call, par->forked_block,
-			      par->forked_insn);
+			      par->forked_insn, oa);
       bool empty = nvptx_shared_propagate (true, is_call,
-					   par->forked_block, par->fork_insn);
+					   par->forked_block, par->fork_insn,
+					   oa);
 
       if (!empty || !is_call)
 	{
@@ -4385,7 +4404,7 @@ nvptx_neuter_pars (parallel *par, offload_attrs *oa, unsigned outer)
 	      basic_block to = regions[ix].second;
 
 	      if (from)
-		nvptx_single (neuter_mask, from, to);
+		nvptx_single (neuter_mask, from, to, oa);
 	      else
 		gcc_assert (!to);
 	    }
@@ -4398,13 +4417,13 @@ nvptx_neuter_pars (parallel *par, offload_attrs *oa, unsigned outer)
 	    {
 	      basic_block block = par->blocks[ix];
 
-	      nvptx_single (neuter_mask, block, block);
+	      nvptx_single (neuter_mask, block, block, oa);
 	    }
 	}
     }
 
   if (skip_mask)
-      nvptx_skip_par (skip_mask, par);
+    nvptx_skip_par (skip_mask, par, oa);
   
   if (par->next)
     nvptx_neuter_pars (par->next, oa, outer);
@@ -4492,6 +4511,15 @@ nvptx_reorg (void)
 	 neutering.  Otherwise the hardware will fail.  */
       gcc_assert (!(oa.mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
 		  || (oa.mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)));
+
+      if (oa.num_workers == 0)
+	oa.max_workers = PTX_CTA_SIZE / oa.vector_length;
+      else
+	oa.max_workers = oa.num_workers;
+
+//      printf ("\nnum_gangs = %d, num_workers = %d, vector_length = %d"
+//	      ", max_workers = %d\n", oa.num_gangs, oa.num_workers,
+//	      oa.vector_length, oa.max_workers);
 
       /* Discover & process partitioned regions.  */
       parallel *pars = nvptx_discover_pars (&bb_insn_map);
