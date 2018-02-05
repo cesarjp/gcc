@@ -78,7 +78,8 @@
 #define WORKAROUND_PTXJIT_BUG 1
 
 /* Define dimension sizes for known hardware.  */
-#define PTX_VECTOR_LENGTH 32
+//#define PTX_VECTOR_LENGTH 32
+#define PTX_VECTOR_LENGTH 128
 #define PTX_WORKER_LENGTH 32
 #define PTX_DEFAULT_RUNTIME_DIM 0 /* Defer to runtime.  */
 #define PTX_WARP_SIZE 32
@@ -1092,14 +1093,31 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
 {
   fprintf (file, "\t{\n");
   fprintf (file, "\t\t.reg.u32\t%%%s;\n", name);
-  fprintf (file, "\t\tmov.u32\t%%%s, %%tid.%s;\n", name, name);
+  if (strcmp (name, "y") == 0 && cfun->machine->tid_y)
+    fprintf (file, "\t\t.reg.u64\t%%t_bcast;\n");
+  fprintf (file, "\t\tmov.u32\t\t%%%s, %%tid.%s;\n", name, name);
   fprintf (file, "\t\tsetp.ne.u32\t%%r%d, %%%s, 0;\n", regno, name);
   if (strcmp (name, "y") == 0 && cfun->machine->tid_y)
     {
-      fprintf (file, "\t\tmov.u32\t%%r%d, %%r%d;\n",
-	       REGNO (cfun->machine->tid_y), regno);
-      fprintf (file, "\t\tmov.u32\t%%r%d, %d;\n",
-	       REGNO (cfun->machine->bcast_partition), oacc_bcast_partition);
+      //fprintf (file, "\t\tadd.u64\t\t%%r%d, %%y, 1; // warp_lane\n",
+      fprintf (file, "\t\tcvt.u64.u32\t%%r%d, %%y; // warp_lane\n",
+	       REGNO (cfun->machine->tid_y));
+      fprintf (file, "\t\tmov.u64\t\t%%r%d, %d;\n",
+	       REGNO (cfun->machine->bcast_partition),
+	       oacc_bcast_partition);
+      fprintf (file, "\t\tmov.u64\t\t%%t_bcast, __oacc_bcast;\n");
+      fprintf (file, "\t\tmul.lo.u64\t%%r%d, %%r%d, %%r%d;\n",
+	       REGNO (cfun->machine->bcast_partition),
+	       REGNO (cfun->machine->bcast_partition),
+	       REGNO (cfun->machine->tid_y));
+      fprintf (file, "\t\tadd.u64\t\t%%r%d, %%r%d, %%t_bcast; "
+	       "// vector broadcast offset\n",
+	       REGNO (cfun->machine->bcast_partition),
+	       REGNO (cfun->machine->bcast_partition));
+//      fprintf (file, "\t\tmov.u32\t%%r%d, %%r%d;\n",
+//	       REGNO (cfun->machine->tid_y), regno);
+//      fprintf (file, "\t\tmov.u32\t%%r%d, %d;\n",
+//	       REGNO (cfun->machine->bcast_partition), oacc_bcast_partition);
     }
   fprintf (file, "\t}\n");
 }
@@ -1785,7 +1803,7 @@ enum propagate_mask
    
 static rtx
 nvptx_gen_shared_bcast (rtx reg, propagate_mask pm, unsigned rep,
-		     broadcast_data_t *data)
+			broadcast_data_t *data, bool vector)
 {
   rtx  res;
   machine_mode mode = GET_MODE (reg);
@@ -1799,7 +1817,7 @@ nvptx_gen_shared_bcast (rtx reg, propagate_mask pm, unsigned rep,
 	start_sequence ();
 	if (pm & PM_read)
 	  emit_insn (gen_sel_truesi (tmp, reg, GEN_INT (1), const0_rtx));
-	emit_insn (nvptx_gen_shared_bcast (tmp, pm, rep, data));
+	emit_insn (nvptx_gen_shared_bcast (tmp, pm, rep, data, vector));
 	if (pm & PM_write)
 	  emit_insn (gen_rtx_SET (reg, gen_rtx_NE (BImode, tmp, const0_rtx)));
 	res = get_insns ();
@@ -2987,6 +3005,19 @@ nvptx_split_blocks (bb_insn_map_t *map)
     }
 }
 
+/* Return true if MASK contains parallelism that requires shared
+   memory to broadcast.  */
+
+static bool
+nvptx_needs_shared_bcast (unsigned mask, offload_attrs *oa)
+{
+  bool worker = mask & GOMP_DIM_MASK (GOMP_DIM_WORKER);
+  bool large_vector = (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
+    && oa->vector_length != PTX_WARP_SIZE;
+
+  return worker || large_vector;
+}
+
 /* BLOCK is a basic block containing a head or tail instruction.
    Locate the associated prehead or pretail instruction, which must be
    in the single predecessor block.  */
@@ -3034,7 +3065,8 @@ nvptx_dump_pars (parallel *par, unsigned depth)
    and then walk successor blocks.   */
 
 static parallel *
-nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
+nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block,
+		offload_attrs *oa)
 {
   if (block->flags & BB_VISITED)
     return par;
@@ -3062,7 +3094,8 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
 	    par = new parallel (par, mask);
 	    par->forked_block = block;
 	    par->forked_insn = end;
-	    if (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+	    // CJP: Extend to support larger vector_lengths
+	    if (nvptx_needs_shared_bcast (mask, oa))
 	      par->fork_insn
 		= nvptx_discover_pre (block, CODE_FOR_nvptx_fork);
 	  }
@@ -3073,11 +3106,11 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
 	     parent.  */
 	  {
 	    unsigned mask = UINTVAL (XVECEXP (PATTERN (end), 0, 0));
-
+	    
 	    gcc_assert (par->mask == mask);
 	    par->join_block = block;
 	    par->join_insn = end;
-	    if (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+	    if (nvptx_needs_shared_bcast (mask, oa))
 	      par->joining_insn
 		= nvptx_discover_pre (block, CODE_FOR_nvptx_joining);
 	    par = par->parent;
@@ -3101,7 +3134,7 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
   edge_iterator ei;
 
   FOR_EACH_EDGE (e, ei, block->succs)
-    nvptx_find_par (map, par, e->dest);
+    nvptx_find_par (map, par, e->dest, oa);
 
   return par;
 }
@@ -3113,7 +3146,7 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
    been cleared when splitting blocks.  */
 
 static parallel *
-nvptx_discover_pars (bb_insn_map_t *map)
+nvptx_discover_pars (bb_insn_map_t *map, offload_attrs *oa)
 {
   basic_block block;
 
@@ -3125,7 +3158,7 @@ nvptx_discover_pars (bb_insn_map_t *map)
   block = ENTRY_BLOCK_PTR_FOR_FN (cfun);
   block->flags &= ~BB_VISITED;
 
-  parallel *par = nvptx_find_par (map, 0, block);
+  parallel *par = nvptx_find_par (map, 0, block, oa);
 
   if (dump_file)
     {
@@ -3774,11 +3807,11 @@ nvptx_find_sese (auto_vec<basic_block> &blocks, bb_pair_vec_t &regions)
    regions and (b) only propagating stack entries that are used.  The
    latter might be quite hard to determine.  */
 
-typedef rtx (*propagator_fn) (rtx, propagate_mask, unsigned, void *);
+typedef rtx (*propagator_fn) (rtx, propagate_mask, unsigned, void *, bool);
 
 static bool
 nvptx_propagate (bool is_call, basic_block block, rtx_insn *insn,
-		 propagate_mask rw, propagator_fn fn, void *data)
+		 propagate_mask rw, propagator_fn fn, void *data, bool vector)
 {
   bitmap live = DF_LIVE_IN (block);
   bitmap_iterator iterator;
@@ -3813,7 +3846,7 @@ nvptx_propagate (bool is_call, basic_block block, rtx_insn *insn,
 	  
 	  emit_insn (gen_rtx_SET (idx, GEN_INT (fs)));
 	  /* Allow worker function to initialize anything needed.  */
-	  rtx init = fn (tmp, PM_loop_begin, fs, data);
+	  rtx init = fn (tmp, PM_loop_begin, fs, data, vector);
 	  if (init)
 	    emit_insn (init);
 	  emit_label (label);
@@ -3822,7 +3855,7 @@ nvptx_propagate (bool is_call, basic_block block, rtx_insn *insn,
 	}
       if (rw & PM_read)
 	emit_insn (gen_rtx_SET (tmp, gen_rtx_MEM (DImode, ptr)));
-      emit_insn (fn (tmp, rw, fs, data));
+      emit_insn (fn (tmp, rw, fs, data, vector));
       if (rw & PM_write)
 	emit_insn (gen_rtx_SET (gen_rtx_MEM (DImode, ptr), tmp));
       if (fs)
@@ -3830,7 +3863,7 @@ nvptx_propagate (bool is_call, basic_block block, rtx_insn *insn,
 	  emit_insn (gen_rtx_SET (pred, gen_rtx_NE (BImode, idx, const0_rtx)));
 	  emit_insn (gen_adddi3 (ptr, ptr, GEN_INT (GET_MODE_SIZE (DImode))));
 	  emit_insn (gen_br_true_uni (pred, label));
-	  rtx fini = fn (tmp, PM_loop_end, fs, data);
+	  rtx fini = fn (tmp, PM_loop_end, fs, data, vector);
 	  if (fini)
 	    emit_insn (fini);
 	  emit_insn (gen_rtx_CLOBBER (GET_MODE (idx), idx));
@@ -3850,7 +3883,7 @@ nvptx_propagate (bool is_call, basic_block block, rtx_insn *insn,
 
 	if (REGNO (reg) >= FIRST_PSEUDO_REGISTER)
 	  {
-	    rtx bcast = fn (reg, rw, 0, data);
+	    rtx bcast = fn (reg, rw, 0, data, vector);
 
 	    insn = emit_insn_after (bcast, insn);
 	    empty = false;
@@ -3863,7 +3896,8 @@ nvptx_propagate (bool is_call, basic_block block, rtx_insn *insn,
 
 static rtx
 warp_prop_gen (rtx reg, propagate_mask pm,
-	   unsigned ARG_UNUSED (count), void *ARG_UNUSED (data))
+	       unsigned ARG_UNUSED (count), void *ARG_UNUSED (data),
+	       bool ARG_UNUSED (vector))
 {
   if (!(pm & PM_read_write))
     return 0;
@@ -3879,13 +3913,14 @@ static bool
 nvptx_warp_propagate (bool is_call, basic_block block, rtx_insn *insn)
 {
   return nvptx_propagate (is_call, block, insn, PM_read_write,
-			  warp_prop_gen, 0);
+			  warp_prop_gen, 0, false);
 }
 
 /* Worker for nvptx_shared_propagate.  */
 
 static rtx
-shared_prop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
+shared_prop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_,
+		 bool vector)
 {
   broadcast_data_t *data = (broadcast_data_t *)data_;
 
@@ -3894,6 +3929,7 @@ shared_prop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
       /* Starting a loop, initialize pointer.    */
       unsigned align = GET_MODE_ALIGNMENT (GET_MODE (reg)) / BITS_PER_UNIT;
 
+      /* CJP TODO: this might need to be extended for vectors  */
       if (align > oacc_bcast_align)
 	oacc_bcast_align = align;
       data->offset = (data->offset + align - 1) & ~(align - 1);
@@ -3909,7 +3945,7 @@ shared_prop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
       return clobber;
     }
   else
-    return nvptx_gen_shared_bcast (reg, pm, rep, data);
+    return nvptx_gen_shared_bcast (reg, pm, rep, data, vector);
 }
 
 /* Spill or fill live state that is live at start of BLOCK.  PRE_P
@@ -3919,7 +3955,7 @@ shared_prop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_)
 
 static bool
 nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
-			rtx_insn *insn, offload_attrs *oa)
+			rtx_insn *insn, bool vector, offload_attrs *oa)
 {
   broadcast_data_t data;
 
@@ -3929,12 +3965,27 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
 
   bool empty = nvptx_propagate (is_call, block, insn,
 				pre_p ? PM_read : PM_write, shared_prop_gen,
-				&data);
+				&data, vector);
   gcc_assert (empty == !data.offset);
   if (data.offset)
     {
+      rtx bcast_sym = oacc_bcast_sym;
+      
       /* Stuff was emitted, initialize the base pointer now.  */
-      rtx init = gen_rtx_SET (data.base, oacc_bcast_sym);
+      /* CJP: Update base pointer here.  */
+      if (vector && oa->max_workers > 1)
+	{
+	  if (!cfun->machine->tid_y)
+	    cfun->machine->tid_y = gen_reg_rtx (DImode);
+	  if (!cfun->machine->bcast_partition)
+	    cfun->machine->bcast_partition = gen_reg_rtx (DImode);
+
+//	  bcast_sym = gen_rtx_MULT (DImode, cfun->machine->tid_y,
+//				    cfun->machine->bcast_partition);
+	  bcast_sym = cfun->machine->bcast_partition;
+	}
+
+      rtx init = gen_rtx_SET (data.base, bcast_sym);
       emit_insn_after (init, insn);
 
       if (oacc_bcast_partition < data.offset)
@@ -4129,7 +4180,8 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
     {
       rtx pvar = XEXP (XEXP (cond_branch, 0), 0);
 
-      if (GOMP_DIM_MASK (GOMP_DIM_VECTOR) == mask)
+      if (GOMP_DIM_MASK (GOMP_DIM_VECTOR) == mask
+	  && oa->vector_length == PTX_WARP_SIZE)
 	{
 	  /* Vector mode only, do a shuffle.  */
 #if WORKAROUND_PTXJIT_BUG
@@ -4197,6 +4249,10 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	     we should never have worker mode only. */
 	  broadcast_data_t data;
 	  unsigned size = GET_MODE_SIZE (SImode);
+	  bool vector = true;
+
+	  if (GOMP_DIM_MASK (GOMP_DIM_WORKER) == mask)
+	    vector = false;
 
 	  data.base = oacc_bcast_sym;
 	  data.ptr = 0;
@@ -4208,12 +4264,14 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	    }
 
 	  data.offset = 0;
-	  emit_insn_before (nvptx_gen_shared_bcast (pvar, PM_read, 0, &data),
+	  emit_insn_before (nvptx_gen_shared_bcast (pvar, PM_read, 0, &data,
+						    vector),
 			    before);
 	  /* Barrier so other workers can see the write.  */
 	  emit_insn_before (nvptx_cta_sync (GEN_INT (0), 0), tail);
 	  data.offset = 0;
-	  emit_insn_before (nvptx_gen_shared_bcast (pvar, PM_write, 0, &data),
+	  emit_insn_before (nvptx_gen_shared_bcast (pvar, PM_write, 0, &data,
+						    vector),
 			    tail);
 	  /* This barrier is needed to avoid worker zero clobbering
 	     the broadcast buffer before all the other workers have
@@ -4327,14 +4385,17 @@ nvptx_process_pars (parallel *par, offload_attrs *oa)
     }
 
   bool is_call = (par->mask & GOMP_DIM_MASK (GOMP_DIM_MAX)) != 0;
-  
-  if (par->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+  bool worker = (par->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER));
+  bool large_vector = ((par->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
+		       && oa->vector_length > PTX_WARP_SIZE);
+
+  if (worker || large_vector)
     {
       nvptx_shared_propagate (false, is_call, par->forked_block,
-			      par->forked_insn, oa);
+			      par->forked_insn, !worker, oa);
       bool empty = nvptx_shared_propagate (true, is_call,
 					   par->forked_block, par->fork_insn,
-					   oa);
+					   !worker, oa);
 
       if (!empty || !is_call)
 	{
@@ -4522,7 +4583,7 @@ nvptx_reorg (void)
 //	      oa.vector_length, oa.max_workers);
 
       /* Discover & process partitioned regions.  */
-      parallel *pars = nvptx_discover_pars (&bb_insn_map);
+      parallel *pars = nvptx_discover_pars (&bb_insn_map, &oa);
       nvptx_process_pars (pars, &oa);
       nvptx_neuter_pars (pars, &oa, 0);
       delete pars;
