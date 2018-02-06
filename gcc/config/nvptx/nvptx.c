@@ -1102,18 +1102,30 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
       //fprintf (file, "\t\tadd.u64\t\t%%r%d, %%y, 1; // warp_lane\n",
       fprintf (file, "\t\tcvt.u64.u32\t%%r%d, %%y; // warp_lane\n",
 	       REGNO (cfun->machine->tid_y));
-      fprintf (file, "\t\tmov.u64\t\t%%r%d, %d;\n",
-	       REGNO (cfun->machine->bcast_partition),
-	       oacc_bcast_partition);
-      fprintf (file, "\t\tmov.u64\t\t%%t_bcast, __oacc_bcast;\n");
-      fprintf (file, "\t\tmul.lo.u64\t%%r%d, %%r%d, %%r%d;\n",
-	       REGNO (cfun->machine->bcast_partition),
-	       REGNO (cfun->machine->bcast_partition),
-	       REGNO (cfun->machine->tid_y));
-      fprintf (file, "\t\tadd.u64\t\t%%r%d, %%r%d, %%t_bcast; "
+//      fprintf (file, "\t\tmov.u64\t\t%%r%d, %d;\n",
+//	       REGNO (cfun->machine->bcast_partition),
+//	       oacc_bcast_partition);
+//      fprintf (file, "\t\tcvta.shared.u64\t%%t_bcast, __oacc_bcast;\n");
+//      fprintf (file, "\t\tmul.lo.u64\t%%r%d, %%r%d, %%r%d;\n",
+//	       REGNO (cfun->machine->bcast_partition),
+//	       REGNO (cfun->machine->bcast_partition),
+//	       REGNO (cfun->machine->tid_y));
+//      fprintf (file, "\t\tadd.u64\t\t%%r%d, %%r%d, %%t_bcast; "
+//	       "// vector broadcast offset\n",
+//	       REGNO (cfun->machine->bcast_partition),
+//	       REGNO (cfun->machine->bcast_partition));
+
+      fprintf (file, "\t\tcvta.shared.u64\t%%t_bcast, __oacc_bcast;\n");
+      fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%r%d, %d, %%t_bcast; "
 	       "// vector broadcast offset\n",
 	       REGNO (cfun->machine->bcast_partition),
-	       REGNO (cfun->machine->bcast_partition));
+	       REGNO (cfun->machine->tid_y),
+	       oacc_bcast_partition);
+
+      fprintf (file, "\t\tadd.u32\t\t%%r%d, %%y, 1; "
+	       "// vector synchronization barrier\n",
+	       REGNO (cfun->machine->sync_bar),
+	       REGNO (cfun->machine->tid_y));
 //      fprintf (file, "\t\tmov.u32\t%%r%d, %%r%d;\n",
 //	       REGNO (cfun->machine->tid_y), regno);
 //      fprintf (file, "\t\tmov.u32\t%%r%d, %d;\n",
@@ -3979,6 +3991,8 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
 	    cfun->machine->tid_y = gen_reg_rtx (DImode);
 	  if (!cfun->machine->bcast_partition)
 	    cfun->machine->bcast_partition = gen_reg_rtx (DImode);
+	  if (!cfun->machine->sync_bar)
+	    cfun->machine->sync_bar = gen_reg_rtx (SImode);
 
 //	  bcast_sym = gen_rtx_MULT (DImode, cfun->machine->tid_y,
 //				    cfun->machine->bcast_partition);
@@ -4088,7 +4102,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	    cond_branch = NULL_RTX;
 	}
     }
-
+  
   if (tail == head)
     {
       /* If this is empty, do nothing.  */
@@ -4160,13 +4174,25 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	    pred = gen_reg_rtx (BImode);
 	    cfun->machine->axis_predicate[mode - GOMP_DIM_WORKER] = pred;
 	  }
+
+	//emit_insn_before (gen_nvptx_blah (GEN_INT (0)), head);
 	
 	rtx br;
 	if (mode == GOMP_DIM_VECTOR)
 	  br = gen_br_true (pred, label);
 	else
 	  br = gen_br_true_uni (pred, label);
-	emit_insn_before (br, head);
+
+	if (recog_memoized (head) == CODE_FOR_nvptx_forked
+	    && recog_memoized (NEXT_INSN (head)) == CODE_FOR_nvptx_barsync)
+	  {
+	    head = NEXT_INSN (head);
+	    emit_insn_after (br, head);
+	  }
+	else if (recog_memoized (head) == CODE_FOR_nvptx_barsync)
+	  emit_insn_after (br, head);
+	else
+	  emit_insn_before (br, head);
 
 	LABEL_NUSES (label)++;
 	if (tail_branch)
@@ -4250,6 +4276,8 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	  broadcast_data_t data;
 	  unsigned size = GET_MODE_SIZE (SImode);
 	  bool vector = true;
+	  rtx barrier = GEN_INT (0);
+	  int threads = 0;
 
 	  if (GOMP_DIM_MASK (GOMP_DIM_WORKER) == mask)
 	    vector = false;
@@ -4267,8 +4295,15 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	  emit_insn_before (nvptx_gen_shared_bcast (pvar, PM_read, 0, &data,
 						    vector),
 			    before);
+
+	  if (vector)
+	    {
+	      barrier = cfun->machine->sync_bar;
+	      threads = oa->vector_length;
+	    }
+
 	  /* Barrier so other workers can see the write.  */
-	  emit_insn_before (nvptx_cta_sync (GEN_INT (0), 0), tail);
+	  emit_insn_before (nvptx_cta_sync (barrier, threads), tail);
 	  data.offset = 0;
 	  emit_insn_before (nvptx_gen_shared_bcast (pvar, PM_write, 0, &data,
 						    vector),
@@ -4276,7 +4311,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	  /* This barrier is needed to avoid worker zero clobbering
 	     the broadcast buffer before all the other workers have
 	     had a chance to read this instance of it.  */
-	  emit_insn_before (nvptx_cta_sync (GEN_INT (0), 0), tail);
+	  emit_insn_before (nvptx_cta_sync (barrier, threads), tail);
 	}
 
       extract_insn (tail);
@@ -4396,12 +4431,21 @@ nvptx_process_pars (parallel *par, offload_attrs *oa)
       bool empty = nvptx_shared_propagate (true, is_call,
 					   par->forked_block, par->fork_insn,
 					   !worker, oa);
+      rtx barrier = GEN_INT (0);
+      int threads = 0;
+
+      if (!worker)
+	{
+	  barrier = cfun->machine->sync_bar;
+	  threads = oa->vector_length;
+	}
 
       if (!empty || !is_call)
 	{
 	  /* Insert begin and end synchronizations.  */
-	  emit_insn_after (nvptx_cta_sync (GEN_INT (0), 0), par->forked_insn);
-	  emit_insn_before (nvptx_cta_sync (GEN_INT (0), 0), par->joining_insn);
+	  emit_insn_after (nvptx_cta_sync (barrier, threads), par->forked_insn);
+	  emit_insn_before (nvptx_cta_sync (barrier, threads),
+			    par->joining_insn);
 	}
     }
   else if (par->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
