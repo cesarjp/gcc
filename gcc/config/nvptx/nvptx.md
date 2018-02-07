@@ -66,8 +66,6 @@
 
    UNSPECV_SIMT_ENTER
    UNSPECV_SIMT_EXIT
-
-   UNSPECV_BLAH
 ])
 
 (define_attr "subregs_ok" "false,true"
@@ -1434,11 +1432,4 @@
   [(unspec_volatile [(const_int 0)] UNSPECV_NOUNROLL)]
   ""
   "\\t.pragma \\\"nounroll\\\";"
-  [(set_attr "predicable" "false")])
-
-(define_insn "nvptx_blah"
-  [(unspec_volatile:SI [(match_operand:SI 0 "const_int_operand" "")]
-		       UNSPECV_BLAH)]
-  ""
-  "// blah %0;"
   [(set_attr "predicable" "false")])
