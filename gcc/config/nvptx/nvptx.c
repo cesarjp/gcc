@@ -1100,8 +1100,10 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
   if (strcmp (name, "y") == 0 && cfun->machine->tid_y)
     {
       //fprintf (file, "\t\tadd.u64\t\t%%r%d, %%y, 1; // warp_lane\n",
+
       fprintf (file, "\t\tcvt.u64.u32\t%%r%d, %%y; // warp_lane\n",
 	       REGNO (cfun->machine->tid_y));
+
 //      fprintf (file, "\t\tmov.u64\t\t%%r%d, %d;\n",
 //	       REGNO (cfun->machine->bcast_partition),
 //	       oacc_bcast_partition);
@@ -1124,8 +1126,8 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
 
       fprintf (file, "\t\tadd.u32\t\t%%r%d, %%y, 1; "
 	       "// vector synchronization barrier\n",
-	       REGNO (cfun->machine->sync_bar),
-	       REGNO (cfun->machine->tid_y));
+	       REGNO (cfun->machine->sync_bar));
+
 //      fprintf (file, "\t\tmov.u32\t%%r%d, %%r%d;\n",
 //	       REGNO (cfun->machine->tid_y), regno);
 //      fprintf (file, "\t\tmov.u32\t%%r%d, %d;\n",
@@ -3990,7 +3992,11 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
 	  if (!cfun->machine->tid_y)
 	    cfun->machine->tid_y = gen_reg_rtx (DImode);
 	  if (!cfun->machine->bcast_partition)
-	    cfun->machine->bcast_partition = gen_reg_rtx (DImode);
+	    {
+	      cfun->machine->bcast_partition = gen_reg_rtx (DImode);
+	      SET_SYMBOL_DATA_AREA (cfun->machine->bcast_partition,
+				    DATA_AREA_SHARED);
+	    }
 	  if (!cfun->machine->sync_bar)
 	    cfun->machine->sync_bar = gen_reg_rtx (SImode);
 
@@ -4285,6 +4291,9 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	  data.base = oacc_bcast_sym;
 	  data.ptr = 0;
 
+	  if (vector)
+	    data.base = cfun->machine->bcast_partition;
+	  
 	  if (oacc_bcast_partition < size)
 	    {
 	      oacc_bcast_partition = size;
