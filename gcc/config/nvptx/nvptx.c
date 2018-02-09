@@ -1110,7 +1110,7 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
   if (strcmp (name, "x") == 0 && cfun->machine->red_partition)
     {
       fprintf (file, "\t\t.reg.u64\t%%t_red;\n");
-      fprintf (file, "\t\t.reg.u64\t%%x64;\n");
+      fprintf (file, "\t\t.reg.u64\t%%y64;\n");
     }
   fprintf (file, "\t\tmov.u32\t\t%%%s, %%tid.%s;\n", name, name);
   fprintf (file, "\t\tsetp.ne.u32\t%%r%d, %%%s, 0;\n", regno, name);
@@ -1130,12 +1130,12 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
     }
   if (strcmp (name, "x") == 0 && cfun->machine->red_partition)
     {
-      fprintf (file, "\t\tcvt.u64.u32\t%%x64, %%x;\n");
+      fprintf (file, "\t\tcvt.u64.u32\t%%y64, %%tid.y;\n");
 //      fprintf (file, "\t\tmul.lo.u64\t%%r%d, %%x64, %d;\n",
 //	       REGNO (cfun->machine->red_partition),
 //	       vector_red_partition);
       fprintf (file, "\t\tcvta.shared.u64\t%%t_red, __vector_red;\n");
-      fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%x64, %d, %%t_red; "
+      fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%y64, %d, %%t_red; "
 	       "// vector reduction buffer\n",
 	       REGNO (cfun->machine->red_partition),
 	       vector_red_partition);
