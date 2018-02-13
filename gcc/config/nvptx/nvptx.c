@@ -5150,7 +5150,7 @@ nvptx_expand_builtin (tree exp, rtx target, rtx ARG_UNUSED (subtarget),
 static int
 nvptx_simt_vf ()
 {
-  return PTX_VECTOR_LENGTH;
+  return PTX_WARP_SIZE;
 }
 
 /* Validate compute dimensions of an OpenACC offload or routine, fill
@@ -5185,10 +5185,11 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 
   bool changed = false;
 
-  /* The vector size must be 32, unless this is a SEQ routine.  */
+  /* The vector size must be a positive multiple of the warp size,
+     unless this is a SEQ routine.  */
   if (fn_level <= GOMP_DIM_VECTOR && fn_level >= -1
       && dims[GOMP_DIM_VECTOR] >= 0
-      && dims[GOMP_DIM_VECTOR] != PTX_VECTOR_LENGTH)
+      && dims[GOMP_DIM_VECTOR] % 32 != 0)
     {
       if (fn_level < 0 && dims[GOMP_DIM_VECTOR] >= 0)
 	warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
@@ -5210,13 +5211,35 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
       changed = true;
     }
 
+  /* Set vector_length to PTX_VECTOR_LENGTH if there are a sufficient
+     number of free threads in the CTA.  */
+  if (dims[GOMP_DIM_WORKER] > 0 && dims[GOMP_DIM_VECTOR] < 0)
+    {
+      if (dims[GOMP_DIM_WORKER] * PTX_VECTOR_LENGTH <= PTX_CTA_SIZE)
+	dims[GOMP_DIM_VECTOR] = PTX_VECTOR_LENGTH;
+      else if (dims[GOMP_DIM_WORKER] * PTX_WARP_SIZE <= PTX_CTA_SIZE)
+	dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
+      else
+	error_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION,
+		  "vector_length must be at least 32");
+      changed = true;
+    }
+
   if (!decl)
     {
-      dims[GOMP_DIM_VECTOR] = PTX_VECTOR_LENGTH;
+      bool new_vector = false;
+      if (dims[GOMP_DIM_VECTOR] <= 1)
+	{
+	  dims[GOMP_DIM_VECTOR] = PTX_VECTOR_LENGTH;
+	  new_vector = true;
+	}
       if (dims[GOMP_DIM_WORKER] < 0)
 	dims[GOMP_DIM_WORKER] = PTX_DEFAULT_RUNTIME_DIM;
       if (dims[GOMP_DIM_GANG] < 0)
 	dims[GOMP_DIM_GANG] = PTX_DEFAULT_RUNTIME_DIM;
+      if (new_vector
+	  && dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR] > PTX_CTA_SIZE)
+	dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
       changed = true;
     }
 
