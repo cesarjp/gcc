@@ -5201,19 +5201,30 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
       changed = true;
     }
 
+  /* vector_length must be at least PTX_WARP_SIZE.  */
+  if (dims[GOMP_DIM_VECTOR] == 0)
+    {
+      dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
+      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
+		  G_("using vector_length (%d), ignoring %d"),
+		  PTX_VECTOR_LENGTH, dims[GOMP_DIM_VECTOR]);
+      changed = true;
+    }
+
   /* Check the num workers is not too large.  */
   if (dims[GOMP_DIM_WORKER] > PTX_WORKER_LENGTH)
     {
-      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
-		  "using num_workers (%d), ignoring %d",
-		  PTX_WORKER_LENGTH, dims[GOMP_DIM_WORKER]);
+      /* Should this be a warning?  */
+//      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
+//		  "using num_workers (%d), ignoring %d",
+//		  PTX_WORKER_LENGTH, dims[GOMP_DIM_WORKER]);
       dims[GOMP_DIM_WORKER] = PTX_WORKER_LENGTH;
       changed = true;
     }
 
   /* Set vector_length to PTX_VECTOR_LENGTH if there are a sufficient
      number of free threads in the CTA.  */
-  if (dims[GOMP_DIM_WORKER] > 0 && dims[GOMP_DIM_VECTOR] < 0)
+  if (dims[GOMP_DIM_WORKER] > 0 && dims[GOMP_DIM_VECTOR] <= 0)
     {
       if (dims[GOMP_DIM_WORKER] * PTX_VECTOR_LENGTH <= PTX_CTA_SIZE)
 	dims[GOMP_DIM_VECTOR] = PTX_VECTOR_LENGTH;
@@ -5224,7 +5235,7 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 		  "vector_length must be at least 32");
       changed = true;
     }
-
+  
   if (!decl)
     {
       bool new_vector = false;
@@ -5243,6 +5254,9 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
       changed = true;
     }
 
+//  printf ("\ndims = %d %d %d\n", dims[0], dims[1], dims[2]);
+  gcc_assert (dims[GOMP_DIM_VECTOR] != 0);
+  
   return changed;
 }
 
