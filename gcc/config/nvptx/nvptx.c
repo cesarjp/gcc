@@ -1864,6 +1864,7 @@ nvptx_gen_shared_bcast (rtx reg, propagate_mask pm, unsigned rep,
 	      oacc_bcast_align = align;
 	    data->offset = (data->offset + align - 1) & ~(align - 1);
 	    addr = data->base;
+	    gcc_assert (data->base != NULL);
 	    if (data->offset)
 	      addr = gen_rtx_PLUS (Pmode, addr, GEN_INT (data->offset));
 	  }
@@ -4301,8 +4302,10 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	  data.base = oacc_bcast_sym;
 	  data.ptr = 0;
 
-	  if (vector)
+	  if (vector && oa->max_workers > 1)
 	    data.base = cfun->machine->bcast_partition;
+
+	  gcc_assert (data.base != NULL);
 
 	  if (oacc_bcast_partition < size)
 	    {
@@ -4315,7 +4318,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 						    vector),
 			    before);
 
-	  if (vector)
+	  if (vector && oa->max_workers > 1)
 	    {
 	      barrier = cfun->machine->sync_bar;
 	      threads = oa->vector_length;
