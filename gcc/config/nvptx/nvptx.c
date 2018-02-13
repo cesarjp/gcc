@@ -4460,7 +4460,7 @@ nvptx_process_pars (parallel *par, offload_attrs *oa)
       rtx barrier = GEN_INT (0);
       int threads = 0;
 
-      if (!worker)
+      if (!worker && cfun->machine->sync_bar)
 	{
 	  barrier = cfun->machine->sync_bar;
 	  threads = oa->vector_length;
