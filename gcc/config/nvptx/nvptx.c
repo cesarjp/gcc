@@ -5161,6 +5161,8 @@ nvptx_simt_vf ()
 static bool
 nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 {
+  //printf ("\nentry dims = %d %d %d\n", dims[0], dims[1], dims[2]);
+
   /* Detect if a function is unsuitable for offloading.  */
   if (!flag_offload_force && decl)
     {
@@ -5205,6 +5207,7 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
   if (dims[GOMP_DIM_VECTOR] == 0)
     {
       dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
+      /* Should this be a warning?  */
       warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
 		  G_("using vector_length (%d), ignoring %d"),
 		  PTX_VECTOR_LENGTH, dims[GOMP_DIM_VECTOR]);
@@ -5214,10 +5217,9 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
   /* Check the num workers is not too large.  */
   if (dims[GOMP_DIM_WORKER] > PTX_WORKER_LENGTH)
     {
-      /* Should this be a warning?  */
-//      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
-//		  "using num_workers (%d), ignoring %d",
-//		  PTX_WORKER_LENGTH, dims[GOMP_DIM_WORKER]);
+      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
+		  "using num_workers (%d), ignoring %d",
+		  PTX_WORKER_LENGTH, dims[GOMP_DIM_WORKER]);
       dims[GOMP_DIM_WORKER] = PTX_WORKER_LENGTH;
       changed = true;
     }
@@ -5254,8 +5256,9 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
       changed = true;
     }
 
-//  printf ("\ndims = %d %d %d\n", dims[0], dims[1], dims[2]);
+  //printf ("\nexit dims = %d %d %d\n", dims[0], dims[1], dims[2]);
   gcc_assert (dims[GOMP_DIM_VECTOR] != 0);
+  gcc_assert (dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR] <= PTX_CTA_SIZE);
   
   return changed;
 }
