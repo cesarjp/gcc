@@ -4302,7 +4302,9 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	  data.base = oacc_bcast_sym;
 	  data.ptr = 0;
 
-	  if (vector && oa->max_workers > 1)
+	  if (vector
+	      && oa->max_workers > 1
+	      && cfun->machine->bcast_partition)
 	    data.base = cfun->machine->bcast_partition;
 
 	  gcc_assert (data.base != NULL);
@@ -4318,7 +4320,9 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 						    vector),
 			    before);
 
-	  if (vector && oa->max_workers > 1)
+	  if (vector
+	      && oa->max_workers > 1
+	      && cfun->machine->sync_bar)
 	    {
 	      barrier = cfun->machine->sync_bar;
 	      threads = oa->vector_length;
