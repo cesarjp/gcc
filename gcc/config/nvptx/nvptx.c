@@ -4917,12 +4917,17 @@ nvptx_expand_shuffle (tree exp, rtx target, machine_mode mode, int ignore)
 }
 
 const char *
-nvptx_output_red_partition (rtx dst, rtx offset, rtx scratch)
+nvptx_output_red_partition (rtx dst, rtx offset)
 {
   char *zero_offset = "\t\tmov.u64\t%%r%d, %%r%d; // vred buffer\n";
+  char *with_offset = "\t\tadd.u64\t%%r%d, %%r%d, %d; // vred buffer\n";
 
-  fprintf (asm_out_file, zero_offset, REGNO (dst),
-	   REGNO (cfun->machine->red_partition));
+  if (offset == const0_rtx)
+    fprintf (asm_out_file, zero_offset, REGNO (dst),
+	     REGNO (cfun->machine->red_partition));
+  else
+    fprintf (asm_out_file, with_offset, REGNO (dst),
+	     REGNO (cfun->machine->red_partition), UINTVAL (offset));
 
   return "";
 }
@@ -4962,28 +4967,8 @@ nvptx_expand_shared_addr (tree exp, rtx target,
 	  vector_red_partition = new_size;
 	}
 
-//      if (offset)
-//	{
-//	  rtx t = gen_rtx_PLUS (Pmode, cfun->machine->red_partition,
-//				GEN_INT (offset));
-//	  off = gen_rtx_SET (gen_reg_rtx (Pmode), t);
-//	  emit_insn (off);
-//	}
-//      else
-//	off = cfun->machine->red_partition;
-
-//      addr = gen_reg_rtx (Pmode);
-//      emit_move_insn (addr, off);
-
-      //emit_insn (gen_nvptx_red_partition (target, off, GEN_INT (offset)));
-      //addr = gen_rtx_MEM (GET_MODE (target), off);
       addr = gen_reg_rtx (Pmode);
-      rtx t = gen_nvptx_red_partition (addr, GEN_INT (offset),
-				       gen_reg_rtx (Pmode));
-      emit_insn (t);
-
-//      addr = gen_rtx_PLUS (Pmode, addr, off);
-//      addr = gen_rtx_CONST (Pmode, addr);
+      emit_insn (gen_nvptx_red_partition (addr, GEN_INT (offset)));
     }
   else
     {
@@ -4998,8 +4983,6 @@ nvptx_expand_shared_addr (tree exp, rtx target,
 	  addr = gen_rtx_PLUS (Pmode, addr, GEN_INT (offset));
 	  addr = gen_rtx_CONST (Pmode, addr);
 	}
-
-      //emit_insn (gen_nvptx_red_partition (target, target, GEN_INT (offset)));
    }
 
   emit_move_insn (target, addr);

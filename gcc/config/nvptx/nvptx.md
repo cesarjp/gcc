@@ -1438,12 +1438,10 @@
 
 (define_insn "nvptx_red_partition"
   [(set (match_operand:DI 0 "nonimmediate_operand" "=R")
-	(unspec_volatile [(match_operand:DI 1 "const_int_operand")
-		          (match_operand:DI 2 "nonimmediate_operand" "Ri")]
-	 UNSPECV_RED_PART))
-   (clobber (match_dup 2))]
+	(unspec_volatile [(match_operand:DI 1 "const_int_operand")]
+	 UNSPECV_RED_PART))]
   ""
   {
-    return nvptx_output_red_partition (operands[0], operands[1], operands[2]);
+    return nvptx_output_red_partition (operands[0], operands[1]);
   }
   [(set_attr "predicable" "false")])
