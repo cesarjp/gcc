@@ -4926,8 +4926,8 @@ nvptx_expand_shuffle (tree exp, rtx target, machine_mode mode, int ignore)
 const char *
 nvptx_output_red_partition (rtx dst, rtx offset)
 {
-  char *zero_offset = "\t\tmov.u64\t%%r%d, %%r%d; // vred buffer\n";
-  char *with_offset = "\t\tadd.u64\t%%r%d, %%r%d, %d; // vred buffer\n";
+  const char *zero_offset = "\t\tmov.u64\t%%r%d, %%r%d; // vred buffer\n";
+  const char *with_offset = "\t\tadd.u64\t%%r%d, %%r%d, %d; // vred buffer\n";
 
   if (offset == const0_rtx)
     fprintf (asm_out_file, zero_offset, REGNO (dst),
@@ -4961,7 +4961,6 @@ nvptx_expand_shared_addr (tree exp, rtx target,
 
       offload_attrs oa;
       unsigned new_size = size + offset;
-      rtx off;
 
       populate_offload_attrs (&oa);
 
@@ -5187,12 +5186,10 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 
   bool changed = false;
 
-  /* vector_length must be at least PTX_WARP_SIZE.  */
-  if (dims[GOMP_DIM_VECTOR == 1])
+  /* vector_length must be at least PTX_WARP_SIZE.  For historical
+     reasons, this isn't a warning.  */
+  if (dims[GOMP_DIM_VECTOR == 1] == 1)
     {
-      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
-		  G_("using vector_length (%d), ignoring %d"),
-		  PTX_VECTOR_LENGTH, dims[GOMP_DIM_VECTOR]);
       dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
       changed = true;
     }
