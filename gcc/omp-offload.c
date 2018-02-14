@@ -644,6 +644,8 @@ oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used)
       pos = TREE_CHAIN (pos);
     }
 
+  //printf ("\nINPUT DIMS = %d %d %d\n", dims[0], dims[1], dims[2]);
+
   bool check = true;
 #ifdef ACCEL_COMPILER
   /* When device_type is implemented, we should also check on the
@@ -675,7 +677,7 @@ oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used)
 		      axes[ix], axes[ix]);
     }
 
-  bool changed = targetm.goacc.validate_dims (fn, dims, level);
+  bool changed = false;
 
   /* Default anything left to 1 or a partitioned default.  */
   for (ix = 0; ix != GOMP_DIM_MAX; ix++)
@@ -702,6 +704,9 @@ oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used)
 		    ? oacc_default_dims[ix] : oacc_min_dims[ix]);
 	changed = true;
       }
+
+  if (targetm.goacc.validate_dims (fn, dims, level))
+    changed = true;
 
   if (changed)
     {
