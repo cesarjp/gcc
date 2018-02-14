@@ -1683,10 +1683,11 @@ function corresponding to the compute region.  For a routine is is the\n\
 outermost level at which partitioned execution may be spawned.  The hook\n\
 should verify non-default values.  If DECL is NULL, global defaults\n\
 are being validated and unspecified defaults should be filled in.\n\
-Diagnostics should be issued as appropriate.  Return\n\
-true, if changes have been made.  You must override this hook to\n\
-provide dimensions larger than 1.",
-bool, (tree decl, int *dims, int fn_level),
+Diagnostics should be issued as appropriate.  The @var{default_dims}\n\
+contain the user-specified default dims.  Return true, if changes have\n\
+been made.  You must override this hook to provide dimensions larger\n\
+than 1.",
+bool, (tree decl, int *dims, int fn_level, int *default_dims),
 default_goacc_validate_dims)
 
 DEFHOOK

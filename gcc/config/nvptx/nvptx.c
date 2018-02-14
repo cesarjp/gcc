@@ -5158,8 +5158,14 @@ nvptx_simt_vf ()
    DECL is null, we are validating the default dimensions.  */
 
 static bool
-nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
+nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level,
+			   int default_dims[])
 {
+  int default_vector_length = PTX_VECTOR_LENGTH;
+
+  if (default_dims)
+    default_vector_length = default_dims[GOMP_DIM_VECTOR];
+
   //printf ("\nentry dims = %d %d %d\n", dims[0], dims[1], dims[2]);
 
   /* Detect if a function is unsuitable for offloading.  */
@@ -5205,8 +5211,8 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 		    dims[GOMP_DIM_VECTOR]
 		    ? G_("using vector_length (%d), ignoring %d")
 		    : G_("using vector_length (%d), ignoring runtime setting"),
-		    PTX_VECTOR_LENGTH, dims[GOMP_DIM_VECTOR]);
-      dims[GOMP_DIM_VECTOR] = PTX_VECTOR_LENGTH;
+		    default_vector_length, dims[GOMP_DIM_VECTOR]);
+      dims[GOMP_DIM_VECTOR] = default_vector_length;
       changed = true;
     }
 
@@ -5225,7 +5231,7 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
     {
       warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
 		  G_("using vector_length (%d), ignoring %d"),
-		  PTX_VECTOR_LENGTH, dims[GOMP_DIM_VECTOR]);
+		  default_vector_length, dims[GOMP_DIM_VECTOR]);
       dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
       changed = true;
     }
@@ -5233,19 +5239,22 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
   /* vector_length must not exceed PTX_CTA_SIZE.  */
   if (dims[GOMP_DIM_VECTOR] >= PTX_CTA_SIZE)
     {
+      int new_vector = PTX_CTA_SIZE;
+      if (default_dims)
+	new_vector = default_vector_length;
       warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
 		  G_("using vector_length (%d), ignoring %d"),
-		  PTX_CTA_SIZE, dims[GOMP_DIM_VECTOR]);
-      dims[GOMP_DIM_VECTOR] = PTX_CTA_SIZE;
+		  new_vector, dims[GOMP_DIM_VECTOR]);
+      dims[GOMP_DIM_VECTOR] = new_vector;
       changed = true;
     }
 
-  /* Set vector_length to PTX_VECTOR_LENGTH if there are a sufficient
+  /* Set vector_length to default_vector_length if there are a sufficient
      number of free threads in the CTA.  */
   if (dims[GOMP_DIM_WORKER] > 0 && dims[GOMP_DIM_VECTOR] <= 0)
     {
-      if (dims[GOMP_DIM_WORKER] * PTX_VECTOR_LENGTH <= PTX_CTA_SIZE)
-	dims[GOMP_DIM_VECTOR] = PTX_VECTOR_LENGTH;
+      if (dims[GOMP_DIM_WORKER] * default_vector_length <= PTX_CTA_SIZE)
+	dims[GOMP_DIM_VECTOR] = default_vector_length;
       else if (dims[GOMP_DIM_WORKER] * PTX_WARP_SIZE <= PTX_CTA_SIZE)
 	dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
       else
@@ -5259,7 +5268,7 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
       bool new_vector = false;
       if (dims[GOMP_DIM_VECTOR] <= 1)
 	{
-	  dims[GOMP_DIM_VECTOR] = PTX_VECTOR_LENGTH;
+	  dims[GOMP_DIM_VECTOR] = default_vector_length;
 	  new_vector = true;
 	}
       if (dims[GOMP_DIM_WORKER] < 0)

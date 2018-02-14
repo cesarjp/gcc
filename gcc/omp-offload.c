@@ -615,8 +615,8 @@ oacc_parse_default_dims (const char *dims)
     }
 
   /* Allow the backend to validate the dimensions.  */
-  targetm.goacc.validate_dims (NULL_TREE, oacc_default_dims, -1);
-  targetm.goacc.validate_dims (NULL_TREE, oacc_min_dims, -2);
+  targetm.goacc.validate_dims (NULL_TREE, oacc_default_dims, -1, NULL);
+  targetm.goacc.validate_dims (NULL_TREE, oacc_min_dims, -2, NULL);
 }
 
 /* Validate and update the dimensions for offloaded FN.  ATTRS is the
@@ -626,7 +626,8 @@ oacc_parse_default_dims (const char *dims)
    function.  */
 
 static void
-oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used)
+oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used,
+		    int * ARG_UNUSED (unused_dims))
 {
   tree purpose[GOMP_DIM_MAX];
   unsigned ix;
@@ -677,7 +678,8 @@ oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used)
 		      axes[ix], axes[ix]);
     }
 
-  bool changed = false;
+  bool changed = targetm.goacc.validate_dims (fn, dims, level,
+					      oacc_default_dims);
 
   /* Default anything left to 1 or a partitioned default.  */
   for (ix = 0; ix != GOMP_DIM_MAX; ix++)
@@ -705,8 +707,6 @@ oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used)
 	changed = true;
       }
 
-  if (targetm.goacc.validate_dims (fn, dims, level))
-    changed = true;
 
   if (changed)
     {
@@ -1609,7 +1609,8 @@ execute_oacc_device_lower ()
     }
 
   int dims[GOMP_DIM_MAX];
-  oacc_validate_dims (current_function_decl, attrs, dims, fn_level, used_mask);
+  oacc_validate_dims (current_function_decl, attrs, dims, fn_level, used_mask,
+		      NULL);
 
   if (dump_file)
     {
@@ -1751,7 +1752,8 @@ execute_oacc_device_lower ()
 
 bool
 default_goacc_validate_dims (tree ARG_UNUSED (decl), int *dims,
-			     int ARG_UNUSED (fn_level))
+			     int ARG_UNUSED (fn_level),
+			     int * ARG_UNUSED (default_dims))
 {
   bool changed = false;
 
