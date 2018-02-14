@@ -5187,6 +5187,16 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 
   bool changed = false;
 
+  /* vector_length must be at least PTX_WARP_SIZE.  */
+  if (dims[GOMP_DIM_VECTOR == 1])
+    {
+      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
+		  G_("using vector_length (%d), ignoring %d"),
+		  PTX_VECTOR_LENGTH, dims[GOMP_DIM_VECTOR]);
+      dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
+      changed = true;
+    }
+
   /* The vector size must be a positive multiple of the warp size,
      unless this is a SEQ routine.  */
   if (fn_level <= GOMP_DIM_VECTOR && fn_level >= -1
@@ -5203,17 +5213,6 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
       changed = true;
     }
 
-  /* vector_length must be at least PTX_WARP_SIZE.  */
-  if (dims[GOMP_DIM_VECTOR] == 0)
-    {
-      dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
-      /* Should this be a warning?  */
-      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
-		  G_("using vector_length (%d), ignoring %d"),
-		  PTX_VECTOR_LENGTH, dims[GOMP_DIM_VECTOR]);
-      changed = true;
-    }
-
   /* Check the num workers is not too large.  */
   if (dims[GOMP_DIM_WORKER] > PTX_WORKER_LENGTH)
     {
@@ -5221,6 +5220,26 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 		  "using num_workers (%d), ignoring %d",
 		  PTX_WORKER_LENGTH, dims[GOMP_DIM_WORKER]);
       dims[GOMP_DIM_WORKER] = PTX_WORKER_LENGTH;
+      changed = true;
+    }
+
+  /* Ensure that num_worker * vector_length < cta size.  */
+  if (dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR] > PTX_CTA_SIZE)
+    {
+      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
+		  G_("using vector_length (%d), ignoring %d"),
+		  PTX_VECTOR_LENGTH, dims[GOMP_DIM_VECTOR]);
+      dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
+      changed = true;
+    }
+
+  /* vector_length must not exceed PTX_CTA_SIZE.  */
+  if (dims[GOMP_DIM_VECTOR] >= PTX_CTA_SIZE)
+    {
+      warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
+		  G_("using vector_length (%d), ignoring %d"),
+		  PTX_CTA_SIZE, dims[GOMP_DIM_VECTOR]);
+      dims[GOMP_DIM_VECTOR] = PTX_CTA_SIZE;
       changed = true;
     }
 
