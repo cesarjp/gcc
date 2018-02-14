@@ -5163,8 +5163,11 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level,
 {
   int default_vector_length = PTX_VECTOR_LENGTH;
 
-  if (default_dims)
-    default_vector_length = default_dims[GOMP_DIM_VECTOR];
+  /* For capability reasons, fallback to vl = 32 for runtime values.  */
+  if (dims[GOMP_DIM_VECTOR] == 0)
+    default_vector_length = PTX_WARP_SIZE;
+  else if (default_dims)
+      default_vector_length = default_dims[GOMP_DIM_VECTOR];
 
   //printf ("\nentry dims = %d %d %d\n", dims[0], dims[1], dims[2]);
 
