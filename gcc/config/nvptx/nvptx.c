@@ -5255,6 +5255,10 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level,
 		  "vector_length must be at least 32");
       changed = true;
     }
+
+  /* Specify a default vector_length.  */
+  if (dims[GOMP_DIM_VECTOR] < 0)
+    dims[GOMP_DIM_VECTOR] = default_vector_length;
   
   if (!decl)
     {
