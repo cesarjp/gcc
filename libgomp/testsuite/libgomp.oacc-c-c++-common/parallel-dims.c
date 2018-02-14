@@ -1,8 +1,7 @@
-/* { dg-xfail-if "hard-coded vector_length" { openacc_nvidia_accel_selected } } */
 /* OpenACC parallelism dimensions clauses: num_gangs, num_workers,
    vector_length.  */
 
-/* { dg-additional-options "-foffload-force" } */
+/* { dg-additional-options "-foffload-force -fopenacc-dim=-:-:32" } */
 
 #include <limits.h>
 #include <openacc.h>
