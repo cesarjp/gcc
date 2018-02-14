@@ -5188,7 +5188,7 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
 
   /* vector_length must be at least PTX_WARP_SIZE.  For historical
      reasons, this isn't a warning.  */
-  if (dims[GOMP_DIM_VECTOR == 1] == 1)
+  if (dims[GOMP_DIM_VECTOR] == 0 || dims[GOMP_DIM_VECTOR == 1] == 1)
     {
       dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
       changed = true;
