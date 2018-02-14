@@ -1,3 +1,4 @@
+/* { dg-xfail-if "hard-coded vector_length" { openacc_nvidia_accel_selected } } */
 /* OpenACC parallelism dimensions clauses: num_gangs, num_workers,
    vector_length.  */
 
