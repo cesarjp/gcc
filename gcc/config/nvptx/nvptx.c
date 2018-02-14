@@ -5192,19 +5192,12 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level,
 
   bool changed = false;
 
-  /* vector_length must be at least PTX_WARP_SIZE.  For historical
-     reasons, this isn't a warning.  */
-  if (dims[GOMP_DIM_VECTOR] == 0 || dims[GOMP_DIM_VECTOR == 1] == 1)
-    {
-      dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
-      changed = true;
-    }
-
   /* The vector size must be a positive multiple of the warp size,
      unless this is a SEQ routine.  */
   if (fn_level <= GOMP_DIM_VECTOR && fn_level >= -1
       && dims[GOMP_DIM_VECTOR] >= 0
-      && dims[GOMP_DIM_VECTOR] % 32 != 0)
+      && (dims[GOMP_DIM_VECTOR] % 32 != 0
+	  || dims[GOMP_DIM_VECTOR] % 32 == 0))
     {
       if (fn_level < 0 && dims[GOMP_DIM_VECTOR] >= 0)
 	warning_at (decl ? DECL_SOURCE_LOCATION (decl) : UNKNOWN_LOCATION, 0,
