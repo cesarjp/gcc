@@ -4006,9 +4006,9 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
 	    cfun->machine->tid_y = gen_reg_rtx (DImode);
 	  if (!cfun->machine->bcast_partition)
 	    {
+	      /* It would be nice to place this register in
+		 DATA_AREA_SHARED.  */
 	      cfun->machine->bcast_partition = gen_reg_rtx (DImode);
-	      SET_SYMBOL_DATA_AREA (cfun->machine->bcast_partition,
-				    DATA_AREA_SHARED);
 	    }
 	  if (!cfun->machine->sync_bar)
 	    cfun->machine->sync_bar = gen_reg_rtx (SImode);
