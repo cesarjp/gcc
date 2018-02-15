@@ -4838,10 +4838,11 @@ nvptx_file_start (void)
   fputs ("// END PREAMBLE\n", asm_out_file);
 }
 
-/* Emit a declaration for a worker-level buffer in .shared memory.  */
+/* Emit a declaration for a worker and vector-level buffer in .shared
+   memory.  */
 
 static void
-write_worker_buffer (FILE *file, rtx sym, unsigned align, unsigned size)
+write_shared_buffer (FILE *file, rtx sym, unsigned align, unsigned size)
 {
   const char *name = XSTR (sym, 0);
 
@@ -4863,19 +4864,19 @@ nvptx_file_end (void)
   fputs (func_decls.str().c_str(), asm_out_file);
 
   if (oacc_bcast_size)
-    write_worker_buffer (asm_out_file, oacc_bcast_sym,
+    write_shared_buffer (asm_out_file, oacc_bcast_sym,
 			 oacc_bcast_align, oacc_bcast_size);
 
   if (worker_red_size)
-    write_worker_buffer (asm_out_file, worker_red_sym,
+    write_shared_buffer (asm_out_file, worker_red_sym,
 			 worker_red_align, worker_red_size);
 
   if (vector_red_size)
-    write_worker_buffer (asm_out_file, vector_red_sym,
-			 worker_red_align, vector_red_size);
+    write_shared_buffer (asm_out_file, vector_red_sym,
+			 vector_red_align, vector_red_size);
 
   if (gangprivate_shared_size)
-    write_worker_buffer (asm_out_file, gangprivate_shared_sym,
+    write_shared_buffer (asm_out_file, gangprivate_shared_sym,
 			 gangprivate_shared_align, gangprivate_shared_size);
 
   if (need_softstack_decl)
@@ -4956,13 +4957,13 @@ nvptx_expand_shared_addr (tree exp, rtx target,
   
   if (vector)
     {
-      if (align > vector_red_align)
-	vector_red_align = align;
-
       offload_attrs oa;
       unsigned new_size = size + offset;
 
       populate_offload_attrs (&oa);
+
+      if (align > vector_red_align)
+	vector_red_align = align;
 
       if (cfun->machine->red_partition == NULL)
 	cfun->machine->red_partition = gen_reg_rtx (Pmode);
