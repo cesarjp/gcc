@@ -4962,16 +4962,19 @@ nvptx_expand_shared_addr (tree exp, rtx target,
 
       populate_offload_attrs (&oa);
 
+      new_size = (new_size * oa.max_workers + align - 1) & ~(align - 1);
+
       if (align > vector_red_align)
 	vector_red_align = align;
 
       if (cfun->machine->red_partition == NULL)
 	cfun->machine->red_partition = gen_reg_rtx (Pmode);
 
-      if (new_size * oa.max_workers > vector_red_size)
+      if (new_size > vector_red_size)
 	{
-	  vector_red_size = new_size * oa.max_workers;
-	  vector_red_partition = new_size;
+	  int partition_size = (size + offset + align - 1) & ~(align -1);
+	  vector_red_size = new_size;
+	  vector_red_partition = partition_size;
 	}
 
       addr = gen_reg_rtx (Pmode);
