@@ -1105,8 +1105,11 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
 {
   fprintf (file, "\t{\n");
   fprintf (file, "\t\t.reg.u32\t%%%s;\n", name);
-  if (strcmp (name, "y") == 0 && cfun->machine->tid_y)
-    fprintf (file, "\t\t.reg.u64\t%%t_bcast;\n");
+  if (strcmp (name, "y") == 0 && cfun->machine->bcast_partition)
+    {
+      fprintf (file, "\t\t.reg.u64\t%%t_bcast;\n");
+      fprintf (file, "\t\t.reg.u64\t%%y64;\n");
+    }
   if (strcmp (name, "x") == 0 && cfun->machine->red_partition)
     {
       fprintf (file, "\t\t.reg.u64\t%%t_red;\n");
@@ -1114,15 +1117,14 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
     }
   fprintf (file, "\t\tmov.u32\t\t%%%s, %%tid.%s;\n", name, name);
   fprintf (file, "\t\tsetp.ne.u32\t%%r%d, %%%s, 0;\n", regno, name);
-  if (strcmp (name, "y") == 0 && cfun->machine->tid_y)
+  if (strcmp (name, "y") == 0 && cfun->machine->bcast_partition)
     {
-      fprintf (file, "\t\tcvt.u64.u32\t%%r%d, %%y; // warp_lane\n",
-	       REGNO (cfun->machine->tid_y));
+      fprintf (file, "\t\tcvt.u64.u32\t%%y64, %%y;\n");
+      fprintf (file, "\t\tadd.u64 %%y64, %%y64, 1; // vector ID\n");
       fprintf (file, "\t\tcvta.shared.u64\t%%t_bcast, __oacc_bcast;\n");
-      fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%r%d, %d, %%t_bcast; "
+      fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%y64, %d, %%t_bcast; "
 	       "// vector broadcast offset\n",
 	       REGNO (cfun->machine->bcast_partition),
-	       REGNO (cfun->machine->tid_y),
 	       oacc_bcast_partition);
       fprintf (file, "\t\tadd.u32\t\t%%r%d, %%y, 1; "
 	       "// vector synchronization barrier\n",
@@ -4002,8 +4004,8 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
       /* Stuff was emitted, initialize the base pointer now.  */
       if (vector && oa->max_workers > 1)
 	{
-	  if (!cfun->machine->tid_y)
-	    cfun->machine->tid_y = gen_reg_rtx (DImode);
+//	  if (!cfun->machine->tid_y)
+//	    cfun->machine->tid_y = gen_reg_rtx (DImode);
 	  if (!cfun->machine->bcast_partition)
 	    {
 	      /* It would be nice to place this register in
@@ -4021,8 +4023,10 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
 
       if (oacc_bcast_partition < data.offset)
 	{
-	  oacc_bcast_partition = data.offset;
-	  oacc_bcast_size = oa->max_workers * data.offset;
+	  int psize = data.offset;
+	  psize = (psize + oacc_bcast_align - 1) & ~(oacc_bcast_align - 1);
+	  oacc_bcast_partition = psize;
+	  oacc_bcast_size = psize * (oa->max_workers + 1);
 	}
     }
   return empty;
@@ -4311,8 +4315,10 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 
 	  if (oacc_bcast_partition < size)
 	    {
-	      oacc_bcast_partition = size;
-	      oacc_bcast_size = oa->max_workers * size;
+	      int psize = data.offset;
+	      psize = (psize + oacc_bcast_align - 1) & ~(oacc_bcast_align - 1);
+	      oacc_bcast_partition = psize;
+	      oacc_bcast_size = psize * (oa->max_workers + 1);
 	    }
 
 	  data.offset = 0;
