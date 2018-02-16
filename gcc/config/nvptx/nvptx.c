@@ -4315,7 +4315,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 
 	  if (oacc_bcast_partition < size)
 	    {
-	      int psize = data.offset;
+	      int psize = size;
 	      psize = (psize + oacc_bcast_align - 1) & ~(oacc_bcast_align - 1);
 	      oacc_bcast_partition = psize;
 	      oacc_bcast_size = psize * (oa->max_workers + 1);
