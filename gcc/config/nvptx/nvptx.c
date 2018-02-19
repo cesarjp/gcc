@@ -4004,8 +4004,6 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
       /* Stuff was emitted, initialize the base pointer now.  */
       if (vector && oa->max_workers > 1)
 	{
-//	  if (!cfun->machine->tid_y)
-//	    cfun->machine->tid_y = gen_reg_rtx (DImode);
 	  if (!cfun->machine->bcast_partition)
 	    {
 	      /* It would be nice to place this register in

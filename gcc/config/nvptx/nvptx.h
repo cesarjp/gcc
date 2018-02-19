@@ -226,7 +226,6 @@ struct GTY(()) machine_function
   int return_mode; /* Return mode of current fn.
 		      (machine_mode not defined yet.) */
   rtx axis_predicate[2]; /* Neutering predicates.  */
-  rtx tid_y; /* tid.y register.  */
   rtx bcast_partition; /* Register containing the size of each
 			  vector's partition of share-memory used to
 			  broadcast state.  */
