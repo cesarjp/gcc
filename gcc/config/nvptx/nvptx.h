@@ -226,6 +226,8 @@ struct GTY(()) machine_function
   int return_mode; /* Return mode of current fn.
 		      (machine_mode not defined yet.) */
   rtx axis_predicate[2]; /* Neutering predicates.  */
+  int axis_dim[2]; /* Maximum number of threads on each axis, dim[0] is
+		      vector_length, dim[1] is num_workers.   */
   rtx bcast_partition; /* Register containing the size of each
 			  vector's partition of share-memory used to
 			  broadcast state.  */

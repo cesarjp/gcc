@@ -1,5 +1,5 @@
 ! { dg-do run }
-! { dg-additional-options "-cpp" }
+! { dg-additional-options "-cpp -fopenacc-dim=-:-:32" }
 
 #define M 8
 #define N 32

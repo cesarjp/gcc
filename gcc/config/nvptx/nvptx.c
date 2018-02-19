@@ -1267,6 +1267,13 @@ nvptx_declare_function_name (FILE *file, const char *name, const_tree decl)
      stream, in order to share the prototype writing code.  */
   std::stringstream s;
   write_fn_proto (s, true, name, decl);
+
+  /* Emit a .maxntid hint to help the PTX JIT emit SYNC branches.  */
+  if (lookup_attribute ("omp target entrypoint", DECL_ATTRIBUTES (decl))
+      && lookup_attribute ("oacc function", DECL_ATTRIBUTES (decl)))
+      s << ".maxntid " << cfun->machine->axis_dim[0] << ", "
+	<< cfun->machine->axis_dim[1] << ", 1\n";
+
   s << "{\n";
 
   bool return_in_mem = write_return_type (s, false, result_type);
@@ -4601,6 +4608,9 @@ populate_offload_attrs (offload_attrs *oa)
     oa->max_workers = PTX_CTA_SIZE / oa->vector_length;
   else
     oa->max_workers = oa->num_workers;
+
+  cfun->machine->axis_dim[0] = oa->vector_length;
+  cfun->machine->axis_dim[1] = oa->max_workers;
 }
 
 /* PTX-specific reorganization
@@ -5172,7 +5182,9 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level,
   int default_vector_length = PTX_VECTOR_LENGTH;
 
   /* For capability reasons, fallback to vl = 32 for runtime values.  */
-  if (dims[GOMP_DIM_VECTOR] == 0)
+  if (/* lookup_attribute ("omp target entrypoint",
+	 DECL_ATTRIBUTES (current_function_decl)) &&  */
+      dims[GOMP_DIM_VECTOR] == 0)
     default_vector_length = PTX_WARP_SIZE;
   else if (default_dims)
       default_vector_length = default_dims[GOMP_DIM_VECTOR];
