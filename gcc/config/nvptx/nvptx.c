@@ -1105,11 +1105,6 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
 {
   fprintf (file, "\t{\n");
   fprintf (file, "\t\t.reg.u32\t%%%s;\n", name);
-  if (strcmp (name, "y") == 0 && cfun->machine->bcast_partition)
-    {
-      fprintf (file, "\t\t.reg.u64\t%%t_bcast;\n");
-      fprintf (file, "\t\t.reg.u64\t%%y64;\n");
-    }
   if (strcmp (name, "x") == 0 && cfun->machine->red_partition)
     {
       fprintf (file, "\t\t.reg.u64\t%%t_red;\n");
@@ -1117,31 +1112,42 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
     }
   fprintf (file, "\t\tmov.u32\t\t%%%s, %%tid.%s;\n", name, name);
   fprintf (file, "\t\tsetp.ne.u32\t%%r%d, %%%s, 0;\n", regno, name);
-  if (strcmp (name, "y") == 0 && cfun->machine->bcast_partition)
-    {
-      fprintf (file, "\t\tcvt.u64.u32\t%%y64, %%y;\n");
-      fprintf (file, "\t\tadd.u64 %%y64, %%y64, 1; // vector ID\n");
-      fprintf (file, "\t\tcvta.shared.u64\t%%t_bcast, __oacc_bcast;\n");
-      fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%y64, %d, %%t_bcast; "
-	       "// vector broadcast offset\n",
-	       REGNO (cfun->machine->bcast_partition),
-	       oacc_bcast_partition);
-      fprintf (file, "\t\tadd.u32\t\t%%r%d, %%y, 1; "
-	       "// vector synchronization barrier\n",
-	       REGNO (cfun->machine->sync_bar));
-    }
   if (strcmp (name, "x") == 0 && cfun->machine->red_partition)
     {
       fprintf (file, "\t\tcvt.u64.u32\t%%y64, %%tid.y;\n");
-//      fprintf (file, "\t\tmul.lo.u64\t%%r%d, %%x64, %d;\n",
-//	       REGNO (cfun->machine->red_partition),
-//	       vector_red_partition);
       fprintf (file, "\t\tcvta.shared.u64\t%%t_red, __vector_red;\n");
       fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%y64, %d, %%t_red; "
 	       "// vector reduction buffer\n",
 	       REGNO (cfun->machine->red_partition),
 	       vector_red_partition);
     }
+  fprintf (file, "\t}\n");
+}
+
+/* Emit code to initialize OpenACC worker broadcast and synchronization
+   registers.  */
+
+static void
+nvptx_init_oacc_workers (FILE *file)
+{
+  fprintf (file, "\t{\n");
+  fprintf (file, "\t\t.reg.u32\t%%tidy;\n");
+  if (cfun->machine->bcast_partition)
+    {
+      fprintf (file, "\t\t.reg.u64\t%%t_bcast;\n");
+      fprintf (file, "\t\t.reg.u64\t%%y64;\n");
+      fprintf (file, "\t\tcvt.u64.u32\t%%y64, %%tidy;\n");
+      fprintf (file, "\t\tadd.u64\t\t%%y64, %%y64, 1; // vector ID\n");
+      fprintf (file, "\t\tcvta.shared.u64\t%%t_bcast, __oacc_bcast;\n");
+      fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%y64, %d, %%t_bcast; "
+	       "// vector broadcast offset\n",
+	       REGNO (cfun->machine->bcast_partition),
+	       oacc_bcast_partition);
+    }
+  if (cfun->machine->sync_bar)
+    fprintf (file, "\t\tadd.u32\t\t%%r%d, %%tidy, 1; "
+	     "// vector synchronization barrier\n",
+	     REGNO (cfun->machine->sync_bar));
   fprintf (file, "\t}\n");
 }
 
@@ -1384,6 +1390,8 @@ nvptx_declare_function_name (FILE *file, const char *name, const_tree decl)
   if (cfun->machine->unisimt_predicate
       || (cfun->machine->has_simtreg && !crtl->is_leaf))
     nvptx_init_unisimt_predicate (file);
+  if (cfun->machine->bcast_partition || cfun->machine->sync_bar)
+    nvptx_init_oacc_workers (file);
 }
 
 /* Output code for switching uniform-simt state.  ENTERING indicates whether
