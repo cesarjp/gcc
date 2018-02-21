@@ -1132,6 +1132,7 @@ nvptx_init_oacc_workers (FILE *file)
 {
   fprintf (file, "\t{\n");
   fprintf (file, "\t\t.reg.u32\t%%tidy;\n");
+  fprintf (file, "\t\tmov.u32\t\t%%tidy, %%tid.y;\n");
   if (cfun->machine->bcast_partition)
     {
       fprintf (file, "\t\t.reg.u64\t%%t_bcast;\n");
