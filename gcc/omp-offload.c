@@ -917,6 +917,9 @@ inform_oacc_loop (oacc_loop *loop)
 static void
 adjust_launch_dims (oacc_loop *loop)
 {
+  if (loop == NULL)
+    return;
+  
   targetm.goacc.adjust_launch_dims (loop->mask, loop->flags);
 
   if (loop->child)
