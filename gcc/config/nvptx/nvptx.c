@@ -5352,7 +5352,7 @@ nvptx_adjust_launch_dims (unsigned mask, unsigned flags)
 
   populate_offload_attrs (&oa);
 
-  if (oa.vector_length == PTX_WARPISZE)
+  if (oa.vector_length == PTX_WARP_SIZE)
     return;
   
   if (!(wv && reduction))
