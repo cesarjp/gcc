@@ -1698,6 +1698,15 @@ int, (int axis),
 default_goacc_dim_limit)
 
 DEFHOOK
+(adjust_launch_dims,
+"This hook should adjust the launch geometry of an OpenACC offloaded\n\
+function depending on the available parallelism on accelerator.\n\
+@var{MASK} contains the encoded launch geometry, whereas\n\
+@var{FLAGS} contains oacc_loop_flag values.",
+void, (unsigned mask, unsigned flags),
+default_goacc_adjust_launch_dims)
+
+DEFHOOK
 (fork_join,
 "This hook can be used to convert IFN_GOACC_FORK and IFN_GOACC_JOIN\n\
 function calls to target-specific gimple, or indicate whether they\n\

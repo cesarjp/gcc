@@ -911,6 +911,20 @@ inform_oacc_loop (oacc_loop *loop)
     inform_oacc_loop (loop->sibling);
 }
 
+/* Adjust the launch geometry for any invalid combinations of acc loop
+   parallelism and reductions.  */
+
+static void
+adjust_launch_dims (oacc_loop *loop)
+{
+  targetm.goacc.adjust_launch_dims (loop->mask, loop->flags);
+
+  if (loop->child)
+    adjust_launch_dims (loop->child);
+  if (loop->sibling)
+    adjust_launch_dims (loop->sibling);
+}
+
 /* DFS walk of basic blocks BB onwards, creating OpenACC loop
    structures as we go.  By construction these loops are properly
    nested.  */
@@ -1630,6 +1644,8 @@ execute_oacc_device_lower ()
   if (dump_enabled_p () && loops->child)
     inform_oacc_loop (loops->child);
 
+  adjust_launch_dims (loops->child);
+
   /* Offloaded targets may introduce new basic blocks, which require
      dominance information to update SSA.  */
   calculate_dominance_info (CDI_DOMINATORS);
@@ -1779,6 +1795,15 @@ default_goacc_dim_limit (int ARG_UNUSED (axis))
 #else
   return 1;
 #endif
+}
+
+/* Default runtime limit adjustment on accelerators.  */
+
+void
+default_goacc_adjust_launch_dims (unsigned ARG_UNUSED (mask),
+				  unsigned ARG_UNUSED (flags))
+{
+  return;
 }
 
 namespace {

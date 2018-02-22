@@ -5338,6 +5338,36 @@ nvptx_dim_limit (int axis)
   return 0;
 }
 
+/* Adjust the launch geometry accounting for reductions incompatible
+   combined worker-vector loops when vector_length >
+   PTX_WARP_SIZE.  */
+
+static void
+nvptx_adjust_launch_dims (unsigned mask, unsigned flags)
+{
+  bool wv = (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+    && (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR));
+  bool reduction = flags & OLF_REDUCTION;
+  offload_attrs oa;
+
+  populate_offload_attrs (&oa);
+
+  if (oa.vector_length == PTX_WARPISZE)
+    return;
+  
+  if (!(wv && reduction))
+    return;
+
+  tree attr = oacc_get_fn_attrib (current_function_decl);
+  tree dims = TREE_CHAIN (TREE_VALUE (attr));
+
+  TREE_VALUE (dims) = integer_one_node;
+
+
+//  printf ("\n<%d %d %d %d>\n", oa.num_gangs, oa.num_workers,
+//	  oa.vector_length, oa.max_workers);
+}
+
 /* Determine whether fork & joins are needed.  */
 
 static bool
@@ -6226,6 +6256,9 @@ nvptx_set_current_function (tree fndecl)
 
 #undef TARGET_GOACC_DIM_LIMIT
 #define TARGET_GOACC_DIM_LIMIT nvptx_dim_limit
+
+#undef TARGET_GOACC_ADJUST_LAUNCH_DIMS
+#define TARGET_GOACC_ADJUST_LAUNCH_DIMS nvptx_adjust_launch_dims
 
 #undef TARGET_GOACC_FORK_JOIN
 #define TARGET_GOACC_FORK_JOIN nvptx_goacc_fork_join
