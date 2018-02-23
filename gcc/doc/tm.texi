@@ -5884,6 +5884,11 @@ This hook should return the maximum size of a particular dimension,
 or zero if unbounded.
 @end deftypefn
 
+@deftypefn {Target Hook} unsigned TARGET_GOACC_ADJUST_PARALLELISM (unsigned @var{mask})
+This hook allows the accelerator compiler to remove any unused
+parallelism exposed in @var{MASK}.  It returns an adjusted mask.
+@end deftypefn
+
 @deftypefn {Target Hook} void TARGET_GOACC_ADJUST_LAUNCH_DIMS (unsigned @var{mask}, unsigned @var{flags})
 This hook should adjust the launch geometry of an OpenACC offloaded
 function depending on the available parallelism on accelerator.

@@ -1150,6 +1150,14 @@ oacc_loop_process (oacc_loop *loop)
 
       unsigned dim = GOMP_DIM_GANG;
       unsigned mask = loop->mask | loop->e_mask;
+
+      /* Ideally, we should be coalescing parallelism here if the
+	 hardware supports it.  E.g. Instead of partitioning a loop
+	 across worker and vector axes, sometimes the hardware can
+	 execute those loops together without resorting to placing
+	 extra thread barriers.  */
+      mask = targetm.goacc.adjust_parallelism (mask);
+
       for (ix = 0; ix != GOMP_DIM_MAX && mask; ix++)
 	{
 	  while (!(GOMP_DIM_MASK (dim) & mask))
@@ -1798,6 +1806,14 @@ default_goacc_dim_limit (int ARG_UNUSED (axis))
 #else
   return 1;
 #endif
+}
+
+/* Default adjustment of loop parallelism is not required.  */
+
+unsigned
+default_goacc_adjust_parallelism (unsigned mask)
+{
+  return mask;
 }
 
 /* Default runtime limit adjustment on accelerators.  */

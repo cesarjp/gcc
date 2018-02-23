@@ -1698,6 +1698,13 @@ int, (int axis),
 default_goacc_dim_limit)
 
 DEFHOOK
+(adjust_parallelism,
+"This hook allows the accelerator compiler to remove any unused\n\
+parallelism exposed in @var{MASK}.  It returns an adjusted mask.",
+unsigned, (unsigned mask),
+default_goacc_adjust_parallelism)
+
+DEFHOOK
 (adjust_launch_dims,
 "This hook should adjust the launch geometry of an OpenACC offloaded\n\
 function depending on the available parallelism on accelerator.\n\

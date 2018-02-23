@@ -5338,6 +5338,27 @@ nvptx_dim_limit (int axis)
   return 0;
 }
 
+/* Adjust the parallelism available to a loop given vector_length
+   associated with the offloaded function.  */
+
+static unsigned
+nvptx_adjust_parallelism (unsigned mask)
+{
+  bool wv = (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+    && (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR));
+  offload_attrs oa;
+
+  populate_offload_attrs (&oa);
+
+  if (oa.vector_length == PTX_WARP_SIZE)
+    return mask;
+
+  if (wv)
+    return mask & ~GOMP_DIM_MASK (GOMP_DIM_WORKER);
+
+  return mask;
+}
+
 /* Adjust the launch geometry accounting for reductions incompatible
    combined worker-vector loops when vector_length >
    PTX_WARP_SIZE.  */
@@ -6256,6 +6277,9 @@ nvptx_set_current_function (tree fndecl)
 
 #undef TARGET_GOACC_DIM_LIMIT
 #define TARGET_GOACC_DIM_LIMIT nvptx_dim_limit
+
+#undef TARGET_GOACC_ADJUST_PARALLELISM
+#define TARGET_GOACC_ADJUST_PARALLELISM nvptx_adjust_parallelism
 
 #undef TARGET_GOACC_ADJUST_LAUNCH_DIMS
 #define TARGET_GOACC_ADJUST_LAUNCH_DIMS nvptx_adjust_launch_dims
