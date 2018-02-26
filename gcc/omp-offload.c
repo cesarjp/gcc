@@ -645,8 +645,6 @@ oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used,
       pos = TREE_CHAIN (pos);
     }
 
-  //printf ("\nINPUT DIMS = %d %d %d\n", dims[0], dims[1], dims[2]);
-
   bool check = true;
 #ifdef ACCEL_COMPILER
   /* When device_type is implemented, we should also check on the
@@ -919,7 +917,7 @@ adjust_launch_dims (oacc_loop *loop)
 {
   if (loop == NULL)
     return;
-  
+
   targetm.goacc.adjust_launch_dims (loop->mask, loop->flags);
 
   if (loop->child)

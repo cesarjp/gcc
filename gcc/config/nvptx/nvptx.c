@@ -1363,7 +1363,7 @@ nvptx_declare_function_name (FILE *file, const char *name, const_tree decl)
   if (cfun->machine->red_partition)
     regno_reg_rtx[REGNO (cfun->machine->red_partition)]
       = cfun->machine->red_partition;
-  
+
   /* Declare the pseudos we have as ptx registers.  */
   int maxregs = max_reg_num ();
   for (int i = LAST_VIRTUAL_REGISTER + 1; i < maxregs; i++)
@@ -3140,7 +3140,6 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block,
 	    par = new parallel (par, mask);
 	    par->forked_block = block;
 	    par->forked_insn = end;
-	    // CJP: Extend to support larger vector_lengths
 	    if (nvptx_needs_shared_bcast (mask, oa))
 	      par->fork_insn
 		= nvptx_discover_pre (block, CODE_FOR_nvptx_fork);
@@ -3975,7 +3974,6 @@ shared_prop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_,
       /* Starting a loop, initialize pointer.    */
       unsigned align = GET_MODE_ALIGNMENT (GET_MODE (reg)) / BITS_PER_UNIT;
 
-      /* CJP TODO: this might need to be extended for vectors  */
       if (align > oacc_bcast_align)
 	oacc_bcast_align = align;
       data->offset = (data->offset + align - 1) & ~(align - 1);
@@ -4685,10 +4683,6 @@ nvptx_reorg (void)
       gcc_assert (!(oa.mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
 		  || (oa.mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)));
 
-//      printf ("\nnum_gangs = %d, num_workers = %d, vector_length = %d"
-//	      ", max_workers = %d\n", oa.num_gangs, oa.num_workers,
-//	      oa.vector_length, oa.max_workers);
-
       /* Discover & process partitioned regions.  */
       parallel *pars = nvptx_discover_pars (&bb_insn_map, &oa);
       nvptx_process_pars (pars, &oa);
@@ -4982,7 +4976,7 @@ nvptx_expand_shared_addr (tree exp, rtx target,
   unsigned offset = TREE_INT_CST_LOW (CALL_EXPR_ARG (exp, 0));
   unsigned size = TREE_INT_CST_LOW (CALL_EXPR_ARG (exp, 1));
   rtx addr = worker_red_sym;
-  
+
   if (vector)
     {
       offload_attrs oa;
@@ -5196,14 +5190,10 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level,
   int default_vector_length = PTX_VECTOR_LENGTH;
 
   /* For capability reasons, fallback to vl = 32 for runtime values.  */
-  if (/* lookup_attribute ("omp target entrypoint",
-	 DECL_ATTRIBUTES (current_function_decl)) &&  */
-      dims[GOMP_DIM_VECTOR] == 0)
+  if (dims[GOMP_DIM_VECTOR] == 0)
     default_vector_length = PTX_WARP_SIZE;
   else if (default_dims)
       default_vector_length = default_dims[GOMP_DIM_VECTOR];
-
-  //printf ("\nentry dims = %d %d %d\n", dims[0], dims[1], dims[2]);
 
   /* Detect if a function is unsuitable for offloading.  */
   if (!flag_offload_force && decl)
@@ -5296,7 +5286,7 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level,
   /* Specify a default vector_length.  */
   if (dims[GOMP_DIM_VECTOR] < 0)
     dims[GOMP_DIM_VECTOR] = default_vector_length;
-  
+
   if (!decl)
     {
       bool new_vector = false;
@@ -5315,10 +5305,9 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level,
       changed = true;
     }
 
-  //printf ("\nexit dims = %d %d %d\n", dims[0], dims[1], dims[2]);
   gcc_assert (dims[GOMP_DIM_VECTOR] != 0);
   gcc_assert (dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR] <= PTX_CTA_SIZE);
-  
+
   return changed;
 }
 
@@ -5375,7 +5364,7 @@ nvptx_adjust_launch_dims (unsigned mask, unsigned flags)
 
   if (oa.vector_length == PTX_WARP_SIZE)
     return;
-  
+
   if (!(wv && reduction))
     return;
 
@@ -5383,10 +5372,6 @@ nvptx_adjust_launch_dims (unsigned mask, unsigned flags)
   tree dims = TREE_CHAIN (TREE_VALUE (attr));
 
   TREE_VALUE (dims) = integer_one_node;
-
-
-//  printf ("\n<%d %d %d %d>\n", oa.num_gangs, oa.num_workers,
-//	  oa.vector_length, oa.max_workers);
 }
 
 /* Determine whether fork & joins are needed.  */

@@ -28,7 +28,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "emit-rtl.h"
 #include "expr.h"
 #include "tree-pass.h"
-#include "target.h"
 
 /* Check all of the uses of pseudo variables.  If any use that is MUST
    uninitialized, add a store of 0 immediately before it.  For
@@ -153,12 +152,7 @@ public:
   {}
 
   /* opt_pass methods: */
-  virtual bool gate (function *)
-  {
-    /* FIXME: nvptx workaround.  */
-    return optimize > 0;
-    //&& !targetm.no_register_allocation;
-  }
+  virtual bool gate (function *) { return optimize > 0; }
   virtual unsigned int execute (function *)
     {
       initialize_uninitialized_regs ();
