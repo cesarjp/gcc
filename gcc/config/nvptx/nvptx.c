@@ -1132,11 +1132,14 @@ nvptx_init_oacc_workers (FILE *file)
 {
   fprintf (file, "\t{\n");
   fprintf (file, "\t\t.reg.u32\t%%tidy;\n");
-  fprintf (file, "\t\tmov.u32\t\t%%tidy, %%tid.y;\n");
   if (cfun->machine->bcast_partition)
     {
       fprintf (file, "\t\t.reg.u64\t%%t_bcast;\n");
       fprintf (file, "\t\t.reg.u64\t%%y64;\n");
+    }
+  fprintf (file, "\t\tmov.u32\t\t%%tidy, %%tid.y;\n");
+  if (cfun->machine->bcast_partition)
+    {
       fprintf (file, "\t\tcvt.u64.u32\t%%y64, %%tidy;\n");
       fprintf (file, "\t\tadd.u64\t\t%%y64, %%y64, 1; // vector ID\n");
       fprintf (file, "\t\tcvta.shared.u64\t%%t_bcast, __oacc_bcast;\n");
