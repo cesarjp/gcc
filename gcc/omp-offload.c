@@ -1149,13 +1149,6 @@ oacc_loop_process (oacc_loop *loop)
       unsigned dim = GOMP_DIM_GANG;
       unsigned mask = loop->mask | loop->e_mask;
 
-      /* Ideally, we should be coalescing parallelism here if the
-	 hardware supports it.  E.g. Instead of partitioning a loop
-	 across worker and vector axes, sometimes the hardware can
-	 execute those loops together without resorting to placing
-	 extra thread barriers.  */
-      mask = targetm.goacc.adjust_parallelism (mask);
-
       for (ix = 0; ix != GOMP_DIM_MAX && mask; ix++)
 	{
 	  while (!(GOMP_DIM_MASK (dim) & mask))
@@ -1286,6 +1279,13 @@ oacc_loop_fixed_partitions (oacc_loop *loop, unsigned outer_mask)
 	}
     }
 
+  /* FIXME: Ideally, we should be coalescing parallelism here if the
+     hardware supports it.  E.g. Instead of partitioning a loop
+     across worker and vector axes, sometimes the hardware can
+     execute those loops together without resorting to placing
+     extra thread barriers.  */
+  this_mask = targetm.goacc.adjust_parallelism (this_mask);
+
   mask_all |= this_mask;
 
   if (loop->flags & OLF_TILE)
@@ -1376,6 +1376,13 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	  loop->e_mask = this_mask & (this_mask << 1);
 	  this_mask ^= loop->e_mask;
 	}
+
+      /* Ideally, we should be coalescing parallelism here if the
+	 hardware supports it.  E.g. Instead of partitioning a loop
+	 across worker and vector axes, sometimes the hardware can
+	 execute those loops together without resorting to placing
+	 extra thread barriers.  */
+      this_mask = targetm.goacc.adjust_parallelism (this_mask);
 
       loop->mask |= this_mask;
     }

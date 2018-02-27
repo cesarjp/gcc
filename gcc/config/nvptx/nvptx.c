@@ -4597,7 +4597,8 @@ populate_offload_attrs (offload_attrs *oa)
 
   for (ix = 0; ix != GOMP_DIM_MAX; ix++, dims = TREE_CHAIN (dims))
     {
-      int size = TREE_INT_CST_LOW (TREE_VALUE (dims));
+      tree t = TREE_VALUE (dims);
+      int size = (t == NULL_TREE) ? 0 : TREE_INT_CST_LOW (t);
       tree allowed = TREE_PURPOSE (dims);
 
       if (size != 1 && !(allowed && integer_zerop (allowed)))
@@ -4619,6 +4620,8 @@ populate_offload_attrs (offload_attrs *oa)
 	}
     }
 
+  if (oa->vector_length == 0)
+    oa->vector_length = PTX_VECTOR_LENGTH;
   if (oa->num_workers == 0)
     oa->max_workers = PTX_CTA_SIZE / oa->vector_length;
   else
@@ -4965,7 +4968,7 @@ nvptx_output_red_partition (rtx dst, rtx offset)
   return "";
 }
 
-/* Worker reduction address expander.  */
+/* Shared-memory reduction address expander.  */
 
 static rtx
 nvptx_expand_shared_addr (tree exp, rtx target,
@@ -5372,9 +5375,11 @@ nvptx_adjust_launch_dims (unsigned mask, unsigned flags)
     return;
 
   tree attr = oacc_get_fn_attrib (current_function_decl);
-  tree dims = TREE_CHAIN (TREE_VALUE (attr));
+  tree worker_dim = TREE_CHAIN (TREE_VALUE (attr));
+  tree vector_dim = TREE_CHAIN (worker_dim);
 
-  TREE_VALUE (dims) = integer_one_node;
+  TREE_VALUE (vector_dim) = build_int_cst (TREE_TYPE (TREE_VALUE (vector_dim)),
+					   PTX_WARP_SIZE);
 }
 
 /* Determine whether fork & joins are needed.  */
