@@ -4621,7 +4621,15 @@ populate_offload_attrs (offload_attrs *oa)
     }
 
   if (oa->vector_length == 0)
-    oa->vector_length = PTX_VECTOR_LENGTH;
+    {
+      /* FIXME: Need a more graceful way to handle large vector
+	 lengths in OpenACC routines.  */
+      if (!lookup_attribute ("omp target entrypoint",
+			     DECL_ATTRIBUTES (current_function_decl)))
+	oa->vector_length = PTX_WARP_SIZE;
+      else
+	oa->vector_length = PTX_VECTOR_LENGTH;
+    }
   if (oa->num_workers == 0)
     oa->max_workers = PTX_CTA_SIZE / oa->vector_length;
   else
