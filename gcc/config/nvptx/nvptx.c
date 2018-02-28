@@ -2904,6 +2904,23 @@ struct offload_attrs
   int max_workers;
 };
 
+/* Define entries for cfun->machine->axis_dim.  */
+
+#define MACH_VECTOR_LENGTH 0
+#define MACH_MAX_WORKERS 1
+
+static int
+nvptx_mach_max_workers ()
+{
+  return cfun->machine->axis_dim[MACH_MAX_WORKERS];
+}
+
+static int
+nvptx_mach_vector_length ()
+{
+  return cfun->machine->axis_dim[MACH_VECTOR_LENGTH];
+}
+
 /* Loop structure of the function.  The entire function is described as
    a NULL loop.  */
 
@@ -3058,11 +3075,11 @@ nvptx_split_blocks (bb_insn_map_t *map)
    memory to broadcast.  */
 
 static bool
-nvptx_needs_shared_bcast (unsigned mask, offload_attrs *oa)
+nvptx_needs_shared_bcast (unsigned mask)
 {
   bool worker = mask & GOMP_DIM_MASK (GOMP_DIM_WORKER);
   bool large_vector = (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
-    && oa->vector_length != PTX_WARP_SIZE;
+    && nvptx_mach_vector_length () != PTX_WARP_SIZE;
 
   return worker || large_vector;
 }
@@ -3114,8 +3131,7 @@ nvptx_dump_pars (parallel *par, unsigned depth)
    and then walk successor blocks.   */
 
 static parallel *
-nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block,
-		offload_attrs *oa)
+nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
 {
   if (block->flags & BB_VISITED)
     return par;
@@ -3143,7 +3159,7 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block,
 	    par = new parallel (par, mask);
 	    par->forked_block = block;
 	    par->forked_insn = end;
-	    if (nvptx_needs_shared_bcast (mask, oa))
+	    if (nvptx_needs_shared_bcast (mask))
 	      par->fork_insn
 		= nvptx_discover_pre (block, CODE_FOR_nvptx_fork);
 	  }
@@ -3158,7 +3174,7 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block,
 	    gcc_assert (par->mask == mask);
 	    par->join_block = block;
 	    par->join_insn = end;
-	    if (nvptx_needs_shared_bcast (mask, oa))
+	    if (nvptx_needs_shared_bcast (mask))
 	      par->joining_insn
 		= nvptx_discover_pre (block, CODE_FOR_nvptx_joining);
 	    par = par->parent;
@@ -3182,7 +3198,7 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block,
   edge_iterator ei;
 
   FOR_EACH_EDGE (e, ei, block->succs)
-    nvptx_find_par (map, par, e->dest, oa);
+    nvptx_find_par (map, par, e->dest);
 
   return par;
 }
@@ -3194,7 +3210,7 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block,
    been cleared when splitting blocks.  */
 
 static parallel *
-nvptx_discover_pars (bb_insn_map_t *map, offload_attrs *oa)
+nvptx_discover_pars (bb_insn_map_t *map)
 {
   basic_block block;
 
@@ -3206,7 +3222,7 @@ nvptx_discover_pars (bb_insn_map_t *map, offload_attrs *oa)
   block = ENTRY_BLOCK_PTR_FOR_FN (cfun);
   block->flags &= ~BB_VISITED;
 
-  parallel *par = nvptx_find_par (map, 0, block, oa);
+  parallel *par = nvptx_find_par (map, 0, block);
 
   if (dump_file)
     {
@@ -4002,7 +4018,7 @@ shared_prop_gen (rtx reg, propagate_mask pm, unsigned rep, void *data_,
 
 static bool
 nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
-			rtx_insn *insn, bool vector, offload_attrs *oa)
+			rtx_insn *insn, bool vector)
 {
   broadcast_data_t data;
 
@@ -4019,7 +4035,7 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
       rtx bcast_sym = oacc_bcast_sym;
 
       /* Stuff was emitted, initialize the base pointer now.  */
-      if (vector && oa->max_workers > 1)
+      if (vector && nvptx_mach_max_workers () > 1)
 	{
 	  if (!cfun->machine->bcast_partition)
 	    {
@@ -4041,7 +4057,7 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
 	  int psize = data.offset;
 	  psize = (psize + oacc_bcast_align - 1) & ~(oacc_bcast_align - 1);
 	  oacc_bcast_partition = psize;
-	  oacc_bcast_size = psize * (oa->max_workers + 1);
+	  oacc_bcast_size = psize * (nvptx_mach_max_workers () + 1);
 	}
     }
   return empty;
@@ -4091,8 +4107,7 @@ bb_first_real_insn (basic_block bb)
    loop.  We could do more if we detected superblocks.  */
 
 static void
-nvptx_single (unsigned mask, basic_block from, basic_block to,
-	      offload_attrs *oa)
+nvptx_single (unsigned mask, basic_block from, basic_block to)
 {
   rtx_insn *head = BB_HEAD (from);
   rtx_insn *tail = BB_END (to);
@@ -4248,7 +4263,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
       rtx pvar = XEXP (XEXP (cond_branch, 0), 0);
 
       if (GOMP_DIM_MASK (GOMP_DIM_VECTOR) == mask
-	  && oa->vector_length == PTX_WARP_SIZE)
+	  && nvptx_mach_vector_length () == PTX_WARP_SIZE)
 	{
 	  /* Vector mode only, do a shuffle.  */
 #if WORKAROUND_PTXJIT_BUG
@@ -4327,7 +4342,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	  data.ptr = 0;
 
 	  if (vector
-	      && oa->max_workers > 1
+	      && nvptx_mach_max_workers () > 1
 	      && cfun->machine->bcast_partition)
 	    data.base = cfun->machine->bcast_partition;
 
@@ -4338,7 +4353,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 	      int psize = size;
 	      psize = (psize + oacc_bcast_align - 1) & ~(oacc_bcast_align - 1);
 	      oacc_bcast_partition = psize;
-	      oacc_bcast_size = psize * (oa->max_workers + 1);
+	      oacc_bcast_size = psize * (nvptx_mach_max_workers () + 1);
 	    }
 
 	  data.offset = 0;
@@ -4347,11 +4362,11 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
 			    before);
 
 	  if (vector
-	      && oa->max_workers > 1
+	      && nvptx_mach_max_workers () > 1
 	      && cfun->machine->sync_bar)
 	    {
 	      barrier = cfun->machine->sync_bar;
-	      threads = oa->vector_length;
+	      threads = nvptx_mach_vector_length ();
 	    }
 
 	  /* Barrier so other workers can see the write.  */
@@ -4378,7 +4393,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to,
    and ending at joining.  */
 
 static void
-nvptx_skip_par (unsigned mask, parallel *par, offload_attrs *oa)
+nvptx_skip_par (unsigned mask, parallel *par)
 {
   basic_block tail = par->join_block;
   gcc_assert (tail->preds->length () == 1);
@@ -4386,7 +4401,7 @@ nvptx_skip_par (unsigned mask, parallel *par, offload_attrs *oa)
   basic_block pre_tail = (*tail->preds)[0]->src;
   gcc_assert (pre_tail->succs->length () == 1);
 
-  nvptx_single (mask, par->forked_block, pre_tail, oa);
+  nvptx_single (mask, par->forked_block, pre_tail);
 }
 
 /* If PAR has a single inner parallel and PAR itself only contains
@@ -4457,7 +4472,7 @@ nvptx_optimize_inner (parallel *par)
    partitioned modes used within this parallel.  */
 
 static unsigned
-nvptx_process_pars (parallel *par, offload_attrs *oa)
+nvptx_process_pars (parallel *par)
 {
   if (nvptx_optimize)
     nvptx_optimize_inner (par);
@@ -4467,29 +4482,29 @@ nvptx_process_pars (parallel *par, offload_attrs *oa)
   /* Do the inner parallels first.  */
   if (par->inner)
     {
-      par->inner_mask = nvptx_process_pars (par->inner, oa);
+      par->inner_mask = nvptx_process_pars (par->inner);
       inner_mask |= par->inner_mask;
     }
 
   bool is_call = (par->mask & GOMP_DIM_MASK (GOMP_DIM_MAX)) != 0;
   bool worker = (par->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER));
   bool large_vector = ((par->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
-		       && oa->vector_length > PTX_WARP_SIZE);
+		      && nvptx_mach_vector_length () > PTX_WARP_SIZE);
 
   if (worker || large_vector)
     {
       nvptx_shared_propagate (false, is_call, par->forked_block,
-			      par->forked_insn, !worker, oa);
+			      par->forked_insn, !worker);
       bool empty = nvptx_shared_propagate (true, is_call,
 					   par->forked_block, par->fork_insn,
-					   !worker, oa);
+					   !worker);
       rtx barrier = GEN_INT (0);
       int threads = 0;
 
       if (!worker && cfun->machine->sync_bar)
 	{
 	  barrier = cfun->machine->sync_bar;
-	  threads = oa->vector_length;
+	  threads = nvptx_mach_vector_length ();
 	}
 
       if (!empty || !is_call)
@@ -4505,7 +4520,7 @@ nvptx_process_pars (parallel *par, offload_attrs *oa)
 
   /* Now do siblings.  */
   if (par->next)
-    inner_mask |= nvptx_process_pars (par->next, oa);
+    inner_mask |= nvptx_process_pars (par->next);
   return inner_mask;
 }
 
@@ -4514,7 +4529,7 @@ nvptx_process_pars (parallel *par, offload_attrs *oa)
    the partitioning of the parallels we are contained in.  */
 
 static void
-nvptx_neuter_pars (parallel *par, offload_attrs *oa, unsigned outer)
+nvptx_neuter_pars (parallel *par, unsigned modes, unsigned outer)
 {
   unsigned me = (par->mask
 		 & (GOMP_DIM_MASK (GOMP_DIM_WORKER)
@@ -4522,13 +4537,13 @@ nvptx_neuter_pars (parallel *par, offload_attrs *oa, unsigned outer)
   unsigned  skip_mask = 0, neuter_mask = 0;
   
   if (par->inner)
-    nvptx_neuter_pars (par->inner, oa, outer | me);
+    nvptx_neuter_pars (par->inner, modes, outer | me);
 
   for (unsigned mode = GOMP_DIM_WORKER; mode <= GOMP_DIM_VECTOR; mode++)
     {
       if ((outer | me) & GOMP_DIM_MASK (mode))
 	{} /* Mode is partitioned: no neutering.  */
-      else if (!(oa->mask & GOMP_DIM_MASK (mode)))
+      else if (!(modes & GOMP_DIM_MASK (mode)))
 	{} /* Mode is not used: nothing to do.  */
       else if (par->inner_mask & GOMP_DIM_MASK (mode)
 	       || !par->forked_insn)
@@ -4561,7 +4576,7 @@ nvptx_neuter_pars (parallel *par, offload_attrs *oa, unsigned outer)
 	      basic_block to = regions[ix].second;
 
 	      if (from)
-		nvptx_single (neuter_mask, from, to, oa);
+		nvptx_single (neuter_mask, from, to);
 	      else
 		gcc_assert (!to);
 	    }
@@ -4574,16 +4589,16 @@ nvptx_neuter_pars (parallel *par, offload_attrs *oa, unsigned outer)
 	    {
 	      basic_block block = par->blocks[ix];
 
-	      nvptx_single (neuter_mask, block, block, oa);
+	      nvptx_single (neuter_mask, block, block);
 	    }
 	}
     }
 
   if (skip_mask)
-    nvptx_skip_par (skip_mask, par, oa);
+    nvptx_skip_par (skip_mask, par);
   
   if (par->next)
-    nvptx_neuter_pars (par->next, oa, outer);
+    nvptx_neuter_pars (par->next, modes, outer);
 }
 
 static void
@@ -4634,9 +4649,6 @@ populate_offload_attrs (offload_attrs *oa)
     oa->max_workers = PTX_CTA_SIZE / oa->vector_length;
   else
     oa->max_workers = oa->num_workers;
-
-  cfun->machine->axis_dim[0] = oa->vector_length;
-  cfun->machine->axis_dim[1] = oa->max_workers;
 }
 
 /* PTX-specific reorganization
@@ -4692,15 +4704,18 @@ nvptx_reorg (void)
 
       populate_offload_attrs (&oa);
 
+      cfun->machine->axis_dim[MACH_VECTOR_LENGTH] = oa.vector_length;
+      cfun->machine->axis_dim[MACH_MAX_WORKERS] = oa.max_workers;
+
       /* If there is worker neutering, there must be vector
 	 neutering.  Otherwise the hardware will fail.  */
       gcc_assert (!(oa.mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
 		  || (oa.mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)));
 
       /* Discover & process partitioned regions.  */
-      parallel *pars = nvptx_discover_pars (&bb_insn_map, &oa);
-      nvptx_process_pars (pars, &oa);
-      nvptx_neuter_pars (pars, &oa, 0);
+      parallel *pars = nvptx_discover_pars (&bb_insn_map);
+      nvptx_process_pars (pars);
+      nvptx_neuter_pars (pars, oa.mask, 0);
       delete pars;
     }
 
