@@ -5372,8 +5372,7 @@ nvptx_fallback_vector_length ()
    associated with the offloaded function.  */
 
 static unsigned
-nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask,
-			  unsigned flags)
+nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask)
 {
   bool wv = (inner_mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
     && (inner_mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR));
@@ -5389,10 +5388,9 @@ nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask,
   if (wv)
     return inner_mask & ~GOMP_DIM_MASK (GOMP_DIM_WORKER);
 
-  /* FIXME: This might be too conservative once the new reduction
-     finalizer is in place.  */
-  if ((flags & OLF_REDUCTION)
-      && (inner_mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
+  /* FIXME: This might also be too conservative if the the inner loop does
+     not contain a reduction.  */
+  if ((inner_mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
       && (outer_mask & GOMP_DIM_MASK (GOMP_DIM_WORKER)))
     nvptx_fallback_vector_length ();
 
