@@ -5356,25 +5356,45 @@ nvptx_dim_limit (int axis)
   return 0;
 }
 
+/* Set vector_length to PTX_WARP_SIZE.  */
+
+static void
+nvptx_fallback_vector_length ()
+{
+  tree attr = oacc_get_fn_attrib (current_function_decl);
+  tree worker_dim = TREE_CHAIN (TREE_VALUE (attr));
+  tree vector_dim = TREE_CHAIN (worker_dim);
+
+  TREE_VALUE (vector_dim) = build_int_cst (integer_type_node, PTX_WARP_SIZE);
+}
+
 /* Adjust the parallelism available to a loop given vector_length
    associated with the offloaded function.  */
 
 static unsigned
-nvptx_adjust_parallelism (unsigned mask)
+nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask)
 {
-  bool wv = (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
-    && (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR));
+  bool wv = (inner_mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+    && (inner_mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR));
   offload_attrs oa;
 
   populate_offload_attrs (&oa);
 
   if (oa.vector_length == PTX_WARP_SIZE)
-    return mask;
+    return inner_mask;
 
+  /* FIXME: This is overly conservative; worker and vector loop will
+     eventually be combined.  */
   if (wv)
-    return mask & ~GOMP_DIM_MASK (GOMP_DIM_WORKER);
+    return inner_mask & ~GOMP_DIM_MASK (GOMP_DIM_WORKER);
 
-  return mask;
+  /* FIXME: This might also be too conservative if the the inner loop does
+     not contain a reduction.  */
+  if ((inner_mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
+      && (outer_mask & GOMP_DIM_MASK (GOMP_DIM_WORKER)))
+    nvptx_fallback_vector_length ();
+
+  return inner_mask;
 }
 
 /* Adjust the launch geometry accounting for reductions incompatible
@@ -5397,12 +5417,7 @@ nvptx_adjust_launch_dims (unsigned mask, unsigned flags)
   if (!(wv && reduction))
     return;
 
-  tree attr = oacc_get_fn_attrib (current_function_decl);
-  tree worker_dim = TREE_CHAIN (TREE_VALUE (attr));
-  tree vector_dim = TREE_CHAIN (worker_dim);
-
-  TREE_VALUE (vector_dim) = build_int_cst (TREE_TYPE (TREE_VALUE (vector_dim)),
-					   PTX_WARP_SIZE);
+  nvptx_fallback_vector_length ();
 }
 
 /* Determine whether fork & joins are needed.  */

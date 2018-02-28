@@ -1700,8 +1700,9 @@ default_goacc_dim_limit)
 DEFHOOK
 (adjust_parallelism,
 "This hook allows the accelerator compiler to remove any unused\n\
-parallelism exposed in @var{MASK}.  It returns an adjusted mask.",
-unsigned, (unsigned mask),
+parallelism exposed in the current loop @var{THIS_MASK}, and the\n\
+enclosing loop @var{OUTER_MASK}.  It returns an adjusted mask.",
+unsigned, (unsigned this_mask, unsigned outer_mask),
 default_goacc_adjust_parallelism)
 
 DEFHOOK

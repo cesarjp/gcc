@@ -5884,9 +5884,10 @@ This hook should return the maximum size of a particular dimension,
 or zero if unbounded.
 @end deftypefn
 
-@deftypefn {Target Hook} unsigned TARGET_GOACC_ADJUST_PARALLELISM (unsigned @var{mask})
+@deftypefn {Target Hook} unsigned TARGET_GOACC_ADJUST_PARALLELISM (unsigned @var{this_mask}, unsigned @var{outer_mask})
 This hook allows the accelerator compiler to remove any unused
-parallelism exposed in @var{MASK}.  It returns an adjusted mask.
+parallelism exposed in the current loop @var{THIS_MASK}, and the
+enclosing loop @var{OUTER_MASK}.  It returns an adjusted mask.
 @end deftypefn
 
 @deftypefn {Target Hook} void TARGET_GOACC_ADJUST_LAUNCH_DIMS (unsigned @var{mask}, unsigned @var{flags})
