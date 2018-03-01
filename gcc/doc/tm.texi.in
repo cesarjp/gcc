@@ -4300,8 +4300,6 @@ address;  but often a machine-dependent strategy can generate better code.
 
 @hook TARGET_GOACC_ADJUST_PARALLELISM
 
-@hook TARGET_GOACC_ADJUST_LAUNCH_DIMS
-
 @hook TARGET_GOACC_FORK_JOIN
 
 @hook TARGET_GOACC_REDUCTION

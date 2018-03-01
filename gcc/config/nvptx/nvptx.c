@@ -5356,18 +5356,6 @@ nvptx_dim_limit (int axis)
   return 0;
 }
 
-/* Set vector_length to PTX_WARP_SIZE.  */
-
-static void
-nvptx_fallback_vector_length ()
-{
-  tree attr = oacc_get_fn_attrib (current_function_decl);
-  tree worker_dim = TREE_CHAIN (TREE_VALUE (attr));
-  tree vector_dim = TREE_CHAIN (worker_dim);
-
-  TREE_VALUE (vector_dim) = build_int_cst (integer_type_node, PTX_WARP_SIZE);
-}
-
 /* Adjust the parallelism available to a loop given vector_length
    associated with the offloaded function.  */
 
@@ -5388,36 +5376,23 @@ nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask)
   if (wv)
     return inner_mask & ~GOMP_DIM_MASK (GOMP_DIM_WORKER);
 
-  /* FIXME: This might also be too conservative if the the inner loop does
-     not contain a reduction.  */
+  /* It's difficult to guarantee that warps in large vector_lengths
+     will remain convergent when a vector loop is nested inside a
+     worker loop.  Therefore, fallback to setting vector_length to
+     PTX_WARP_SIZE.  Hopefully this condition may be relaxed for
+     sm_70+ targets.  */
   if ((inner_mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
       && (outer_mask & GOMP_DIM_MASK (GOMP_DIM_WORKER)))
-    nvptx_fallback_vector_length ();
+    {
+      tree attr = oacc_get_fn_attrib (current_function_decl);
+      tree worker_dim = TREE_CHAIN (TREE_VALUE (attr));
+      tree vector_dim = TREE_CHAIN (worker_dim);
+
+      TREE_VALUE (vector_dim) = build_int_cst (integer_type_node,
+					       PTX_WARP_SIZE);
+    }
 
   return inner_mask;
-}
-
-/* Adjust the launch geometry accounting for reductions incompatible
-   combined worker-vector loops when vector_length >
-   PTX_WARP_SIZE.  */
-
-static void
-nvptx_adjust_launch_dims (unsigned mask, unsigned flags)
-{
-  bool wv = (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
-    && (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR));
-  bool reduction = flags & OLF_REDUCTION;
-  offload_attrs oa;
-
-  populate_offload_attrs (&oa);
-
-  if (oa.vector_length == PTX_WARP_SIZE)
-    return;
-
-  if (!(wv && reduction))
-    return;
-
-  nvptx_fallback_vector_length ();
 }
 
 /* Determine whether fork & joins are needed.  */
@@ -6311,9 +6286,6 @@ nvptx_set_current_function (tree fndecl)
 
 #undef TARGET_GOACC_ADJUST_PARALLELISM
 #define TARGET_GOACC_ADJUST_PARALLELISM nvptx_adjust_parallelism
-
-#undef TARGET_GOACC_ADJUST_LAUNCH_DIMS
-#define TARGET_GOACC_ADJUST_LAUNCH_DIMS nvptx_adjust_launch_dims
 
 #undef TARGET_GOACC_FORK_JOIN
 #define TARGET_GOACC_FORK_JOIN nvptx_goacc_fork_join

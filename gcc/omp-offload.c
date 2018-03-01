@@ -909,23 +909,6 @@ inform_oacc_loop (oacc_loop *loop)
     inform_oacc_loop (loop->sibling);
 }
 
-/* Adjust the launch geometry for any invalid combinations of acc loop
-   parallelism and reductions.  */
-
-static void
-adjust_launch_dims (oacc_loop *loop)
-{
-  if (loop == NULL)
-    return;
-
-  targetm.goacc.adjust_launch_dims (loop->mask, loop->flags);
-
-  if (loop->child)
-    adjust_launch_dims (loop->child);
-  if (loop->sibling)
-    adjust_launch_dims (loop->sibling);
-}
-
 /* DFS walk of basic blocks BB onwards, creating OpenACC loop
    structures as we go.  By construction these loops are properly
    nested.  */
@@ -1377,13 +1360,7 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	  this_mask ^= loop->e_mask;
 	}
 
-      /* Ideally, we should be coalescing parallelism here if the
-	 hardware supports it.  E.g. Instead of partitioning a loop
-	 across worker and vector axes, sometimes the hardware can
-	 execute those loops together without resorting to placing
-	 extra thread barriers.  */
       this_mask = targetm.goacc.adjust_parallelism (this_mask, outer_mask);
-
       loop->mask |= this_mask;
     }
 
@@ -1432,6 +1409,8 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	}
 
       loop->mask |= this_mask;
+      loop->mask = targetm.goacc.adjust_parallelism (loop->mask, outer_mask);
+
       if (!loop->mask && noisy)
 	warning_at (loop->loc, 0,
 		    tiling
@@ -1660,8 +1639,6 @@ execute_oacc_device_lower ()
   if (dump_enabled_p () && loops->child)
     inform_oacc_loop (loops->child);
 
-  adjust_launch_dims (loops->child);
-
   /* Offloaded targets may introduce new basic blocks, which require
      dominance information to update SSA.  */
   calculate_dominance_info (CDI_DOMINATORS);
@@ -1820,15 +1797,6 @@ default_goacc_adjust_parallelism (unsigned this_mask,
 				  unsigned ARG_UNUSED (outer_mask))
 {
   return this_mask;
-}
-
-/* Default runtime limit adjustment on accelerators.  */
-
-void
-default_goacc_adjust_launch_dims (unsigned ARG_UNUSED (mask),
-				  unsigned ARG_UNUSED (flags))
-{
-  return;
 }
 
 namespace {

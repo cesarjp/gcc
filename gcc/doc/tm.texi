@@ -5890,13 +5890,6 @@ parallelism exposed in the current loop @var{THIS_MASK}, and the
 enclosing loop @var{OUTER_MASK}.  It returns an adjusted mask.
 @end deftypefn
 
-@deftypefn {Target Hook} void TARGET_GOACC_ADJUST_LAUNCH_DIMS (unsigned @var{mask}, unsigned @var{flags})
-This hook should adjust the launch geometry of an OpenACC offloaded
-function depending on the available parallelism on accelerator.
-@var{MASK} contains the encoded launch geometry, whereas
-@var{FLAGS} contains oacc_loop_flag values.
-@end deftypefn
-
 @deftypefn {Target Hook} bool TARGET_GOACC_FORK_JOIN (gcall *@var{call}, const int *@var{dims}, bool @var{is_fork})
 This hook can be used to convert IFN_GOACC_FORK and IFN_GOACC_JOIN
 function calls to target-specific gimple, or indicate whether they
