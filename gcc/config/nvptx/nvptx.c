@@ -5211,6 +5211,19 @@ nvptx_simt_vf ()
   return PTX_WARP_SIZE;
 }
 
+#define NVPTX_GOACC_VL_WARP "nvptx vl warp"
+
+/* Return true of the offloaded function needs a vector_length of
+   PTX_WARP_SIZE.  */
+
+static bool
+nvptx_goacc_needs_vl_warp ()
+{
+  tree attr = lookup_attribute (NVPTX_GOACC_VL_WARP,
+				DECL_ATTRIBUTES (current_function_decl));
+  return attr == NULL_TREE;
+}
+
 /* Validate compute dimensions of an OpenACC offload or routine, fill
    in non-unity defaults.  FN_LEVEL indicates the level at which a
    routine might spawn a loop.  It is negative for non-routines.  If
@@ -5318,7 +5331,16 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level,
 
   /* Specify a default vector_length.  */
   if (dims[GOMP_DIM_VECTOR] < 0)
-    dims[GOMP_DIM_VECTOR] = default_vector_length;
+    {
+      dims[GOMP_DIM_VECTOR] = default_vector_length;
+      changed = true;
+    }
+
+  if (nvptx_goacc_needs_vl_warp () && dims[GOMP_DIM_VECTOR] != PTX_WARP_SIZE)
+    {
+      dims[GOMP_DIM_VECTOR] = PTX_WARP_SIZE;
+      changed = true;
+    }
 
   if (!decl)
     {
@@ -5366,6 +5388,9 @@ nvptx_dim_limit (int axis)
 static unsigned
 nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask)
 {
+  if (nvptx_goacc_needs_vl_warp ())
+    return inner_mask;
+
   bool wv = (inner_mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
     && (inner_mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR));
   offload_attrs oa;
@@ -5388,12 +5413,9 @@ nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask)
   if ((inner_mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
       && (outer_mask & GOMP_DIM_MASK (GOMP_DIM_WORKER)))
     {
-      tree attr = oacc_get_fn_attrib (current_function_decl);
-      tree worker_dim = TREE_CHAIN (TREE_VALUE (attr));
-      tree vector_dim = TREE_CHAIN (worker_dim);
-
-      TREE_VALUE (vector_dim) = build_int_cst (integer_type_node,
-					       PTX_WARP_SIZE);
+      tree attr = tree_cons (get_identifier (NVPTX_GOACC_VL_WARP), NULL_TREE,
+			      DECL_ATTRIBUTES (current_function_decl));
+      DECL_ATTRIBUTES (current_function_decl) = attr;
     }
 
   return inner_mask;
