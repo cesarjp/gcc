@@ -77,9 +77,15 @@
 
 #define WORKAROUND_PTXJIT_BUG 1
 
-/* Define dimension sizes for known hardware.  */
-//#define PTX_VECTOR_LENGTH 32
-#define PTX_VECTOR_LENGTH 128
+/* Define dimension sizes for known hardware.  Both PTX_WORKER_LENGTH
+   and PTX_VECTOR_LENGTH controls the default value for num_workers
+   and vector_length, respectively.  These values are not hard coded;
+   the user may override them using explicit num_workers and
+   vector_length clauses, or appripriated -fopenacc-dim compiler
+   flags.  Furthermore, num_workers may be set dynamically at runtime,
+   but vector_length is fixed at compile time. */
+//#define PTX_VECTOR_LENGTH 128
+#define PTX_VECTOR_LENGTH 32
 #define PTX_WORKER_LENGTH 32
 #define PTX_DEFAULT_RUNTIME_DIM 0 /* Defer to runtime.  */
 #define PTX_WARP_SIZE 32
