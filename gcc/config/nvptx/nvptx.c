@@ -4226,8 +4226,6 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	    cfun->machine->axis_predicate[mode - GOMP_DIM_WORKER] = pred;
 	  }
 
-	//emit_insn_before (gen_nvptx_blah (GEN_INT (0)), head);
-	
 	rtx br;
 	if (mode == GOMP_DIM_VECTOR)
 	  br = gen_br_true (pred, label);
