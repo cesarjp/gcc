@@ -1,5 +1,3 @@
-/* { dg-additional-options "-fopenacc-dim=-:-:32" } */
-
 /* Test dispatch of events to callbacks.  */
 
 #undef NDEBUG

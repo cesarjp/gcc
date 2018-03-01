@@ -1,4 +1,4 @@
-/* { dg-additional-options "-fopenacc-dim=-:-:32" } */
+/* { dg-additional-options "-fopenacc-dim=-:-" } */
 /* This code uses nvptx inline assembly guarded with acc_on_device, which is
    not optimized away at -O0, and then confuses the target assembler.
    { dg-skip-if "" { *-*-* } { "-O0" } { "" } } */

@@ -57,13 +57,13 @@ program main
 
   a(:,:) = 1.0
   b(:,:) = 0.25
-  
+
   c(:,:) = 0.0
   d(:,:) = 0.0
 
   alpha = 1.05
   beta = 1.25
-  
+
   call openacc_sgemm (M, N, K, alpha, a, b, beta, c)
   call host_sgemm (M, N, K, alpha, a, b, beta, d)
 
