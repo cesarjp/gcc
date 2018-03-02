@@ -133,6 +133,7 @@ static GTY((cache)) hash_table<tree_hasher> *needed_fndecls_htab;
    memory.  It'd be nice if PTX supported common blocks, because then
    this could be shared across TUs (taking the largest size).  */
 static unsigned oacc_bcast_size;
+static unsigned oacc_bcast_partition;
 static unsigned oacc_bcast_align;
 static GTY(()) rtx oacc_bcast_sym;
 
@@ -1104,8 +1105,53 @@ nvptx_init_axis_predicate (FILE *file, int regno, const char *name)
 {
   fprintf (file, "\t{\n");
   fprintf (file, "\t\t.reg.u32\t%%%s;\n", name);
-  fprintf (file, "\t\tmov.u32\t%%%s, %%tid.%s;\n", name, name);
+  if (strcmp (name, "x") == 0 && cfun->machine->red_partition)
+    {
+      fprintf (file, "\t\t.reg.u64\t%%t_red;\n");
+      fprintf (file, "\t\t.reg.u64\t%%y64;\n");
+    }
+  fprintf (file, "\t\tmov.u32\t\t%%%s, %%tid.%s;\n", name, name);
   fprintf (file, "\t\tsetp.ne.u32\t%%r%d, %%%s, 0;\n", regno, name);
+  if (strcmp (name, "x") == 0 && cfun->machine->red_partition)
+    {
+      fprintf (file, "\t\tcvt.u64.u32\t%%y64, %%tid.y;\n");
+      fprintf (file, "\t\tcvta.shared.u64\t%%t_red, __vector_red;\n");
+      fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%y64, %d, %%t_red; "
+	       "// vector reduction buffer\n",
+	       REGNO (cfun->machine->red_partition),
+	       vector_red_partition);
+    }
+  fprintf (file, "\t}\n");
+}
+
+/* Emit code to initialize OpenACC worker broadcast and synchronization
+   registers.  */
+
+static void
+nvptx_init_oacc_workers (FILE *file)
+{
+  fprintf (file, "\t{\n");
+  fprintf (file, "\t\t.reg.u32\t%%tidy;\n");
+  if (cfun->machine->bcast_partition)
+    {
+      fprintf (file, "\t\t.reg.u64\t%%t_bcast;\n");
+      fprintf (file, "\t\t.reg.u64\t%%y64;\n");
+    }
+  fprintf (file, "\t\tmov.u32\t\t%%tidy, %%tid.y;\n");
+  if (cfun->machine->bcast_partition)
+    {
+      fprintf (file, "\t\tcvt.u64.u32\t%%y64, %%tidy;\n");
+      fprintf (file, "\t\tadd.u64\t\t%%y64, %%y64, 1; // vector ID\n");
+      fprintf (file, "\t\tcvta.shared.u64\t%%t_bcast, __oacc_bcast;\n");
+      fprintf (file, "\t\tmad.lo.u64\t%%r%d, %%y64, %d, %%t_bcast; "
+	       "// vector broadcast offset\n",
+	       REGNO (cfun->machine->bcast_partition),
+	       oacc_bcast_partition);
+    }
+  if (cfun->machine->sync_bar)
+    fprintf (file, "\t\tadd.u32\t\t%%r%d, %%tidy, 1; "
+	     "// vector synchronization barrier\n",
+	     REGNO (cfun->machine->sync_bar));
   fprintf (file, "\t}\n");
 }
 
@@ -1231,6 +1277,13 @@ nvptx_declare_function_name (FILE *file, const char *name, const_tree decl)
      stream, in order to share the prototype writing code.  */
   std::stringstream s;
   write_fn_proto (s, true, name, decl);
+
+  /* Emit a .maxntid hint to help the PTX JIT emit SYNC branches.  */
+  if (lookup_attribute ("omp target entrypoint", DECL_ATTRIBUTES (decl))
+      && lookup_attribute ("oacc function", DECL_ATTRIBUTES (decl)))
+      s << ".maxntid " << cfun->machine->axis_dim[0] << ", "
+	<< cfun->machine->axis_dim[1] << ", 1\n";
+
   s << "{\n";
 
   bool return_in_mem = write_return_type (s, false, result_type);
@@ -1341,6 +1394,8 @@ nvptx_declare_function_name (FILE *file, const char *name, const_tree decl)
   if (cfun->machine->unisimt_predicate
       || (cfun->machine->has_simtreg && !crtl->is_leaf))
     nvptx_init_unisimt_predicate (file);
+  if (cfun->machine->bcast_partition || cfun->machine->sync_bar)
+    nvptx_init_oacc_workers (file);
 }
 
 /* Output code for switching uniform-simt state.  ENTERING indicates whether
@@ -2849,6 +2904,26 @@ struct offload_attrs
   int max_workers;
 };
 
+/* Define entries for cfun->machine->axis_dim.  */
+
+#define MACH_VECTOR_LENGTH 0
+#define MACH_MAX_WORKERS 1
+
+static int
+nvptx_mach_max_workers ()
+{
+  return cfun->machine->axis_dim[MACH_MAX_WORKERS];
+}
+
+static int
+nvptx_mach_vector_length ()
+{
+  return cfun->machine->axis_dim[MACH_VECTOR_LENGTH];
+}
+
+/* Loop structure of the function.  The entire function is described as
+   a NULL loop.  */
+
 struct parallel
 {
   /* Parent parallel.  */
@@ -2996,6 +3071,19 @@ nvptx_split_blocks (bb_insn_map_t *map)
     }
 }
 
+/* Return true if MASK contains parallelism that requires shared
+   memory to broadcast.  */
+
+static bool
+nvptx_needs_shared_bcast (unsigned mask)
+{
+  bool worker = mask & GOMP_DIM_MASK (GOMP_DIM_WORKER);
+  bool large_vector = (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
+    && nvptx_mach_vector_length () != PTX_WARP_SIZE;
+
+  return worker || large_vector;
+}
+
 /* BLOCK is a basic block containing a head or tail instruction.
    Locate the associated prehead or pretail instruction, which must be
    in the single predecessor block.  */
@@ -3071,7 +3159,7 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
 	    par = new parallel (par, mask);
 	    par->forked_block = block;
 	    par->forked_insn = end;
-	    if (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+	    if (nvptx_needs_shared_bcast (mask))
 	      par->fork_insn
 		= nvptx_discover_pre (block, CODE_FOR_nvptx_fork);
 	  }
@@ -3086,7 +3174,7 @@ nvptx_find_par (bb_insn_map_t *map, parallel *par, basic_block block)
 	    gcc_assert (par->mask == mask);
 	    par->join_block = block;
 	    par->join_insn = end;
-	    if (mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+	    if (nvptx_needs_shared_bcast (mask))
 	      par->joining_insn
 		= nvptx_discover_pre (block, CODE_FOR_nvptx_joining);
 	    par = par->parent;
@@ -3944,23 +4032,45 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
   gcc_assert (empty == !data.offset);
   if (data.offset)
     {
+      rtx bcast_sym = oacc_bcast_sym;
+
       /* Stuff was emitted, initialize the base pointer now.  */
-      rtx init = gen_rtx_SET (data.base, oacc_bcast_sym);
+      if (vector && nvptx_mach_max_workers () > 1)
+	{
+	  if (!cfun->machine->bcast_partition)
+	    {
+	      /* It would be nice to place this register in
+		 DATA_AREA_SHARED.  */
+	      cfun->machine->bcast_partition = gen_reg_rtx (DImode);
+	    }
+	  if (!cfun->machine->sync_bar)
+	    cfun->machine->sync_bar = gen_reg_rtx (SImode);
+
+	  bcast_sym = cfun->machine->bcast_partition;
+	}
+
+      rtx init = gen_rtx_SET (data.base, bcast_sym);
       emit_insn_after (init, insn);
 
-      if (oacc_bcast_size < data.offset)
-	oacc_bcast_size = data.offset;
+      if (oacc_bcast_partition < data.offset)
+	{
+	  int psize = data.offset;
+	  psize = (psize + oacc_bcast_align - 1) & ~(oacc_bcast_align - 1);
+	  oacc_bcast_partition = psize;
+	  oacc_bcast_size = psize * (nvptx_mach_max_workers () + 1);
+	}
     }
   return empty;
 }
 
-/* Emit a CTA-level synchronization barrier.  We use different
-   markers for before and after synchronizations.  */
+/* Emit a CTA-level synchronization barrier (bar.sync).  LOCK is the
+   barrier number, which is an integer or a register.  THREADS is the
+   number of threads controlled by the barrier.  */
 
 static rtx
-nvptx_cta_sync (bool after)
+nvptx_cta_sync (rtx lock, int threads)
 {
-  return gen_nvptx_barsync (GEN_INT (after));
+  return gen_nvptx_barsync (lock, GEN_INT (threads));
 }
 
 #if WORKAROUND_PTXJIT_BUG
@@ -4115,13 +4225,23 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	    pred = gen_reg_rtx (BImode);
 	    cfun->machine->axis_predicate[mode - GOMP_DIM_WORKER] = pred;
 	  }
-	
+
 	rtx br;
 	if (mode == GOMP_DIM_VECTOR)
 	  br = gen_br_true (pred, label);
 	else
 	  br = gen_br_true_uni (pred, label);
-	emit_insn_before (br, head);
+
+	if (recog_memoized (head) == CODE_FOR_nvptx_forked
+	    && recog_memoized (NEXT_INSN (head)) == CODE_FOR_nvptx_barsync)
+	  {
+	    head = NEXT_INSN (head);
+	    emit_insn_after (br, head);
+	  }
+	else if (recog_memoized (head) == CODE_FOR_nvptx_barsync)
+	  emit_insn_after (br, head);
+	else
+	  emit_insn_before (br, head);
 
 	LABEL_NUSES (label)++;
 	if (tail_branch)
@@ -4135,7 +4255,8 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
     {
       rtx pvar = XEXP (XEXP (cond_branch, 0), 0);
 
-      if (GOMP_DIM_MASK (GOMP_DIM_VECTOR) == mask)
+      if (GOMP_DIM_MASK (GOMP_DIM_VECTOR) == mask
+	  && nvptx_mach_vector_length () == PTX_WARP_SIZE)
 	{
 	  /* Vector mode only, do a shuffle.  */
 #if WORKAROUND_PTXJIT_BUG
@@ -4202,26 +4323,55 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	  /* Includes worker mode, do spill & fill.  By construction
 	     we should never have worker mode only. */
 	  broadcast_data_t data;
+	  unsigned size = GET_MODE_SIZE (SImode);
+	  bool vector = true;
+	  rtx barrier = GEN_INT (0);
+	  int threads = 0;
+
+	  if (GOMP_DIM_MASK (GOMP_DIM_WORKER) == mask)
+	    vector = false;
 
 	  data.base = oacc_bcast_sym;
 	  data.ptr = 0;
 
-	  if (oacc_bcast_size < GET_MODE_SIZE (SImode))
-	    oacc_bcast_size = GET_MODE_SIZE (SImode);
+	  if (vector
+	      && nvptx_mach_max_workers () > 1
+	      && cfun->machine->bcast_partition)
+	    data.base = cfun->machine->bcast_partition;
+
+	  gcc_assert (data.base != NULL);
+
+	  if (oacc_bcast_partition < size)
+	    {
+	      int psize = size;
+	      psize = (psize + oacc_bcast_align - 1) & ~(oacc_bcast_align - 1);
+	      oacc_bcast_partition = psize;
+	      oacc_bcast_size = psize * (nvptx_mach_max_workers () + 1);
+	    }
 
 	  data.offset = 0;
 	  emit_insn_before (nvptx_gen_shared_bcast (pvar, PM_read, 0, &data,
-						    false),
+						    vector),
 			    before);
+
+	  if (vector
+	      && nvptx_mach_max_workers () > 1
+	      && cfun->machine->sync_bar)
+	    {
+	      barrier = cfun->machine->sync_bar;
+	      threads = nvptx_mach_vector_length ();
+	    }
+
 	  /* Barrier so other workers can see the write.  */
-	  emit_insn_before (nvptx_cta_sync (false), tail);
+	  emit_insn_before (nvptx_cta_sync (barrier, threads), tail);
 	  data.offset = 0;
 	  emit_insn_before (nvptx_gen_shared_bcast (pvar, PM_write, 0, &data,
-						    false), tail);
+						    vector),
+			    tail);
 	  /* This barrier is needed to avoid worker zero clobbering
 	     the broadcast buffer before all the other workers have
 	     had a chance to read this instance of it.  */
-	  emit_insn_before (nvptx_cta_sync (true), tail);
+	  emit_insn_before (nvptx_cta_sync (barrier, threads), tail);
 	}
 
       extract_insn (tail);
@@ -4330,20 +4480,32 @@ nvptx_process_pars (parallel *par)
     }
 
   bool is_call = (par->mask & GOMP_DIM_MASK (GOMP_DIM_MAX)) != 0;
-  
-  if (par->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+  bool worker = (par->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER));
+  bool large_vector = ((par->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
+		      && nvptx_mach_vector_length () > PTX_WARP_SIZE);
+
+  if (worker || large_vector)
     {
       nvptx_shared_propagate (false, is_call, par->forked_block,
-			      par->forked_insn, false);
+			      par->forked_insn, !worker);
       bool empty = nvptx_shared_propagate (true, is_call,
 					   par->forked_block, par->fork_insn,
-					   false);
+					   !worker);
+      rtx barrier = GEN_INT (0);
+      int threads = 0;
+
+      if (!worker && cfun->machine->sync_bar)
+	{
+	  barrier = cfun->machine->sync_bar;
+	  threads = nvptx_mach_vector_length ();
+	}
 
       if (!empty || !is_call)
 	{
 	  /* Insert begin and end synchronizations.  */
-	  emit_insn_after (nvptx_cta_sync (false), par->forked_insn);
-	  emit_insn_before (nvptx_cta_sync (true), par->joining_insn);
+	  emit_insn_after (nvptx_cta_sync (barrier, threads), par->forked_insn);
+	  emit_insn_before (nvptx_cta_sync (barrier, threads),
+			    par->joining_insn);
 	}
     }
   else if (par->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
@@ -4469,15 +4631,20 @@ populate_offload_attrs (offload_attrs *oa)
   if (oa->vector_length == 0)
     {
       /* FIXME: Need a more graceful way to handle large vector
-	 lengths in OpenACC routines.  */
+	 lengths in OpenACC routines and also -fopenacc-dims.  */
       if (!lookup_attribute ("omp target entrypoint",
 			     DECL_ATTRIBUTES (current_function_decl)))
 	oa->vector_length = PTX_WARP_SIZE;
-      else
+      else if (PTX_VECTOR_LENGTH != PTX_WARP_SIZE)
 	oa->vector_length = PTX_VECTOR_LENGTH;
     }
   if (oa->num_workers == 0)
-    oa->max_workers = PTX_CTA_SIZE / oa->vector_length;
+    {
+      if (oa->vector_length == 0)
+	oa->max_workers = PTX_WORKER_LENGTH;
+      else
+	oa->max_workers = PTX_CTA_SIZE / oa->vector_length;
+    }
   else
     oa->max_workers = oa->num_workers;
 }
@@ -4534,6 +4701,9 @@ nvptx_reorg (void)
       offload_attrs oa;
 
       populate_offload_attrs (&oa);
+
+      cfun->machine->axis_dim[MACH_VECTOR_LENGTH] = oa.vector_length;
+      cfun->machine->axis_dim[MACH_MAX_WORKERS] = oa.max_workers;
 
       /* If there is worker neutering, there must be vector
 	 neutering.  Otherwise the hardware will fail.  */
