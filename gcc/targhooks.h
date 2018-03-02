@@ -111,10 +111,11 @@ extern void default_finish_cost (void *, unsigned *, unsigned *, unsigned *);
 extern void default_destroy_cost_data (void *);
 
 /* OpenACC hooks.  */
-extern bool default_goacc_validate_dims (tree, int [], int);
+extern bool default_goacc_validate_dims (tree, int [], int, int []);
 extern int default_goacc_dim_limit (int);
 extern bool default_goacc_fork_join (gcall *, const int [], bool);
 extern void default_goacc_reduction (gcall *);
+extern unsigned default_goacc_adjust_parallelism (unsigned, unsigned);
 
 /* These are here, and not in hooks.[ch], because not all users of
    hooks.h include tm.h, and thus we don't have CUMULATIVE_ARGS.  */
