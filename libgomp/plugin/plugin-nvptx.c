@@ -31,6 +31,7 @@
    is not clear as to what that state might be.  Or how one might
    propagate it from one thread to another.  */
 
+#define _GNU_SOURCE
 #include "openacc.h"
 #include "config.h"
 #include "libgomp-plugin.h"
@@ -47,6 +48,9 @@
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #if PLUGIN_NVPTX_DYNAMIC
 # include <dlfcn.h>
@@ -136,6 +140,12 @@ init_cuda_lib (void)
 #else
 # define CUDA_CALL_PREFIX
 # define init_cuda_lib() true
+#endif
+
+#include "secure_getenv.h"
+
+#if CUDA_VERSION < 8000
+#define CU_JIT_NEW_SM3X_OPT 15
 #endif
 
 /* Convenience macros for the frequently used CUDA library call and
@@ -876,12 +886,301 @@ notify_var (const char *var_name, const char *env_var)
     GOMP_PLUGIN_debug (0, "%s: '%s'\n", var_name, env_var);
 }
 
+static void
+do_prog (const char *prog, const char *arg)
+{
+  pid_t pid = fork ();
+
+  if (pid == -1)
+    {
+      GOMP_PLUGIN_error ("Fork failed");
+      return;
+    }
+  else if (pid > 0)
+    {
+      int status;
+      waitpid (pid, &status, 0);
+      if (!WIFEXITED (status))
+	GOMP_PLUGIN_error ("Running %s %s failed", prog, arg);
+    }
+  else
+    {
+      execlp (prog, prog /* argv[0] */, arg, NULL);
+      abort ();
+    }
+}
+
+static void
+debug_linkout (void *linkout, size_t linkoutsize)
+{
+  static int gomp_nvptx_disasm = -1;
+  if (gomp_nvptx_disasm == -1)
+    {
+      const char *var_name = "GOMP_NVPTX_DISASM";
+      const char *env_var = secure_getenv (var_name);
+      notify_var (var_name, env_var);
+      gomp_nvptx_disasm
+	= ((env_var != NULL && env_var[0] == '1' && env_var[1] == '\0')
+	   ? 1 : 0);
+    }
+
+  static int gomp_nvptx_save_temps = -1;
+  if (gomp_nvptx_save_temps == -1)
+    {
+      const char *var_name = "GOMP_NVPTX_SAVE_TEMPS";
+      const char *env_var = secure_getenv (var_name);
+      notify_var (var_name, env_var);
+      gomp_nvptx_save_temps
+	= ((env_var != NULL && env_var[0] == '1' && env_var[1] == '\0')
+	   ? 1 : 0);
+    }
+
+  if (gomp_nvptx_disasm == 0
+      && gomp_nvptx_save_temps == 0)
+    return;
+
+  const char *prefix = "gomp-nvptx.";
+  const char *postfix = ".cubin";
+  const int len =	(strlen (prefix)
+			 + 20 /* %lld.  */
+			 + strlen (postfix)
+			 + 1  /* '\0'.  */);
+  char file_name[len];
+  int res = snprintf (file_name, len, "%s%lld%s", prefix,
+		      (long long)getpid (), postfix);
+  assert (res < len); /* Assert there's no truncation.  */
+
+  GOMP_PLUGIN_debug (0, "Generating %s with size %zu\n",
+		     file_name, linkoutsize);
+  FILE *cubin_file = fopen (file_name, "wb");
+  if (cubin_file == NULL)
+    {
+      GOMP_PLUGIN_debug (0, "Opening %s failed\n", file_name);
+      return;
+    }
+
+  fwrite (linkout, linkoutsize, 1, cubin_file);
+  unsigned int write_succeeded = ferror (cubin_file) == 0;
+  if (!write_succeeded)
+    GOMP_PLUGIN_debug (0, "Writing %s failed\n", file_name);
+
+  res = fclose (cubin_file);
+  if (res != 0)
+    GOMP_PLUGIN_debug (0, "Closing %s failed\n", file_name);
+
+  if (!write_succeeded)
+    return;
+
+  if (gomp_nvptx_disasm == 1)
+    {
+      GOMP_PLUGIN_debug (0, "Disassembling %s\n", file_name);
+      do_prog ("nvdisasm", file_name);
+    }
+
+  if (gomp_nvptx_save_temps == 0)
+    {
+      GOMP_PLUGIN_debug (0, "Removing %s\n", file_name);
+      remove (file_name);
+    }
+}
+
+/* If environment variable GOMP_NVPTX_PTXRW=[Ww], write *RES_CODE to file
+   gomp-nvptx.<NUM>.ptx.  If it is [Rr], read *RES_CODE from file
+   instead.  */
+
+static void
+post_process_ptx (unsigned num, const char **res_code, size_t *res_size)
+{
+  static int gomp_nvptx_ptxrw = -1;
+
+  if (gomp_nvptx_ptxrw == -1)
+    {
+      const char *var_name = "GOMP_NVPTX_PTXRW";
+      const char *env_var = secure_getenv (var_name);
+      notify_var (var_name, env_var);
+
+      gomp_nvptx_ptxrw = 0;
+      if (env_var == NULL)
+	;
+      else if ((env_var[0] == 'w' || env_var[0] == 'W')
+	       && env_var[1] == '\0')
+	gomp_nvptx_ptxrw = 1;
+      else if ((env_var[0] == 'r' || env_var[0] == 'R')
+	       && env_var[1] == '\0')
+	gomp_nvptx_ptxrw = 2;
+      else
+	GOMP_PLUGIN_error ("Error parsing %s", var_name);
+    }
+
+  if (gomp_nvptx_ptxrw == 0)
+    return;
+
+  const char *code = *res_code;
+  size_t size = *res_size;
+
+  const char *prefix = "gomp-nvptx.";
+  const char *postfix = ".ptx";
+  const int len =	(strlen (prefix)
+			 + 10 /* %u.  */
+			 + strlen (postfix)
+			 + 1  /* '\0'.  */);
+  char file_name[len];
+  int res = snprintf (file_name, len, "%s%u%s", prefix,
+		      num, postfix);
+  assert (res < len); /* Assert there's no truncation.  */
+
+  GOMP_PLUGIN_debug (0, "%s %s \n",
+		     (gomp_nvptx_ptxrw == 1 ? "Writing" : "Reading"),
+		     file_name);
+
+  if (gomp_nvptx_ptxrw == 1)
+    {
+      FILE *ptx_file = fopen (file_name, "w");
+      if (ptx_file == NULL)
+	{
+	  GOMP_PLUGIN_debug (0, "Opening %s failed\n", file_name);
+	  return;
+	}
+
+      int res = fprintf (ptx_file, "%s", code);
+      unsigned int write_succeeded = res == size - 1;
+      if (!write_succeeded)
+	GOMP_PLUGIN_debug (0,
+			   "Writing %s failed: written %d but expected %zu\n",
+			   file_name, res, size - 1);
+
+      res = fclose (ptx_file);
+      if (res != 0)
+	GOMP_PLUGIN_debug (0, "Closing %s failed\n", file_name);
+
+      return;
+    }
+
+  if (gomp_nvptx_ptxrw == 2)
+    {
+      FILE *ptx_file = fopen (file_name, "r");
+      if (ptx_file == NULL)
+	{
+	  GOMP_PLUGIN_debug (0, "Opening %s failed\n", file_name);
+	  return;
+	}
+
+      if (fseek (ptx_file, 0L, SEEK_END) != 0)
+	{
+	  GOMP_PLUGIN_debug (0, "Seeking end of %s failed\n", file_name);
+	  return;
+	}
+
+      long bufsize = ftell (ptx_file);
+      if (bufsize == -1)
+	{
+	  GOMP_PLUGIN_debug (0, "ftell of %s failed\n", file_name);
+	  return;
+	}
+
+      if (fseek (ptx_file, 0L, SEEK_SET) != 0)
+	{
+	  GOMP_PLUGIN_debug (0, "Seeking start of %s failed\n", file_name);
+	  return;
+	}
+
+	char *new_code = GOMP_PLUGIN_malloc (sizeof (char) * (bufsize + 1));
+
+	size_t new_size = fread (new_code, sizeof (char), bufsize, ptx_file);
+	if (ferror (ptx_file) != 0)
+	  {
+	    GOMP_PLUGIN_debug (0, "Reading %s failed\n", file_name);
+	    return;
+	  }
+
+	assert (new_size < bufsize + 1);
+	new_code[new_size++] = '\0';
+
+	int res = fclose (ptx_file);
+	if (res != 0)
+	  {
+	    GOMP_PLUGIN_debug (0, "Closing %s failed\n", file_name);
+	    return;
+	  }
+
+	*res_code = new_code;
+	*res_size = new_size;
+	return;
+    }
+}
+
+static bool
+parse_number (const char *c, unsigned long* resp, char **end)
+{
+  unsigned long res;
+
+  errno = 0;
+  res = strtoul (c, end, 10);
+  if (errno)
+    return false;
+
+  *resp = res;
+  return true;
+}
+
+static void
+process_GOMP_NVPTX_JIT (intptr_t *gomp_nvptx_o, intptr_t *gomp_nvptx_ori,
+			uintptr_t *gomp_nvptx_target)
+{
+  const char *var_name = "GOMP_NVPTX_JIT";
+  const char *env_var = getenv (var_name);
+  notify_var (var_name, env_var);
+
+  if (env_var == NULL)
+    return;
+
+  const char *c = env_var;
+  while (*c != '\0')
+    {
+      while (*c == ' ')
+	c++;
+
+      if (c[0] == '-' && c[1] == 'O'
+	  && '0' <= c[2] && c[2] <= '4'
+	  && (c[3] == '\0' || c[3] == ' '))
+	{
+	  *gomp_nvptx_o = c[2] - '0';
+	  c += 3;
+	  continue;
+	}
+
+      if (c[0] == '-' && c[1] == 'o' && c[2] == 'r' && c[3] == 'i'
+	  && (c[4] == '\0' || c[4] == ' '))
+	{
+	  *gomp_nvptx_ori = 1;
+	  c += 4;
+	  continue;
+	}
+
+      if (c[0] == '-' && c[1] == 'a' && c[2] == 'r' && c[3] == 'c'
+	  && c[4] == 'h' && c[5] == '=')
+	{
+	  const char *end;
+	  unsigned long val;
+	  if (parse_number (&c[6], &val, (char**)&end))
+	    {
+	      *gomp_nvptx_target = val;
+	      c = end;
+	      continue;
+	    }
+	}
+
+      GOMP_PLUGIN_error ("Error parsing %s", var_name);
+      break;
+    }
+}
+
 static bool
 link_ptx (CUmodule *module, const struct targ_ptx_obj *ptx_objs,
 	  unsigned num_objs)
 {
-  CUjit_option opts[6];
-  void *optvals[6];
+  CUjit_option opts[9];
+  void *optvals[9];
   float elapsed = 0.0;
   char elog[1024];
   char ilog[16384];
@@ -908,15 +1207,50 @@ link_ptx (CUmodule *module, const struct targ_ptx_obj *ptx_objs,
   opts[5] = CU_JIT_LOG_VERBOSE;
   optvals[5] = (void *) 1;
 
-  CUDA_CALL (cuLinkCreate, 6, opts, optvals, &linkstate);
+  static intptr_t gomp_nvptx_o = -1;
+  static intptr_t gomp_nvptx_ori = -1;
+  static uintptr_t gomp_nvptx_target = 0;
+
+  static bool init_done = false;
+  if (!init_done)
+    {
+      process_GOMP_NVPTX_JIT (&gomp_nvptx_o, &gomp_nvptx_ori,
+			      &gomp_nvptx_target);
+      init_done = true;
+  }
+
+  int nopts = 6;
+  if (gomp_nvptx_o != -1)
+    {
+      opts[nopts] = CU_JIT_OPTIMIZATION_LEVEL;
+      optvals[nopts] = (void *) gomp_nvptx_o;
+      nopts++;
+    }
+  if (gomp_nvptx_ori != -1)
+    {
+      opts[nopts] = CU_JIT_NEW_SM3X_OPT;
+      optvals[nopts] = (void *) gomp_nvptx_ori;
+      nopts++;
+    }
+  if (gomp_nvptx_target != 0)
+    {
+      opts[nopts] = CU_JIT_TARGET;
+      optvals[nopts] = (void *) gomp_nvptx_target;
+      nopts++;
+    }
+
+  CUDA_CALL (cuLinkCreate, nopts, opts, optvals, &linkstate);
 
   for (; num_objs--; ptx_objs++)
     {
+      const char *ptx_code = ptx_objs->code;
+      size_t ptx_size = ptx_objs->size;
+      post_process_ptx (num_objs, &ptx_code, &ptx_size);
+      GOMP_PLUGIN_debug (0, "Loading:\n---\n%s\n---\n", ptx_code);
       /* cuLinkAddData's 'data' argument erroneously omits the const
 	 qualifier.  */
-      GOMP_PLUGIN_debug (0, "Loading:\n---\n%s\n---\n", ptx_objs->code);
       r = CUDA_CALL_NOCHECK (cuLinkAddData, linkstate, CU_JIT_INPUT_PTX,
-			     (char *) ptx_objs->code, ptx_objs->size,
+			     (char *) ptx_code, ptx_size,
 			     0, 0, 0, 0);
       if (r != CUDA_SUCCESS)
 	{
@@ -938,6 +1272,8 @@ link_ptx (CUmodule *module, const struct targ_ptx_obj *ptx_objs,
       GOMP_PLUGIN_error ("cuLinkComplete error: %s", cuda_error (r));
       return false;
     }
+
+  debug_linkout (linkout, linkoutsize);
 
   CUDA_CALL (cuModuleLoadData, module, linkout);
   CUDA_CALL (cuLinkDestroy, linkstate);
