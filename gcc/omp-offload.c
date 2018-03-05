@@ -627,7 +627,7 @@ oacc_parse_default_dims (const char *dims)
 
 static void
 oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used,
-		    int * ARG_UNUSED (unused_dims))
+		    int * ARG_UNUSED (default_dims))
 {
   tree purpose[GOMP_DIM_MAX];
   unsigned ix;
