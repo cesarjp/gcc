@@ -1186,7 +1186,7 @@
 		 (match_operand:SI 3 "const_int_operand" "n")]
 		  UNSPEC_SHUFFLE))]
   ""
-  "%.\\tshfl%S3.b32\\t%0, %1, %2, 31;")
+  "%.\\tshfl.sync%S3.b32\\t%0, %1, %2, 31, 0xffffffff;")
 
 (define_insn "nvptx_vote_ballot"
   [(set (match_operand:SI 0 "nvptx_register_operand" "=R")
