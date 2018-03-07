@@ -4335,7 +4335,7 @@ nvptx_process_pars (parallel *par)
 	{
 	  /* Insert begin and end synchronizations.  */
 	  emit_insn_after (nvptx_cta_sync (false), par->forked_insn);
-	  emit_insn_before (nvptx_cta_sync (true), par->joining_insn);
+	  emit_insn_before (nvptx_cta_sync (true), par->join_insn);
 	}
     }
   else if (par->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
