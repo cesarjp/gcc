@@ -4103,7 +4103,17 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	  br = gen_br_true (pred, label);
 	else
 	  br = gen_br_true_uni (pred, label);
-	emit_insn_before (br, head);
+
+	if (recog_memoized (head) == CODE_FOR_nvptx_forked
+	    && recog_memoized (NEXT_INSN (head)) == CODE_FOR_nvptx_barsync)
+	  {
+	    head = NEXT_INSN (head);
+	    emit_insn_after (br, head);
+	  }
+	else if (recog_memoized (head) == CODE_FOR_nvptx_barsync)
+	  emit_insn_after (br, head);
+	else
+	  emit_insn_before (br, head);
 
 	LABEL_NUSES (label)++;
 	if (tail_branch)
