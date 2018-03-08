@@ -4056,6 +4056,15 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	return;
     }
 
+  /* NVPTX_BARSYNC barriers are placed immediately before NVPTX_JOIN
+     in order to ensure that all of the threads in a CTA reach the
+     barrier.  Don't nueter BLOCK if head is NVPTX_BARSYNC and tail is
+     NVPTX_JOIN.  */
+  if (from == to
+      && recog_memoized (head) == CODE_FOR_nvptx_barsync
+      && recog_memoized (tail) == CODE_FOR_nvptx_join)
+    return;
+
   /* Insert the vector test inside the worker test.  */
   unsigned mode;
   rtx_insn *before = tail;
