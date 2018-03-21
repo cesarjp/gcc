@@ -1,7 +1,6 @@
 ! Exercise three levels of parallelism using SGEMM from BLAS.
 
 ! { dg-do run }
-! { dg-additional-options "-fopenacc-dim=-:-:128" }
 
 ! Implicitly set vector_length to 128 using -fopenacc-dim.
 subroutine openacc_sgemm (m, n, k, alpha, a, b, beta, c)
@@ -40,7 +39,6 @@ subroutine openacc_sgemm_128 (m, n, k, alpha, a, b, beta, c)
   real :: temp
 
   !$acc parallel loop copy(c(1:m,1:n)) copyin(a(1:k,1:m),b(1:k,1:n)) vector_length (128)
-  ! { dg-prune-output "using vector_length \\(32\\), ignoring 128" }
   do j = 1, n
      !$acc loop
      do i = 1, m
