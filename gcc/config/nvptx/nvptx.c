@@ -4507,8 +4507,8 @@ nvptx_process_pars (parallel *par)
       if (!empty || !is_call)
 	{
 	  /* Insert begin and end synchronizations.  */
-	  emit_insn_before (nvptx_cta_sync (barrier), par->forked_insn);
-	  emit_insn_before (nvptx_cta_sync (barrier), par->join_insn);
+	  emit_insn_before (nvptx_cta_sync (barrier, threads), par->forked_insn);
+	  emit_insn_before (nvptx_cta_sync (barrier, threads), par->join_insn);
 	}
     }
   else if (par->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR))
@@ -5218,7 +5218,7 @@ nvptx_goacc_needs_vl_warp ()
 {
   tree attr = lookup_attribute (NVPTX_GOACC_VL_WARP,
 				DECL_ATTRIBUTES (current_function_decl));
-  return attr == NULL_TREE;
+  return attr != NULL_TREE;
 }
 
 /* Validate compute dimensions of an OpenACC offload or routine, fill
