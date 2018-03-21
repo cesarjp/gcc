@@ -1202,9 +1202,12 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 			     default_dims[GOMP_DIM_VECTOR]);
 	}
       pthread_mutex_unlock (&ptx_dev_lock);
-      int vectors = default_dims[GOMP_DIM_VECTOR];
+      int vectors = dims[GOMP_DIM_VECTOR];
       int workers = default_dims[GOMP_DIM_WORKER];
       int gangs = default_dims[GOMP_DIM_GANG];
+
+      if (vectors < 0)
+	vectors = default_dims[GOMP_DIM_VECTOR];
 
       if (nvptx_thread()->ptx_dev->driver_version > 6050)
 	{
