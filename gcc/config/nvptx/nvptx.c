@@ -4122,7 +4122,9 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
   while (true)
     {
       /* Find first insn of from block.  */
-      while (head != BB_END (from) && !INSN_P (head))
+      while (head != BB_END (from)
+	     && (!INSN_P (head)
+		 || recog_memoized (head) == CODE_FOR_nvptx_barsync))
 	head = NEXT_INSN (head);
 
       if (from == to)
@@ -4171,6 +4173,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	{
 	default:
 	  break;
+	case CODE_FOR_nvptx_barsync:
 	case CODE_FOR_nvptx_fork:
 	case CODE_FOR_nvptx_forked:
 	case CODE_FOR_nvptx_joining:
@@ -4189,15 +4192,6 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	/* Block with only unconditional branch.  Nothing to do.  */
 	return;
     }
-
-  /* NVPTX_BARSYNC barriers are placed immediately before NVPTX_JOIN
-     in order to ensure that all of the threads in a CTA reach the
-     barrier.  Don't nueter BLOCK if head is NVPTX_BARSYNC and tail is
-     NVPTX_JOIN.  */
-  if (from == to
-      && recog_memoized (head) == CODE_FOR_nvptx_barsync
-      && recog_memoized (tail) == CODE_FOR_nvptx_join)
-    return;
 
   /* Insert the vector test inside the worker test.  */
   unsigned mode;
@@ -4246,17 +4240,7 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	  br = gen_br_true (pred, label);
 	else
 	  br = gen_br_true_uni (pred, label);
-
-	if (recog_memoized (head) == CODE_FOR_nvptx_forked
-	    && recog_memoized (NEXT_INSN (head)) == CODE_FOR_nvptx_barsync)
-	  {
-	    head = NEXT_INSN (head);
-	    emit_insn_after (br, head);
-	  }
-	else if (recog_memoized (head) == CODE_FOR_nvptx_barsync)
-	  emit_insn_after (br, head);
-	else
-	  emit_insn_before (br, head);
+	emit_insn_before (br, head);
 
 	LABEL_NUSES (label)++;
 	if (tail_branch)
