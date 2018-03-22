@@ -76,6 +76,7 @@
 #include "target-def.h"
 
 #define WORKAROUND_PTXJIT_BUG 1
+#define WORKAROUND_PTXJIT_BUG_3 1
 
 /* Define dimension sizes for known hardware.  */
 #define PTX_VECTOR_LENGTH 32
@@ -1219,6 +1220,15 @@ nvptx_declare_function_name (FILE *file, const char *name, const_tree decl)
      stream, in order to share the prototype writing code.  */
   std::stringstream s;
   write_fn_proto (s, true, name, decl);
+
+#if WORKAROUND_PTXJIT_BUG_3
+  /* Emitting a .maxntid seems to have the effect of encouraging the
+     PTX JIT emit SYNC branches.  */
+  if (lookup_attribute ("omp target entrypoint", DECL_ATTRIBUTES (decl))
+      && lookup_attribute ("oacc function", DECL_ATTRIBUTES (decl)))
+      s << ".maxntid 32, 32, 1\n";
+#endif
+
   s << "{\n";
 
   bool return_in_mem = write_return_type (s, false, result_type);
