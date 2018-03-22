@@ -4061,9 +4061,14 @@ nvptx_shared_propagate (bool pre_p, bool is_call, basic_block block,
       if (oacc_bcast_partition < data.offset)
 	{
 	  int psize = data.offset;
+	  int pnum = 1;
+
+	  if (nvptx_mach_vector_length () > PTX_WARP_SIZE)
+	    pnum = nvptx_mach_max_workers () + 1;
+
 	  psize = (psize + oacc_bcast_align - 1) & ~(oacc_bcast_align - 1);
 	  oacc_bcast_partition = psize;
-	  oacc_bcast_size = psize * (nvptx_mach_max_workers () + 1);
+	  oacc_bcast_size = psize * pnum;
 	}
     }
   return empty;
@@ -4348,9 +4353,14 @@ nvptx_single (unsigned mask, basic_block from, basic_block to)
 	  if (oacc_bcast_partition < size)
 	    {
 	      int psize = size;
+	      int pnum = 1;
+
+	      if (nvptx_mach_vector_length () > PTX_WARP_SIZE)
+		pnum = nvptx_mach_max_workers () + 1;
+
 	      psize = (psize + oacc_bcast_align - 1) & ~(oacc_bcast_align - 1);
 	      oacc_bcast_partition = psize;
-	      oacc_bcast_size = psize * (nvptx_mach_max_workers () + 1);
+	      oacc_bcast_size = psize * pnum;
 	    }
 
 	  data.offset = 0;
