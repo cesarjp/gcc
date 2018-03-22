@@ -1284,12 +1284,6 @@ nvptx_declare_function_name (FILE *file, const char *name, const_tree decl)
   std::stringstream s;
   write_fn_proto (s, true, name, decl);
 
-  /* Emit a .maxntid hint to help the PTX JIT emit SYNC branches.  */
-  if (lookup_attribute ("omp target entrypoint", DECL_ATTRIBUTES (decl))
-      && lookup_attribute ("oacc function", DECL_ATTRIBUTES (decl)))
-      s << ".maxntid " << cfun->machine->axis_dim[0] << ", "
-	<< cfun->machine->axis_dim[1] << ", 1\n";
-
   s << "{\n";
 
   bool return_in_mem = write_return_type (s, false, result_type);
