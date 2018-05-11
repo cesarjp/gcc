@@ -46,6 +46,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "trans-stmt.h"
 #include "gomp-constants.h"
 #include "gimplify.h"
+#include "omp-general.h"
 
 #define MAX_LABEL_VALUE 99999
 
@@ -1429,23 +1430,52 @@ add_attributes_to_decl (symbol_attribute sym_attr, tree list)
 	list = chainon (list, attr);
       }
 
-  if (sym_attr.omp_declare_target_link)
+  if (sym_attr.omp_declare_target_link
+#if 0 /* TODO */
+      || sym_attr.oacc_declare_link
+#endif
+      )
     list = tree_cons (get_identifier ("omp declare target link"),
 		      NULL_TREE, list);
-  else if (sym_attr.omp_declare_target)
-    list = tree_cons (get_identifier ("omp declare target"),
-		      NULL_TREE, list);
-
-  if (sym_attr.oacc_function)
+  else if (sym_attr.omp_declare_target
+	   || sym_attr.oacc_declare_create
+	   || sym_attr.oacc_declare_copyin
+	   || sym_attr.oacc_declare_deviceptr
+#if 0 /* TODO */
+	   || sym_attr.oacc_declare_device_resident
+#endif
+	   )
     {
-      tree dims = NULL_TREE;
-      int ix;
-      int level = sym_attr.oacc_function - 1;
+      tree c = NULL_TREE;
+      if (sym_attr.oacc_function_nohost)
+	c = build_omp_clause (/* TODO */ input_location,
+			      OMP_CLAUSE_NOHOST);
+      list = tree_cons (get_identifier ("omp declare target"), c, list);
+    }
 
-      for (ix = GOMP_DIM_MAX; ix--;)
-	dims = tree_cons (build_int_cst (boolean_type_node, ix >= level),
-			  integer_zero_node, dims);
+  if (sym_attr.oacc_function != OACC_FUNCTION_NONE)
+    {
+      omp_clause_code code = OMP_CLAUSE_ERROR;
+      tree clause, dims;
+      
+      switch (sym_attr.oacc_function)
+	{
+	case OACC_FUNCTION_GANG:
+	  code = OMP_CLAUSE_GANG;
+	  break;
+	case OACC_FUNCTION_WORKER:
+	  code = OMP_CLAUSE_WORKER;
+	  break;
+	case OACC_FUNCTION_VECTOR:
+	  code = OMP_CLAUSE_VECTOR;
+	  break;
+	case OACC_FUNCTION_SEQ:
+	default:
+	  code = OMP_CLAUSE_SEQ;
+	}
 
+      clause = build_omp_clause (UNKNOWN_LOCATION, code);
+      dims = oacc_build_routine_dims (clause);
       list = tree_cons (get_identifier ("oacc function"),
 			dims, list);
     }
@@ -6231,12 +6261,19 @@ add_clause (gfc_symbol *sym, gfc_omp_map_op map_op)
 {
   gfc_omp_namelist *n;
 
+  if (!module_oacc_clauses)
+    module_oacc_clauses = gfc_get_omp_clauses ();
+
+  if (sym->backend_decl == NULL)
+    gfc_get_symbol_decl (sym);
+
+  for (n = module_oacc_clauses->lists[OMP_LIST_MAP]; n != NULL; n = n->next)
+    if (n->sym->backend_decl == sym->backend_decl)
+      return;
+
   n = gfc_get_omp_namelist ();
   n->sym = sym;
   n->u.map_op = map_op;
-
-  if (!module_oacc_clauses)
-    module_oacc_clauses = gfc_get_omp_clauses ();
 
   if (module_oacc_clauses->lists[OMP_LIST_MAP])
     n->next = module_oacc_clauses->lists[OMP_LIST_MAP];
@@ -6253,10 +6290,10 @@ find_module_oacc_declare_clauses (gfc_symbol *sym)
       gfc_omp_map_op map_op;
 
       if (sym->attr.oacc_declare_create)
-	map_op = OMP_MAP_FORCE_ALLOC;
+	map_op = OMP_MAP_ALLOC;
 
       if (sym->attr.oacc_declare_copyin)
-	map_op = OMP_MAP_FORCE_TO;
+	map_op = OMP_MAP_TO;
 
       if (sym->attr.oacc_declare_deviceptr)
 	map_op = OMP_MAP_FORCE_DEVICEPTR;

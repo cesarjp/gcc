@@ -95,10 +95,12 @@ changed to GNU Offloading and Multi Processing Runtime Library.
 @comment
 @menu
 * Enabling OpenMP::            How to enable OpenMP for your applications.
-* Runtime Library Routines::   The OpenMP runtime application programming 
+* OpenMP Runtime Library Routines: Runtime Library Routines.
+                               The OpenMP runtime application programming
                                interface.
-* Environment Variables::      Influencing runtime behavior with environment 
-                               variables.
+* OpenMP Environment Variables: Environment Variables.
+                               Influencing OpenMP runtime behavior with
+                               environment variables.
 * Enabling OpenACC::           How to enable OpenACC for your
                                applications.
 * OpenACC Runtime Library Routines:: The OpenACC runtime application
@@ -109,6 +111,7 @@ changed to GNU Offloading and Multi Processing Runtime Library.
                                asynchronous operations.
 * OpenACC Library Interoperability:: OpenACC library interoperability with the
                                NVIDIA CUBLAS library.
+* OpenACC Profiling Interface::
 * The libgomp ABI::            Notes on the external ABI presented by libgomp.
 * Reporting Bugs::             How to report bugs in the GNU Offloading and
                                Multi Processing Runtime Library.
@@ -144,11 +147,11 @@ version 4.5.
 
 
 @c ---------------------------------------------------------------------
-@c Runtime Library Routines
+@c OpenMP Runtime Library Routines
 @c ---------------------------------------------------------------------
 
 @node Runtime Library Routines
-@chapter Runtime Library Routines
+@chapter OpenMP Runtime Library Routines
 
 The runtime routines described here are defined by Section 3 of the OpenMP
 specification in version 4.5.  The routines are structured in following
@@ -1327,11 +1330,11 @@ guaranteed not to change during the execution of the program.
 
 
 @c ---------------------------------------------------------------------
-@c Environment Variables
+@c OpenMP Environment Variables
 @c ---------------------------------------------------------------------
 
 @node Environment Variables
-@chapter Environment Variables
+@chapter OpenMP Environment Variables
 
 The environment variables which beginning with @env{OMP_} are defined by
 section 4 of the OpenMP specification in version 4.5, while those
@@ -1815,13 +1818,28 @@ flag @option{-fopenacc} must be specified.  This enables the OpenACC directive
 arranges for automatic linking of the OpenACC runtime library 
 (@ref{OpenACC Runtime Library Routines}).
 
+Offloading is enabled by default.  In some cases, the compiler may
+come to the conclusion that offloading incurs too much overhead, and
+suggest to the runtime to avoid it.  To counteract that, you can use
+the option @option{-foffload-force} to force offloading in such cases.
+Alternatively, offloading is also enabled if a specific device type is
+requested, in a call to @code{acc_init} or by setting the
+@env{ACC_DEVICE_TYPE} environment variable, for example.
+If you expect code to be offloaded no matter the overhead, for
+example, when preparing data on a non-shared memory offloading device
+for later use in an OpenACC @code{host_data} construct, be sure to
+force offloading, to get the device memory initialized.
+For example, if calling into the cuBLAS library (@ref{OpenACC Library
+Interoperability}) from an OpenACC @code{host_data} construct, this
+program is portable only to @code{acc_device_nvidia} devices, so it's
+good practice then to initialize the runtime with an explicit
+@code{acc_init (acc_device_nvidia)} call.
+
 A complete description of all OpenACC directives accepted may be found in 
 the @uref{https://www.openacc.org, OpenACC} Application Programming
-Interface manual, version 2.0.
+Interface manual, version 2.5.
 
-Note that this is an experimental feature and subject to
-change in future versions of GCC.  See
-@uref{https://gcc.gnu.org/wiki/OpenACC} for more information.
+See @uref{https://gcc.gnu.org/wiki/OpenACC} for more information.
 
 
 
@@ -1833,11 +1851,14 @@ change in future versions of GCC.  See
 @chapter OpenACC Runtime Library Routines
 
 The runtime routines described here are defined by section 3 of the OpenACC
-specifications in version 2.0.
+specification in version 2.0.
 They have C linkage, and do not throw exceptions.
 Generally, they are available only for the host, with the exception of
 @code{acc_on_device}, which is available for both the host and the
 acceleration device.
+
+This list has not yet been updated for the OpenACC specification in
+version 2.5.
 
 @menu
 * acc_get_num_devices::         Get number of devices for the given device
@@ -2823,13 +2844,15 @@ A.2.1.4.
 @node OpenACC Environment Variables
 @chapter OpenACC Environment Variables
 
-The variables @env{ACC_DEVICE_TYPE} and @env{ACC_DEVICE_NUM}
-are defined by section 4 of the OpenACC specification in version 2.0.
+The variables @env{ACC_DEVICE_TYPE}, @env{ACC_DEVICE_NUM},
+and @code{ACC_PROFLIB}
+are defined by section 4 of the OpenACC specification in version 2.5.
 The variable @env{GCC_ACC_NOTIFY} is used for diagnostic purposes.
 
 @menu
 * ACC_DEVICE_TYPE::
 * ACC_DEVICE_NUM::
+* ACC_PROFLIB::
 * GCC_ACC_NOTIFY::
 @end menu
 
@@ -2839,7 +2862,7 @@ The variable @env{GCC_ACC_NOTIFY} is used for diagnostic purposes.
 @section @code{ACC_DEVICE_TYPE}
 @table @asis
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.5}, section
 4.1.
 @end table
 
@@ -2849,8 +2872,21 @@ The variable @env{GCC_ACC_NOTIFY} is used for diagnostic purposes.
 @section @code{ACC_DEVICE_NUM}
 @table @asis
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.5}, section
 4.2.
+@end table
+
+
+
+@node ACC_PROFLIB
+@section @code{ACC_PROFLIB}
+@table @asis
+@item @emph{See also}:
+@ref{OpenACC Profiling Interface}
+
+@item @emph{Reference}:
+@uref{https://www.openacc.org, OpenACC specification v2.5}, section
+4.3.
 @end table
 
 
@@ -3065,8 +3101,299 @@ is called prior to a call to @code{cudaCreate()}. If @code{cudaCreate()}
 is called prior to a call to an OpenACC function, then you must call
 @code{acc_set_device_num()}@footnote{More complete information
 about @env{ACC_DEVICE_TYPE} and @env{ACC_DEVICE_NUM} can be found in
-sections 4.1 and 4.2 of the @uref{https://www.openacc.org, OpenACC}
-Application Programming Interface”, Version 2.0.}
+sections 4.1 and 4.2 of the @uref{https://www.openacc.org, OpenACC
+Application Programming Interface}, version 2.5.}
+
+
+
+@c ---------------------------------------------------------------------
+@c OpenACC Profiling Interface
+@c ---------------------------------------------------------------------
+
+@node OpenACC Profiling Interface
+@chapter OpenACC Profiling Interface
+
+@section Implementation Status and Implementation-Defined Behavior
+
+We're implementing most of the Profiling Interface as defined by
+the OpenACC 2.5 specification.  The specification doesn't
+clearly define some aspects of its Profiling Interface, so we're
+clarifying these as @emph{implementation-defined behavior} here.  We
+already have reported to the OpenACC Technical Committee some issues,
+and will report more, later on.
+
+This implementation of the OpenACC Profiling Interface is tuned to
+keep the performance impact as low as possible when it's not in use.
+This is relevant, as the Profiling Interface affects all the
+@emph{hot} code paths (in the target code, not in the offloaded code).
+Users of the OpenACC Profiling Interface can be expected to understand
+that performance will always be impacted to some degree: for example,
+because of the @emph{runtime} (libgomp) calling into a third-party
+@emph{library} for every event that has been registered.
+
+This implementation of the OpenACC Profiling Interface has not yet
+been validated for use in multi-threaded code.  This is a more general
+issue; see CSTS-110 @cite{Make sure all OpenACC entry points in
+libgomp are thread-safe}.
+
+The @code{acc_prof_lookup} interface is not implemented, and
+@code{acc_register_library} will receive @code{NULL} for its
+@code{lookup} parameter.
+
+Remarks about data provided to callbacks:
+
+@table @asis
+
+@item @code{acc_prof_info.event_type}
+It is not clear if for @emph{nested} event callbacks (for example,
+@code{acc_ev_enqueue_launch_start} as part of a parent compute
+construct), this should be set for the nested event
+(@code{acc_ev_enqueue_launch_start}), or if the value of the parent
+construct should remain (@code{acc_ev_compute_construct_start}).  In
+this implementation, the value will generally correspond to the
+innermost nested event type.
+
+@item @code{acc_prof_info.device_type}
+@itemize
+
+@item
+For @code{acc_ev_compute_construct_start}, and in presence of an
+@code{if} clause with @emph{false} argument, this will still refer to
+the offloading device type; unsure whether that's the expected
+behavior.
+
+@item
+Complementary to the item before, for
+@code{acc_ev_compute_construct_end}, this is set to
+@code{acc_device_host} in presence of an @code{if} clause with
+@emph{false} argument, unsure whether that's the expected behavior.
+
+@end itemize
+
+@item @code{acc_prof_info.thread_id}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_prof_info.async}
+@itemize
+
+@item
+Not yet implemented correctly for
+@code{acc_ev_compute_construct_start}.
+
+@item
+In a compute construct, for host-fallback
+execution/@code{acc_device_host} it will always be
+@code{acc_async_sync}; unsure if that is the expected behavior.
+
+@item
+For @code{acc_ev_device_init_start} and @code{acc_ev_device_init_end},
+it will always be @code{acc_async_sync}; unsure if that is the
+expected behavior.
+
+@end itemize
+
+@item @code{acc_prof_info.async_queue}
+There is no @cite{limited number of asynchronous queues} in libgomp.
+We define this to always have the same value as
+@code{acc_prof_info.async}.
+
+@item @code{acc_prof_info.file}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_prof_info.func_name}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_prof_info.line_no}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_prof_info.end_line_no}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_prof_info.func_line_no}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_prof_info.func_end_line_no}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_event_info.event_type}, @code{acc_event_info.*.event_type}
+Relating to @code{acc_prof_info.event_type} discussed above, in this
+implementation, this will always be the same value as
+@code{acc_prof_info.event_type}.
+
+@item @code{acc_event_info.*.parent_construct}
+@itemize
+
+@item
+Will be @code{acc_construct_parallel} for OpenACC kernels constructs;
+should be @code{acc_construct_kernels}.
+
+@item
+Will be @code{acc_construct_enter_data} or
+@code{acc_construct_exit_data} when processing variable mappings
+specified in OpenACC declare directives; should be
+@code{acc_construct_declare}.
+
+@item
+For implicit @code{acc_ev_device_init_start},
+@code{acc_ev_device_init_end}, and explicit as well as implicit
+@code{acc_ev_alloc}, @code{acc_ev_free},
+@code{acc_ev_enqueue_upload_start}, @code{acc_ev_enqueue_upload_end},
+@code{acc_ev_enqueue_download_start},
+@code{acc_ev_enqueue_download_end}, @code{acc_ev_wait_start}, and
+@code{acc_ev_wait_end}, will be
+@code{acc_construct_parallel}; should reflect the real parent
+construct.
+
+@end itemize
+
+@item @code{acc_event_info.*.implicit}
+For @code{acc_ev_alloc}, @code{acc_ev_free},
+@code{acc_ev_enqueue_upload_start}, @code{acc_ev_enqueue_upload_end},
+@code{acc_ev_enqueue_download_start},
+@code{acc_ev_enqueue_download_end}, @code{acc_ev_wait_start}, and
+@code{acc_ev_wait_end}, this currently will be @code{1}
+also for explicit usage.
+
+@item @code{acc_event_info.data_event.var_name}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_event_info.data_event.host_ptr}
+For @code{acc_ev_alloc}, and @code{acc_ev_free}, this is always
+@code{NULL}.
+
+@item @code{typedef union acc_api_info}
+@dots{} as printed in @cite{5.2.3. Third Argument: API-Specific
+Information}, should obviously be @code{typedef @emph{struct}
+acc_api_info}.
+
+@item @code{acc_api_info.device_api}
+Possibly not yet implemented correctly for
+@code{acc_ev_compute_construct_start},
+@code{acc_ev_device_init_start}, @code{acc_ev_device_init_end}:
+will always be @code{acc_device_api_none} for these event types.
+For @code{acc_ev_enter_data_start}, it will be
+@code{acc_device_api_none} in some cases.
+
+@item @code{acc_api_info.device_type}
+Always the same as @code{acc_prof_info.device_type}.
+
+@item @code{acc_api_info.vendor}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_api_info.device_handle}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_api_info.context_handle}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_api_info.async_handle}
+Always @code{NULL}; not yet implemented.
+
+@end table
+
+Remarks about certain event types:
+
+@table @asis
+
+@item @code{acc_ev_device_init_start}, @code{acc_ev_device_init_end}
+@itemize
+
+@item
+@c See DEVICE_INIT_INSIDE_COMPUTE_CONSTRUCT in
+@c libgomp.oacc-c-c++-common/acc_prof-parallel-1.c.
+Whan a compute construct triggers implicit
+@code{acc_ev_device_init_start} and @code{acc_ev_device_init_end}
+events, they currently aren't @emph{nested within} the corresponding
+@code{acc_ev_compute_construct_start} and
+@code{acc_ev_compute_construct_end}, but they're currently observed
+@emph{before} @code{acc_ev_compute_construct_start}.  It is not clear
+what to do: the standard asks us provide a lot of details to the
+@code{acc_ev_compute_construct_start} callback, without (implicitly)
+initializing a device before?
+
+@item
+Callbacks for these event types will not be invoked for calls to the
+@code{acc_set_device_type} and @code{acc_set_device_num} functions;
+it's not clear if they should be.
+
+@end itemize
+
+@item @code{acc_ev_enter_data_start}, @code{acc_ev_enter_data_end}, @code{acc_ev_exit_data_start}, @code{acc_ev_exit_data_end}
+@itemize
+
+@item
+Callbacks for these event types will also be invoked for OpenACC
+host_data constructs; it's not clear if they should be.
+
+@item
+Callbacks for these event types will also be invoked when processing
+variable mappings specified in OpenACC declare directives; it's not
+clear if they should be.
+
+@end itemize
+
+@end table
+
+Callbacks for the following event types will be invoked, but dispatch
+and information provided therein has not yet been thoroughly reviewed:
+
+@itemize
+@item @code{acc_ev_alloc}
+@item @code{acc_ev_free}
+@item @code{acc_ev_update_start}, @code{acc_ev_update_end}
+@item @code{acc_ev_enqueue_upload_start}, @code{acc_ev_enqueue_upload_end}
+@item @code{acc_ev_enqueue_download_start}, @code{acc_ev_enqueue_download_end}
+@item @code{acc_ev_wait_start}, @code{acc_ev_wait_end}
+@end itemize
+
+During device initialization, and finalization, respectively,
+callbacks for the following event types will not yet be invoked:
+
+@itemize
+@item @code{acc_ev_alloc}
+@item @code{acc_ev_free}
+@end itemize
+
+Callbacks for the following event types have not yet been implemented,
+so currently won't be invoked:
+
+@itemize
+@item @code{acc_ev_device_shutdown_start}, @code{acc_ev_device_shutdown_end}
+@item @code{acc_ev_runtime_shutdown}
+@item @code{acc_ev_create}, @code{acc_ev_delete}
+@end itemize
+
+For the following runtime library functions, not all expected
+callbacks will be invoked (mostly concerning implicit device
+initialization):
+
+@itemize
+@item @code{acc_get_num_devices}
+@item @code{acc_set_device_type}
+@item @code{acc_get_device_type}
+@item @code{acc_set_device_num}
+@item @code{acc_get_device_num}
+@item @code{acc_init}
+@item @code{acc_shutdown}
+@end itemize
+
+Aside from implicit device initialization, for the following runtime
+library functions, no callbacks will be invoked for shared-memory
+offloading devices (it's not clear if they should be):
+
+@itemize
+@item @code{acc_malloc}
+@item @code{acc_free}
+@item @code{acc_copyin}, @code{acc_present_or_copyin}, @code{acc_copyin_async}
+@item @code{acc_create}, @code{acc_present_or_create}, @code{acc_create_async}
+@item @code{acc_copyout}, @code{acc_copyout_async}, @code{acc_copyout_finalize}, @code{acc_copyout_finalize_async}
+@item @code{acc_delete}, @code{acc_delete_async}, @code{acc_delete_finalize}, @code{acc_delete_finalize_async}
+@item @code{acc_update_device}, @code{acc_update_device_async}
+@item @code{acc_update_self}, @code{acc_update_self_async}
+@item @code{acc_map_data}, @code{acc_unmap_data}
+@item @code{acc_memcpy_to_device}, @code{acc_memcpy_to_device_async}
+@item @code{acc_memcpy_from_device}, @code{acc_memcpy_from_device_async}
+@end itemize
 
 
 

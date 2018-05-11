@@ -36,10 +36,23 @@ acc_get_current_cuda_device (void)
 {
   struct goacc_thread *thr = goacc_thread ();
 
-  if (thr && thr->dev && thr->dev->openacc.cuda.get_current_device_func)
-    return thr->dev->openacc.cuda.get_current_device_func ();
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
 
-  return NULL;
+  void *ret = NULL;
+  if (thr && thr->dev && thr->dev->openacc.cuda.get_current_device_func)
+    ret = thr->dev->openacc.cuda.get_current_device_func ();
+
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
+
+  return ret;
 }
 
 void *
@@ -47,10 +60,23 @@ acc_get_current_cuda_context (void)
 {
   struct goacc_thread *thr = goacc_thread ();
 
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
+
+  void *ret = NULL;
   if (thr && thr->dev && thr->dev->openacc.cuda.get_current_context_func)
-    return thr->dev->openacc.cuda.get_current_context_func ();
- 
-  return NULL;
+    ret = thr->dev->openacc.cuda.get_current_context_func ();
+
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
+
+  return ret;
 }
 
 void *
@@ -61,10 +87,33 @@ acc_get_cuda_stream (int async)
   if (async < 0)
     return NULL;
 
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
+  if (profiling_setup_p)
+    {
+      prof_info.async = async; //TODO
+      /* See <https://github.com/OpenACC/openacc-spec/issues/71>.  */
+      prof_info.async_queue = prof_info.async;
+    }
+
+  void *ret = NULL;
   if (thr && thr->dev && thr->dev->openacc.cuda.get_stream_func)
-    return thr->dev->openacc.cuda.get_stream_func (async);
- 
-  return NULL;
+    {
+      goacc_aq aq = lookup_goacc_asyncqueue (thr, false, async);
+      if (aq)
+	ret = thr->dev->openacc.cuda.get_stream_func (aq);
+    }
+
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
+
+  return ret;
 }
 
 int
@@ -79,8 +128,32 @@ acc_set_cuda_stream (int async, void *stream)
 
   thr = goacc_thread ();
 
-  if (thr && thr->dev && thr->dev->openacc.cuda.set_stream_func)
-    return thr->dev->openacc.cuda.set_stream_func (async, stream);
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
+  if (profiling_setup_p)
+    {
+      prof_info.async = async; //TODO
+      /* See <https://github.com/OpenACC/openacc-spec/issues/71>.  */
+      prof_info.async_queue = prof_info.async;
+    }
 
-  return -1;
+  int ret = -1;
+  if (thr && thr->dev && thr->dev->openacc.cuda.set_stream_func)
+    {
+      goacc_aq aq = get_goacc_asyncqueue (async);
+      gomp_mutex_lock (&thr->dev->openacc.async.lock);
+      ret = thr->dev->openacc.cuda.set_stream_func (aq, stream);
+      gomp_mutex_unlock (&thr->dev->openacc.async.lock);
+    }
+
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
+
+  return ret;
 }

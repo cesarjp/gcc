@@ -745,6 +745,39 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 	case GOMP_MAP_LINK:
 	  pp_string (pp, "link");
 	  break;
+	case GOMP_MAP_DYNAMIC_ARRAY_TO:
+	  pp_string (pp, "to,dynamic_array");
+	  break;
+	case GOMP_MAP_DYNAMIC_ARRAY_FROM:
+	  pp_string (pp, "from,dynamic_array");
+	  break;
+	case GOMP_MAP_DYNAMIC_ARRAY_TOFROM:
+	  pp_string (pp, "tofrom,dynamic_array");
+	  break;
+	case GOMP_MAP_DYNAMIC_ARRAY_FORCE_TO:
+	  pp_string (pp, "force_to,dynamic_array");
+	  break;
+	case GOMP_MAP_DYNAMIC_ARRAY_FORCE_FROM:
+	  pp_string (pp, "force_from,dynamic_array");
+	  break;
+	case GOMP_MAP_DYNAMIC_ARRAY_FORCE_TOFROM:
+	  pp_string (pp, "force_tofrom,dynamic_array");
+	  break;
+	case GOMP_MAP_DYNAMIC_ARRAY_ALLOC:
+	  pp_string (pp, "alloc,dynamic_array");
+	  break;
+	case GOMP_MAP_DYNAMIC_ARRAY_FORCE_ALLOC:
+	  pp_string (pp, "force_alloc,dynamic_array");
+	  break;
+	case GOMP_MAP_DYNAMIC_ARRAY_FORCE_PRESENT:
+	  pp_string (pp, "force_present,dynamic_array");
+	  break;
+	case GOMP_MAP_DECLARE_ALLOCATE:
+	  pp_string (pp, "declare_allocate");
+	  break;
+	case GOMP_MAP_DECLARE_DEALLOCATE:
+	  pp_string (pp, "declare_deallocate");
+	  break;
 	default:
 	  gcc_unreachable ();
 	}
@@ -765,6 +798,10 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 	      break;
 	    case GOMP_MAP_TO_PSET:
 	      pp_string (pp, " [pointer set, len: ");
+	      break;
+	    case GOMP_MAP_DYNAMIC_ARRAY:
+	      gcc_assert (TREE_CODE (OMP_CLAUSE_SIZE (clause)) == TREE_LIST);
+	      pp_string (pp, " [dimensions: ");
 	      break;
 	    default:
 	      pp_string (pp, " [len: ");
@@ -1033,7 +1070,24 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 			 spc, flags, false);
       pp_right_paren (pp);
       break;
-
+    case OMP_CLAUSE_DEVICE_TYPE:
+      pp_string (pp, "device_type(");
+      dump_generic_node (pp, OMP_CLAUSE_DEVICE_TYPE_DEVICES (clause),
+			 spc, flags, false);
+      pp_string (pp, ") [");
+      dump_omp_clauses (pp, OMP_CLAUSE_DEVICE_TYPE_CLAUSES (clause),
+			spc, flags);
+      pp_string (pp, " ]");
+      break;
+    case OMP_CLAUSE_NOHOST:
+      pp_string (pp, "nohost");
+      break;
+    case OMP_CLAUSE_BIND:
+      pp_string (pp, "bind(");
+      dump_generic_node (pp, OMP_CLAUSE_BIND_NAME (clause),
+			 spc, flags, false);
+      pp_string (pp, ")");
+      break;
     case OMP_CLAUSE__GRIDDIM_:
       pp_string (pp, "_griddim_(");
       pp_unsigned_wide_integer (pp, OMP_CLAUSE__GRIDDIM__DIMENSION (clause));
@@ -1045,10 +1099,15 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 			 false);
       pp_right_paren (pp);
       break;
+    case OMP_CLAUSE_IF_PRESENT:
+      pp_string (pp, "if_present");
+      break;
+    case OMP_CLAUSE_FINALIZE:
+      pp_string (pp, "finalize");
+      break;
 
     default:
-      /* Should never happen.  */
-      dump_generic_node (pp, clause, spc, flags, false);
+      pp_string (pp, "unknown");
       break;
     }
 }

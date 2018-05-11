@@ -1,0 +1,319 @@
+2016-10-02  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	PR fortran/77371
+	* omp-low.c (lower_omp_target): Avoid reference-type processing
+	on pointers for firstprivate clause.
+	* gimplify.c (gimplify_adjust_omp_clauses): Add 'remove = true'
+	when emitting error on private/firstprivate reductions.
+
+2016-09-15  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (oacc_default_clause): Privatize fortran common blocks.
+	(omp_notice_variable): Defer the expansion of DECL_VALUE_EXPR for
+	common block decls.
+
+2017-07-16  Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_propagate_unified): Use next_real_insn to
+	find comparison insn.  Assert that comparison is found.
+
+2017-06-30  Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_propagate_unified): Fix gcc_assert
+	condition by allowing !INSN_P.
+
+2016-08-31  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* config/nvptx/nvptx.md (cond_uni): New pattern.
+	* config/nvptx/nvptx.c (nvptx_propagate_unified): New.
+	(nvptx_split_blocks): Call it for cond_uni insn.
+	(nvptx_expand_cond_uni): New.
+	(enum nvptx_builtins): Add NVPTX_BUILTIN_COND_UNI.
+	(nvptx_init_builtins): Initialize it.
+	(nvptx_generate_vector_shuffle): Change integral SHIFT operand to
+	tree BITS operand.
+	(nvptx_vector_reduction): New.
+	(nvptx_goacc_reduction_fini): Call it for vector.
+
+2016-08-30  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (lower_omp_target): Handle NULL-sized types for
+	assumed-sized arrays.
+
+2016-08-26  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* ipa-inline-analysis.c (inline_write_summary): Only dump callee
+	counts when dumping the function's body.
+
+2016-12-06  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (gimplify_adjust_omp_clauses_1): Link ACC new clauses
+	with the old ones.
+
+2016-08-17  Cesar Philippidis  <cesar@codesourcery.com>
+
+	PR middle-end/70828
+	* gimplify.c (struct gimplify_omp_ctx): Add tree clauses member.
+	(new_omp_context): Initialize clauses to NULL_TREE.
+	(gimplify_scan_omp_clauses): Set clauses in the gimplify_omp_ctx.
+	(omp_clause_matching_array_ref): New function.
+	(gomp_needs_data_present): New function.
+	(gimplify_adjust_omp_clauses_1): Use preset or pointer omp clause map
+	kinds when creating implicit data clauses for OpenACC offloaded
+	variables defined used an acc data region as necessary.
+
+2016-08-17  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* omp-low.c (verify_oacc_routine_clauses): Change formal
+	parameters.  Add checking if already marked as an accelerator
+	routine.  Adjust all users.
+
+	* omp-low.c (build_oacc_routine_dims): Move some of its processing
+	into...
+	(verify_oacc_routine_clauses): ... this new function.
+	* omp-low.h (verify_oacc_routine_clauses): New prototype.
+
+2016-07-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* lto-cgraph.c (input_overwrite_node): Change the assertion to an
+	error for missing symbols.
+
+2015-10-20  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* lto-cgraph.c (input_overwrite_node): Cleanup openacc diagnostic
+	emission.
+
+2015-07-24  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* tree-cfg.c (struct replace_decls_d): New struct.
+	(replace_block_vars_by_duplicates_1): New function.
+	(replace_block_vars_by_duplicates): Use it to replace the decls
+	in the value exprs by duplicates.
+	* lto-cgraph.c (input_overwrite_node): Gracefully error on missing
+	symbols with flag_openacc.
+	* tree-nested.c (convert_nonlocal_omp_clauses): Handle OMP_CLAUSE_GANG,
+	OMP_CLAUSE_WORKER, OMP_CLAUSE_VECTOR, and OMP_CLAUSE_SEQ.
+	(convert_local_omp_clauses): Likewise.
+
+2016-01-08  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* lto-cgraph.c (input_varpool_node): Reduce the assert for
+	missing variables to an error.
+
+2016-06-10  Thomas Schwinge  <thomas@codesourcery.com>
+
+	PR middle-end/71373
+	Backport from trunk r237291:
+	* tree-nested.c (convert_nonlocal_omp_clauses)
+	(convert_local_omp_clauses): Handle OMP_CLAUSE_ASYNC,
+	OMP_CLAUSE_WAIT, OMP_CLAUSE_INDEPENDENT, OMP_CLAUSE_AUTO,
+	OMP_CLAUSE__CACHE_, OMP_CLAUSE_TILE.
+
+	Backport from trunk r237291:
+	* gimplify.c (gimplify_adjust_omp_clauses): Discard
+	OMP_CLAUSE_TILE.
+	* omp-low.c (scan_sharing_clauses): Don't expect OMP_CLAUSE_TILE.
+
+2016-05-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	Backport trunk r236678:
+	2016-05-24  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (omp_notice_variable): Use zero-length arrays for data
+	pointers inside OACC_DATA regions.
+	(gimplify_scan_omp_clauses): Prune firstprivate clause associated
+	with OACC_DATA, OACC_ENTER_DATA and OACC_EXIT data regions.
+	(gimplify_adjust_omp_clauses): Fix typo in comment.
+
+2016-06-30  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_goacc_validate_dims): Only trigger
+	the "avoid offloading" mechanism for -O2 and higher.
+
+2016-01-21  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* common.opt: Add -foffload-force.
+	* lto-wrapper.c (merge_and_complain, append_compiler_options):
+	Handle it.
+	* doc/invoke.texi: Document it.
+	* config/nvptx/mkoffload.c (struct id_map): Add "flags" member.
+	(record_id): Parse, and set it.
+	(process): Use it.
+	* config/nvptx/nvptx.c (nvptx_attribute_table): Add "omp avoid
+	offloading".
+	(nvptx_record_offload_symbol): Use it.
+	(nvptx_goacc_validate_dims): Set it.
+
+2016-01-13  Tom de Vries  <tom@codesourcery.com>
+
+	PR tree-optimization/68977
+	* omp-low.c (oacc_xform_loop): Handle seen_error () == true.
+
+2016-01-08  Nathan Sidwell  <nathan@acm.org>
+
+	* omp-low.c (expand_omp_atomic_pipeline): Pay attention to
+	LOOPS_HAVE_SIMPLE_LATCHES state.
+
+2016-01-05  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* config/nvptx/nvptx.c (PTX_GANG_DEFAULT): New.
+	(nvptx_goacc_validate_dims): Extend to handle global defaults.
+	* doc/invoke.texi (fopenacc-dim): Document.
+	* lto-wrapper.c (merge_and_complain): Add OPT_fopenacc_dim_ case.
+	(append_compiler_options): Likewise.
+	* omp-low.c (oacc_default_dims, oacc_min_dims): New.
+	(oacc_parse_default_dims): New.
+	(oacc_validate_dims): Add USED arg.  Emit warnings about strange
+	partitioning choices.  Select non-unity default when possible.
+	(oacc_loop_fixed_partitions): Return mask of used partitions.
+	(oacc_loop_auto_partitions): Emit dump info.
+	(oacc_loop_partition): Return mask of used partitions.
+	(execute_oacc_device_lower): Parse default dimension arg.  Adjust
+	loop partitioning and validation calls.
+
+2015-12-08  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* gimplify.c (gimplify_scan_omp_clauses)
+	(gimplify_adjust_omp_clauses): Handle OMP_CLAUSE_BIND,
+	OMP_CLAUSE_NOHOST.
+	* tree-nested.c (convert_nonlocal_omp_clauses)
+	(convert_local_omp_clauses): Likewise.
+	* omp-low.c (scan_sharing_clauses): Likewise.
+	(execute_oacc_device_lower) [ACCEL_COMPILER]: Handle OpenACC bind
+	clauses.
+	[!ACCEL_COMPILER]: Handle OpenACC nohost clauses.
+	* tree-core.h (enum omp_clause_code) <OMP_CLAUSE_BIND>: Update
+	description.
+
+2015-10-16  Tom de Vries  <tom@codesourcery.com>
+
+	* tree-pretty-print.c (dump_omp_clause): Handle bind clause.
+
+2015-10-16  Tom de Vries  <tom@codesourcery.com>
+
+	* tree-pretty-print.c (dump_omp_clause): Handle OMP_CLAUSE_NOHOST.
+
+2015-07-17  Julian Brown  <julian@codesourcery.com>
+
+	* gimplify.c (gimplify_scan_omp_clauses): Handle
+	OMP_CLAUSE_DEVICE_TYPE.
+	(gimplify_adjust_omp_clauses): Likewise.
+	* omp-low.c (scan_sharing_clauses): Likewise.
+	(expand_omp_target): Add "sorry" for device_type support.
+	* tree-pretty-print.c (dump_omp_clause): Add device_type support.
+	* tree.c (walk_tree_1): Likewise.
+
+2015-05-13  Thomas Schwinge  <thomas@codesourcery.com>
+	    Bernd Schmidt  <bernds@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+	    Chung-Lin Tang  <cltang@codesourcery.com>
+	    James Norris  <jnorris@codesourcery.com>
+	    Joseph Myers  <joseph@codesourcery.com>
+	    Julian Brown  <julian@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* builtin-types.def
+	(BT_FN_VOID_INT_OMPFN_SIZE_PTR_PTR_PTR_INT_INT_INT_INT_INT_VAR):
+	Remove.
+	(BT_FN_INT_INT_INT_INT)
+	(BT_FN_VOID_INT_OMPFN_SIZE_PTR_PTR_PTR_INT_INT_INT_SIZE_INT_INT_VAR):
+	New function types.
+	* builtins.c (expand_oacc_builtin, expand_oacc_ganglocal_ptr): New
+	functions.
+	(expand_builtin, is_simple_builtin): Use them.
+	* config/nvptx/mkoffload.c (process): Protect
+	GOMP_offload_register prototype from C++ name mangling.
+	* config/nvptx/nvptx.c (nvptx_file_start): Print declaration of
+	sdata.
+	* config/nvptx/nvptx.md (UNSPEC_NCTAID, UNSPEC_CTAID)
+	(UNSPEC_SHARED_DATA): New constants.
+	(oacc_nctaid_insn, oacc_nctaid, oacc_ctaid_insn, oacc_ctaid)
+	(ganglocal_ptr<mode>, ganglocal_ptr): New patterns.
+	* doc/md.texi (oacc_ntid, oacc_tid): Document.
+	* gimple.h (gimple_statement_omp_parallel_layout): Add
+	ganglocal_size member.
+	(gimple_omp_target_ganglocal_size)
+	(gimple_omp_target_set_ganglocal_size): New functions.
+	* gimplify.c (gimplify_omp_var_data): Add GOVD_USE_DEVICE,
+	GOVD_FORCE_MAP, GOVD_GANGLOCAL.
+	(omp_region_type): Add ORT_HOST_DATA.
+	(omp_region_kind, acc_region_kind): New enum types.
+	(gimplify_omp_ctx): Add region_kind, acc_region_kind members.
+	(new_omp_context, omp_add_variable, omp_notice_variable)
+	(gimplify_scan_omp_clauses, gimplify_adjust_omp_clauses_1): Update
+	for OpenACC.
+	(gimplify_scan_omp_clauses): Add region_kind formal parameter.
+	Adjust all users.
+	(gimplify_oacc_host_data_1, gimplify_oacc_host_data): New
+	functions.
+	(gimplify_expr): Update handling of OACC_HOST_DATA.
+	* omp-builtins.def (BUILT_IN_GOACC_KERNELS_INTERNAL)
+	(BUILT_IN_GOACC_KERNELS, BUILT_IN_GOACC_PARALLEL): Change type
+	from BT_FN_VOID_INT_OMPFN_SIZE_PTR_PTR_PTR_INT_INT_INT_INT_INT_VAR
+	to
+	BT_FN_VOID_INT_OMPFN_SIZE_PTR_PTR_PTR_INT_INT_INT_SIZE_INT_INT_VAR.
+	Adjust all users.
+	(BUILT_IN_GOACC_GET_THREAD_NUM, BUILT_IN_GOACC_GET_NUM_THREADS):
+	Change type from from BT_FN_INT to BT_FN_INT_INT_INT_INT.  Adjust
+	all users.
+	(BUILT_IN_GOACC_NTID, BUILT_IN_GOACC_TID, BUILT_IN_GOACC_NCTAID)
+	(BUILT_IN_GOACC_CTAID, BUILT_IN_GOACC_GET_GANGLOCAL_PTR)
+	(BUILT_IN_GOACC_DEVICEPTR): New builtins.
+	* omp-low.c (omp_context): Add oacc_reduction_set, ganglocal_init,
+	ganglocal_ptr, ganglocal_size, ganglocal_size_host members.
+	(new_omp_context, delete_omp_context): Initialize/deinitialize
+	these, respectively.
+	(omp_for_data): Add gang, worker, vector members.
+	(extract_omp_for_data): Populate these.
+	(oacc_max_threads, oacc_finalize_reduction_data): Rewrite
+	functions.
+	(is_oacc_parallel, oacc_parallel_max_reduction_array_size)
+	(align_and_expand, alloc_var_ganglocal, install_var_ganglocal)
+	(install_array_var_ganglocal)
+	(oacc_outermost_parallel_kernels_context, oacc_inside_routine)
+	(is_oacc_multithreaded, oacc_needs_global_memory)
+	(is_atomic_compatible_reduction, oacc_serial_reduction)
+	(oacc_process_reduction_data_helper): New functions.
+	(build_outer_var_ref, fixup_remapped_decl, scan_sharing_clauses)
+	(check_omp_nesting_restrictions, lower_rec_input_clauses)
+	(lower_reduction_clauses, oacc_initialize_reduction_data)
+	(oacc_process_reduction_data, lower_omp_target)
+	(lower_omp_regimplify_p): Update for OpenACC.
+	* tree-parloops.c (create_parallel_loop): For OpenACC, switch from
+	vector to gang parallelism.
+	* tree-pretty-print.c (dump_omp_clause): Handle
+	GOMP_MAP_FORCE_TO_GANGLOCAL.
+
+2015-05-11  Thomas Schwinge  <thomas@codesourcery.com>
+	    Bernd Schmidt  <bernds@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+	    Chung-Lin Tang  <cltang@codesourcery.com>
+	    James Norris  <jnorris@codesourcery.com>
+	    Joseph Myers  <joseph@codesourcery.com>
+	    Julian Brown  <julian@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* gimplify.c (gimplify_scan_omp_clauses)
+	(gimplify_adjust_omp_clauses): Handle OMP_CLAUSE_TILE.
+	(gimplify_expr): Don't verify OACC_KERNELS_COMBINED, and
+	OACC_PARALLEL_COMBINED.
+	* omp-low.c (scan_sharing_clauses): Handle OMP_CLAUSE_BIND,
+	OMP_CLAUSE_NOHOST, OMP_CLAUSE_TILE.
+	(check_omp_nesting_restrictions): Support GIMPLE_OMP_ATOMIC_LOAD,
+	GIMPLE_OMP_ATOMIC_STORE inside OpenACC contexts.
+	* tree-core.h (omp_clause_code): Add OMP_CLAUSE_BIND,
+	OMP_CLAUSE_NOHOST, OMP_CLAUSE_TILE, OMP_CLAUSE_DEVICE_TYPE.
+	* tree.c (omp_clause_num_ops, omp_clause_code_name, walk_tree_1):
+	Update for these.
+	* tree-pretty-print.c (dump_omp_clause): Handle OMP_CLAUSE_TILE.
+	* tree.h (OACC_KERNELS_COMBINED, OACC_PARALLEL_COMBINED): Remove
+	macros.
+	(OMP_CLAUSE_BIND_NAME, OMP_CLAUSE_TILE_LIST)
+	(OMP_CLAUSE_DEVICE_TYPE_DEVICES, OMP_CLAUSE_DEVICE_TYPE_CLAUSES):
+	Add macros.
+
+Copyright (C) 2015-2018 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

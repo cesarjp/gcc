@@ -4521,7 +4521,7 @@ omp_privatize_field (tree t, bool shared)
 static tree
 handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 			     bool &maybe_zero_len, unsigned int &first_non_one,
-			     enum c_omp_region_type ort)
+			     bool &non_contiguous, enum c_omp_region_type ort)
 {
   tree ret, low_bound, length, type;
   if (TREE_CODE (t) != TREE_LIST)
@@ -4575,7 +4575,8 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 		      omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	  return error_mark_node;
 	}
-      else if (TREE_CODE (t) == PARM_DECL
+      else if (ort == C_ORT_OMP
+	       && TREE_CODE (t) == PARM_DECL
 	       && DECL_ARTIFICIAL (t)
 	       && DECL_NAME (t) == this_identifier)
 	{
@@ -4603,7 +4604,8 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
       && TREE_CODE (TREE_CHAIN (t)) == FIELD_DECL)
     TREE_CHAIN (t) = omp_privatize_field (TREE_CHAIN (t), false);
   ret = handle_omp_array_sections_1 (c, TREE_CHAIN (t), types,
-				     maybe_zero_len, first_non_one, ort);
+				     maybe_zero_len, first_non_one,
+				     non_contiguous, ort);
   if (ret == error_mark_node || ret == NULL_TREE)
     return ret;
 
@@ -4775,6 +4777,21 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 		    }
 		}
 	    }
+
+	  /* For OpenACC, if the low_bound/length suggest this is a subarray,
+	     and is referenced through by a pointer, then mark this as
+	     non-contiguous.  */
+	  if (ort == C_ORT_ACC
+	      && types.length () > 0
+	      && (TREE_CODE (low_bound) != INTEGER_CST
+		  || integer_nonzerop (low_bound)
+		  || (length && (TREE_CODE (length) != INTEGER_CST
+				 || !tree_int_cst_equal (size, length)))))
+	    {
+	      tree x = types.last ();
+	      if (TREE_CODE (x) == POINTER_TYPE)
+		non_contiguous = true;
+	    }
 	}
       else if (length == NULL_TREE)
 	{
@@ -4816,13 +4833,16 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
       /* If there is a pointer type anywhere but in the very first
 	 array-section-subscript, the array section can't be contiguous.  */
       if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_DEPEND
-	  && TREE_CODE (TREE_CHAIN (t)) == TREE_LIST)
+	  && TREE_CODE (TREE_CHAIN (t)) == TREE_LIST
+	  && ort != C_ORT_ACC)
 	{
 	  error_at (OMP_CLAUSE_LOCATION (c),
 		    "array section is not contiguous in %qs clause",
 		    omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	  return error_mark_node;
 	}
+      else if (TREE_CODE (TREE_CHAIN (t)) == TREE_LIST)
+	non_contiguous = true;
     }
   else
     {
@@ -4850,10 +4870,11 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 {
   bool maybe_zero_len = false;
   unsigned int first_non_one = 0;
+  bool non_contiguous = false;
   auto_vec<tree, 10> types;
   tree first = handle_omp_array_sections_1 (c, OMP_CLAUSE_DECL (c), types,
 					    maybe_zero_len, first_non_one,
-					    ort);
+					    non_contiguous, ort);
   if (first == error_mark_node)
     return true;
   if (first == NULL_TREE)
@@ -4887,6 +4908,7 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
       unsigned int num = types.length (), i;
       tree t, side_effects = NULL_TREE, size = NULL_TREE;
       tree condition = NULL_TREE;
+      tree da_dims = NULL_TREE;
 
       if (int_size_in_bytes (TREE_TYPE (first)) <= 0)
 	maybe_zero_len = true;
@@ -4912,6 +4934,13 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 	    length = fold_convert (sizetype, length);
 	  if (low_bound == NULL_TREE)
 	    low_bound = integer_zero_node;
+
+	  if (non_contiguous)
+	    {
+	      da_dims = tree_cons (low_bound, length, da_dims);
+	      continue;
+	    }
+
 	  if (!maybe_zero_len && i > first_non_one)
 	    {
 	      if (integer_nonzerop (low_bound))
@@ -4999,6 +5028,14 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 	}
       if (!processing_template_decl)
 	{
+	  if (non_contiguous)
+	    {
+	      int kind = OMP_CLAUSE_MAP_KIND (c);
+	      OMP_CLAUSE_SET_MAP_KIND (c, kind | GOMP_MAP_DYNAMIC_ARRAY);
+	      OMP_CLAUSE_DECL (c) = t;
+	      OMP_CLAUSE_SIZE (c) = da_dims;
+	      return false;
+	    }
 	  if (side_effects)
 	    size = build2 (COMPOUND_EXPR, sizetype, side_effects, size);
 	  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION)
@@ -5078,7 +5115,8 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 	  else
 	    OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_FIRSTPRIVATE_POINTER);
 	  if (OMP_CLAUSE_MAP_KIND (c2) != GOMP_MAP_FIRSTPRIVATE_POINTER
-	      && !cxx_mark_addressable (t))
+	      && !cxx_mark_addressable (t,
+					CXX_MARK_ADDRESSABLE_FLAGS_ALLOW_THIS))
 	    return false;
 	  OMP_CLAUSE_DECL (c2) = t;
 	  t = build_fold_addr_expr (first);
@@ -5667,7 +5705,8 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
 		  && TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c)))
 		     != REFERENCE_TYPE)
 		cxx_mark_addressable (decl_placeholder ? decl_placeholder
-				      : OMP_CLAUSE_DECL (c));
+				      : OMP_CLAUSE_DECL (c),
+				      CXX_MARK_ADDRESSABLE_FLAGS_ALLOW_THIS);
 	      tree omp_out = placeholder;
 	      tree omp_in = decl_placeholder ? decl_placeholder
 			    : convert_from_reference (OMP_CLAUSE_DECL (c));
@@ -5693,7 +5732,8 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
 			  && TREE_CODE (stmts[4]) == DECL_EXPR);
 	      if (TREE_ADDRESSABLE (DECL_EXPR_DECL (stmts[3])))
 		cxx_mark_addressable (decl_placeholder ? decl_placeholder
-				      : OMP_CLAUSE_DECL (c));
+				      : OMP_CLAUSE_DECL (c),
+				      CXX_MARK_ADDRESSABLE_FLAGS_ALLOW_THIS);
 	      if (TREE_ADDRESSABLE (DECL_EXPR_DECL (stmts[4])))
 		cxx_mark_addressable (placeholder);
 	      tree omp_priv = decl_placeholder ? decl_placeholder
@@ -5881,6 +5921,14 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
 	  goto check_dup_generic;
 	case OMP_CLAUSE_REDUCTION:
+	  if (ort == C_ORT_ACC && oacc_get_fn_attrib (current_function_decl)
+	      && omp_find_clause (clauses, OMP_CLAUSE_GANG))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"gang reduction on an orphan loop");
+	      remove = true;
+	      break;
+	    }
 	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
 	  t = OMP_CLAUSE_DECL (c);
 	  if (TREE_CODE (t) == TREE_LIST)
@@ -6634,7 +6682,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      remove = true;
 	    }
 	  else if (!processing_template_decl
-		   && !cxx_mark_addressable (t))
+		   && !cxx_mark_addressable (t,
+					     CXX_MARK_ADDRESSABLE_FLAGS_ALLOW_THIS))
 	    remove = true;
 	  break;
 
@@ -6782,7 +6831,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		   && (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP
 		       || (OMP_CLAUSE_MAP_KIND (c)
 			   != GOMP_MAP_FIRSTPRIVATE_POINTER))
-		   && !cxx_mark_addressable (t))
+		   && !cxx_mark_addressable (t,
+					     CXX_MARK_ADDRESSABLE_FLAGS_ALLOW_THIS))
 	    remove = true;
 	  else if (!(OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 		     && (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_POINTER
@@ -6857,7 +6907,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	handle_map_references:
 	  if (!remove
 	      && !processing_template_decl
-	      && (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+	      && ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+		  || ort == C_ORT_ACC)
 	      && TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c))) == REFERENCE_TYPE)
 	    {
 	      t = OMP_CLAUSE_DECL (c);
@@ -7088,6 +7139,10 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	case OMP_CLAUSE_AUTO:
 	case OMP_CLAUSE_INDEPENDENT:
 	case OMP_CLAUSE_SEQ:
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
+	case OMP_CLAUSE_IF_PRESENT:
+	case OMP_CLAUSE_FINALIZE:
 	  break;
 
 	case OMP_CLAUSE_TILE:
@@ -7129,6 +7184,12 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      TREE_VALUE (list) = t;
 	    }
 	  break;
+
+	case OMP_CLAUSE_DEVICE_TYPE:
+	  OMP_CLAUSE_DEVICE_TYPE_CLAUSES (c)
+	    = finish_omp_clauses (OMP_CLAUSE_DEVICE_TYPE_CLAUSES (c), ort);
+	  pc = &OMP_CLAUSE_CHAIN (c);
+	  continue;
 
 	case OMP_CLAUSE_ORDERED:
 	  ordered_seen = true;

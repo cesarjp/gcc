@@ -1,0 +1,663 @@
+2018-05-09  Tom de Vries  <tom@codesourcery.com>
+
+	backport from trunk:
+	2018-05-09  Tom de Vries  <tom@codesourcery.com>
+
+	PR target/85626
+	* config/nvptx/nvptx.md (define_insn "trap", define_insn "trap_if_true")
+	(define_insn "trap_if_false"): Add exit after trap.
+
+2018-05-07  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (enum gimplify_omp_var_data): Add GOVD_DEVICETPR.
+	(omp_notice_variable): Add GOVD_DEVICEPTR attribute when appropriate.
+	(gimplify_scan_omp_clauses): Likewise.
+	(gimplify_adjust_omp_clauses_1): Set GOMP_MAP_FORCE_DEVICEPTR for
+	implicit deviceptr mappings.
+
+2018-05-04  Tom de Vries  <tom@codesourcery.com>
+
+	backport from trunk:
+	2018-05-04  Tom de Vries  <tom@codesourcery.com>
+
+	PR target/85653
+	* config/nvptx/nvptx.c (WORKAROUND_PTXJIT_BUG_3): Define.
+	(workaround_barsyncs): New function.
+	(nvptx_reorg): Use workaround_barsyncs.
+	* config/nvptx/nvptx.md (define_c_enum "unspecv"): Add UNSPECV_MEMBAR.
+	(define_expand "nvptx_membar_cta"): New define_expand.
+	(define_insn "*nvptx_membar_cta"): New insn.
+
+2018-04-23  Tom de Vries  <tom@codesourcery.com>
+
+	PR target/85486
+	* omp-offload.c (oacc_fn_attrib_level): Remove static.
+	* omp-offload.h (oacc_fn_attrib_level): Declare.
+	* config/nvptx/nvptx.c (has_vector_partitionable_routine_calls_p): New
+	function.
+	(nvptx_goacc_validate_dims): Force vector length 32 if offloading
+	function calls vector-partitionable routines.
+
+2018-04-21  Tom de Vries  <tom@codesourcery.com>
+
+	PR target/85381
+	* config/nvptx/nvptx.c (nvptx_process_pars): Don't emit barriers for
+	empty loops.
+
+2018-04-12  Tom de Vries  <tom@codesourcery.com>
+
+	PR target/85246
+	* config/nvptx/nvptx.c (nvptx_single): Don't use partitioning when
+	propagating branch condition calculated in vector-worker-neutered code.
+
+2018-04-12  Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_single): Simplify init of vector variable.
+	Add and use variable use_partitioning_p.
+
+2018-04-10  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* config/nvptx/nvptx.c (populate_offload_attrs): Ensure that
+	oa->vector_length is set.
+
+2018-04-05  Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_adjust_parallelism): Handle
+	nvptx_long_vectors_in_workers.
+	* config/nvptx/nvptx.opt (mlong-vector-in-workers): Add option.
+
+2018-04-05  Cesar Philippidis  <cesar@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* omp-offload.c (oacc_get_default_dim): New function.
+	* omp-offload.h (oacc_get_default_dim): Declare.
+	* config/nvptx/nvptx.c (NVPTX_GOACC_VL_WARP): Define.
+	(nvptx_goacc_needs_vl_warp): New function.
+	(nvptx_goacc_validate_dims): Take larger vector lengths into
+	account.
+	(nvptx_adjust_parallelism): New function.
+	(TARGET_GOACC_ADJUST_PARALLELISM): Define.
+	(populate_offload_attrs): Handle the situation where the default
+	runtime geometry has not been initialized yet for reductions.
+
+2018-04-05  Cesar Philippidis  <cesar@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx-protos.h (nvptx_output_red_partition): Declare.
+	* config/nvptx/nvptx.c (vector_red_size, vector_red_align,
+	vector_red_partition, vector_red_sym): New global variables.
+	(nvptx_option_override): Initialize vector_red_sym.
+	(nvptx_declare_function_name): Restore red_partition register.
+	(nvptx_file_end): Emit code to declare the vector reduction variables.
+	(nvptx_output_red_partition): New function.
+	(nvptx_expand_shared_addr): Add vector argument. Use it to handle
+	large vector reductions.
+	(enum nvptx_builtins): Add NVPTX_BUILTIN_VECTOR_ADDR.
+	(nvptx_init_builtins): Add VECTOR_ADDR.
+	(nvptx_expand_builtin): Update call to nvptx_expand_shared_addr.
+	Handle nvptx_expand_shared_addr.
+	(nvptx_get_shared_red_addr): Add vector argument and handle large
+	vectors.
+	(nvptx_goacc_reduction_setup): Add offload_attrs argument and handle
+	large vectors.
+	(nvptx_goacc_reduction_init): Likewise.
+	(nvptx_goacc_reduction_fini): Likewise.
+	(nvptx_goacc_reduction_teardown): Likewise.
+	(nvptx_goacc_reduction): Update calls to nvptx_goacc_reduction_{setup,
+	init,fini,teardown}.
+	(nvptx_init_axis_predicate): Initialize vector_red_partition.
+	(nvptx_set_current_function): Init vector_red_partition.
+	* config/nvptx/nvptx.md (UNSPECV_RED_PART): New unspecv.
+	(nvptx_red_partition): New insn.
+	* config/nvptx/nvptx.h (struct machine_function): Add red_partition.
+
+2018-04-05  Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_set_current_function): Initialize
+	oacc_broadcast_partition.
+
+2018-04-03  Cesar Philippidis  <cesar@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx.c (oacc_bcast_partition): Declare.
+	(nvptx_option_override): Init oacc_bcast_partition.
+	(nvptx_init_oacc_workers): New function.
+	(nvptx_declare_function_name): Call nvptx_init_oacc_workers.
+	(nvptx_needs_shared_bcast): New function.
+	(nvptx_find_par): Generalize to enable vectors to use shared-memory
+	to propagate state.
+	(nvptx_shared_propagate): Initialize vector bcast partition and
+	synchronization state.
+	(nvptx_single):  Generalize to enable vectors to use shared-memory
+	to propagate state.
+	(nvptx_process_pars): Likewise.
+	* config/nvptx/nvptx.h (struct machine_function): Add
+	bcast_partition and sync_bar members.
+
+2018-04-03  Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_gen_shared_bcast, shared_prop_gen)
+	(nvptx_goacc_expand_accel_var): Use MAX and ROUND_UP.
+	(nvptx_assemble_value, nvptx_output_skip): Use MIN.
+	(nvptx_shared_propagate, nvptx_single, nvptx_expand_shared_addr): Use
+	MAX.
+
+2018-03-28  Tom de Vries  <tom@codesourcery.com>
+
+	PR testsuite/85106
+	* doc/sourcebuild.texi (Commands for use in dg-final, Scan optimization
+	dump files): Add offload-tree.
+
+2018-03-28  Tom de Vries  <tom@codesourcery.com>
+
+	PR testsuite/85106
+	* doc/sourcebuild.texi (Commands for use in dg-final, Scan optimization
+	dump files): Add wpa-ipa.
+
+2018-03-27  Tom de Vries  <tom@codesourcery.com>
+
+	* omp-offload.c (oacc_loop_auto_partitions): Fix adjust_parallism usage.
+
+2018-03-26  Cesar Philippidis  <cesar@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* doc/tm.texi.in: Add placeholder for TARGET_GOACC_ADJUST_PARALLELISM.
+	* doc/tm.texi: Regenerate.
+	* omp-offload.c (oacc_loop_fixed_partitions): Use the adjust_parallelism
+	hook to modify this_mask.
+	(oacc_loop_auto_partitions): Use the adjust_parallelism hook to modify
+	this_mask and loop->mask.
+	(default_goacc_adjust_parallelism): New function.
+	* target.def (adjust_parallelism): New hook.
+	* targhooks.h (default_goacc_adjust_parallelism): Declare.
+
+2018-03-23  Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx.c (MACH_VECTOR_LENGTH, MACH_MAX_WORKERS): Define.
+	(nvptx_mach_max_workers, nvptx_mach_vector_length): New function.
+	(nvptx_reorg): Set function-specific axis_dim's.
+	* config/nvptx/nvptx.h (struct machine_function): Add axis_dims.
+
+2018-03-23  Tom de Vries  <tom@codesourcery.com>
+
+	* config/nvptx/nvptx.md (nvptx_barsync): Add and handle operand.
+	* config/nvptx/nvptx.c (nvptx_cta_sync): Change arguments to take in a
+	lock and thread count.  Update call to gen_nvptx_barsync.
+	(nvptx_single, nvptx_process_pars): Update calls to nvptx_cta_sync.
+
+2018-03-23  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_single): Always pass false to
+	nvptx_cta_sync.
+	(nvptx_process_pars): Likewise.
+
+2018-03-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* config/nvptx/nvptx.c (PTX_VECTOR_LENGTH, PTX_WORKER_LENGTH,
+	PTX_DEFAULT_RUNTIME_DIM): Move to the top of the file.
+	(PTX_WARP_SIZE): Define.
+	(PTX_CTA_SIZE): Define.
+	(worker_bcast_size): Rename to oacc_bcast_size.
+	(worker_bcast_align): Rename to oacc_bcast_align.
+	(worker_bcast_sym): Rename to oacc_bcast_sym.
+	(nvptx_option_override): Update usage of oacc_bcast_*.
+	(nvptx_gen_wcast): Rename to nvptx_gen_warp_bcast.
+	(struct wcast_data_t): Rename to broadcast_data_t.
+	(nvptx_gen_wcast): Rename to nvptx_gen_shared_bcast.  Update to use
+	oacc_bcast_* variables.
+	(struct offload_attrs): New.
+	(propagator_fn): Add bool argument.
+	(nvptx_propagate): New bool argument.  Pass bool argument to fn.
+	(vprop_gen): Rename to warp_prop_gen.  Update call to
+	nvptx_gen_warp_bcast.
+	(nvptx_vpropagate): Rename to nvptx_warp_propagate. Update call to
+	nvptx_propagate.
+	(wprop_gen): Rename to shared_prop_gen.  Update usage of oacc_bcast_*
+	variables and call to nvptx_gen_shared_bcast.
+	(nvptx_wpropagate): Rename to nvptx_shared_propagate.  Update usage
+	of oacc_bcast_* variables and call to nvptx_propagate.
+	(nvptx_wsync): Rename to nvptx_cta_sync.
+	(nvptx_single): Update usage of oacc_bcast_* vars and calls to
+	nvptx_gen_warp_bcast, nvptx_gen_shared_bcast and nvptx_cta_sync.
+	(nvptx_process_pars): Likewise.
+	(nvptx_neuter_pars): Whitespace.
+	(populate_offload_attrs): New function.
+	(nvptx_reorg): Use it to extract partitioning mask.
+	(write_worker_buffer): Rename to write_shared_buffer.
+	(nvptx_file_end): Update calls to write_shared_buffer.
+	(nvptx_expand_worker_addr): Rename to nvptx_expand_shared_addr.
+	(nvptx_expand_builtin): Update call to nvptx_expand_shared_addr.
+	(nvptx_simt_vf): Return PTX_WARP_SIZE instead of PTX_VECTOR_LENGTH.
+	(nvptx_get_worker_red_addr): Rename to nvptx_get_shared_red_addr.
+	(nvptx_goacc_reduction_setup): Update call to
+	nvptx_get_shared_red_addr.
+	(nvptx_goacc_reduction_fini): Likewise.
+	(nvptx_goacc_reduction_teardown): Likewise.
+
+2018-02-15  Tom de Vries  <tom@codesourcery.com>
+
+	* oacc-init.c (acc_init_state_lock, acc_init_state, acc_init_thread):
+	New variable.
+	(acc_init_1): Set acc_init_thread to pthread_self ().  Set
+	acc_init_state to initializing at the start, and to initialized at the
+	end.
+	(self_initializing_p): New function.
+	(acc_get_device_type): Return acc_device_none if called by thread that
+	is currently executing acc_init_1.
+
+2018-01-31  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (omp_add_variable): Allow certain OpenACC reduction
+	variables to remain firstprivate.
+
+2018-01-26  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (oacc_privatize_reduction): New function.
+	(omp_add_variable): Use it to determine if a reduction variable
+	needs to be privatized.
+
+2018-01-31  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (install_parm_decl): Don't extract identifiers from
+	artifical decls.
+
+2017-12-21  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* builtin-types.def (BF_FN_VOID_INT_INT_OMPFN_SIZE_PTR_PTR_PTR_VAR):
+	Define.
+	* config/nvptx/nvptx.c (nvptx_expand_cmp_swap): Handle PARM_DECLs.
+	* omp-builtins.def (BUILD_IN_GOACC_PARALLEL): Call
+	GOACC_parallel_keyed_v2.
+	* omp-expand.c (expand_omp_target): Update call to
+	BUILT_IN_GOACC_PARALLEL.
+	* omp-low.c (struct omp_context): Add parm_map member.
+	(lookup_parm): New function.
+	(build_receiver_ref): Lookup parm_map decls.
+	(install_parm_decl): New function.
+	(install_var_field): Install parm_map decl for OpenACC parallel region
+	data clauses.
+	(delete_omp_context): Clean parm_map.
+	(scan_sharing_clauses): Install subarray variable mapping into parm_map.
+	(create_omp_child_function): Defer creation of child function for
+	OpenACC parallel regions.
+	(scan_omp_target): Likewise.
+	(append_decl_arg): New function.
+	(lower_omp_target): Create an child offloaded function using one
+	parameter per data mapping for OpenACC parallel regions.
+	* tree-ssa-structalias.c (find_func_aliases_for_builtin_call):
+	Ignore OpenACC parallel regions.
+	(find_func_clobbers): Likewise.
+	(ipa_pta_execute): Likewise.
+
+2017-10-11  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (oacc_default_clause): Create implicit 0-length
+	array data clauses for pointers and reference types.
+
+2017-09-05  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* tree.h (OMP_CLAUSE_MAP_PRIVATE): Define macro.
+	* gimplify.c (enum gimplify_omp_var_data): Add GOVD_MAP_PRIVATE enum value.
+	(omp_add_variable): Add GOVD_MAP_PRIVATE to reduction clause flags if
+	not a gang-partitioned loop directive.
+	(gimplify_adjust_omp_clauses_1): Set OMP_CLAUSE_MAP_PRIVATE of new map
+	clause to 1 if GOVD_MAP_PRIVATE flag is present.
+	* omp-low.c (lower_oacc_reductions): Handle map clauses with
+	OMP_CLAUSE_MAP_PRIVATE set in same matter as firstprivate/private.
+	(lower_omp_target): Likewise. Add copy back code for map clauses with
+	OMP_CLAUSE_MAP_PRIVATE set.
+	* tree.h (OMP_CLAUSE_MAP_PRIVATE): Define macro.
+
+2017-08-11  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* config/nvptx/nvptx.c (PTX_GANG_DEFAULT): Delete define.
+	(PTX_DEFAULT_RUNTIME_DIM): New define.
+	(nvptx_goacc_validate_dims): Use it to allow the runtime to
+	dynamically allocate num_workers and num_gangs.
+	(nvptx_dim_limit): Don't impose an arbritary num_workers.
+
+2017-08-01  Cesar Philippidis  <cesar@codesourcery.com>
+	    Thomas Schwinge  <thomas@codesourcery.com>
+
+	* omp-expand.c (expand_omp_target): Don't expect OMP_CLAUSE_WAIT_EXPR
+	to be a constant expression.
+
+2017-07-25  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* omp-expand.c (expand_omp_target): Add middle-end support for
+	handling OMP_CLAUSE_WAIT clause with a GOMP_ASYNC_NOVAL(-1) as the
+	argument.
+
+2017-05-17  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* omp-expand.c (expand_omp_target): Revert GOACC_enter_exit_data
+	ABI change.
+	* gimplify.c (gimplify_omp_target_update): Handle
+	OMP_CLAUSE_FINALIZE for OACC_EXIT_DATA.
+
+	* tree-nested.c (convert_nonlocal_omp_clauses)
+	(convert_local_omp_clauses): Handle "OMP_CLAUSE_FINALIZE".
+	* tree-pretty-print.c (dump_omp_clause): Handle
+	"OMP_CLAUSE_FINALIZE".
+
+	* gimplify.c (gimplify_oacc_declare_1) <GOMP_MAP_ALLOC>: Use
+	"GOMP_MAP_RELEASE".
+
+2017-05-16  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* tree-core.h (enum omp_clause_code): Add OMP_CLAUSE_FINALIZE.
+	* tree.c (omp_clause_num_ops): Add entry for OMP_CLAUSE_FINALIZE.
+	(omp_clause_code_name): Add "finalize" entry.
+	* omp-low.c (scan_sharing_clauses): Handle OMP_CLAUSE_FINALIZE.
+	* omp-expand.c (expand_omp_target): Add finalize argument for
+	GOACC_enter_exit_data call.
+	* gimplify.c (gimplify_scan_omp_clauses): Handle OMP_CLAUSE_FINALIZE.
+	(gimplify_adjust_omp_clauses): Likewise.
+
+2017-05-15  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* doc/invoke.texi: Update for OpenACC 2.5.
+
+2017-05-12  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_goacc_reduction_init): Don't update
+	LHS if it doesn't exist.
+
+2017-05-11  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (gomp_needs_data_present): Ensure that the
+	correct decl is matched when scanning clauses in the enclosing
+	acc data constructs.
+
+2017-05-09  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (gimplify_omp_target_update): Relax OpenACC update data
+	mappings to GOMP_MAP_{TO,FROM} when the user specifies if_present.
+
+2017-05-05  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* tree-nested.c (convert_nonlocal_omp_clauses)
+	(convert_local_omp_clauses): Handle OMP_CLAUSE_IF_PRESENT.
+
+2017-05-04  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (gimplify_scan_omp_clauses): Handle OMP_CLAUSE_IF_PRESENT.
+	(gimplify_adjust_omp_clauses): Likewise.
+	* omp-low.c (scan_sharing_clauses): Likewise, but just ignore it for
+	now.
+	* tree-pretty-print.c (dump_omp_clause): Likewise.
+	* tree.c (omp_clause_num_ops): Add an entry for OMP_CLAUSE_IF_PRESENT.
+	(omp_clause_code_name): Likewise.
+	* tree-core.h (enum omp_clause_code): Likewise.
+
+2017-05-03  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (lower_oacc_head_mark): Don't mark OpenACC auto
+	loops as independent inside acc parallel regions.
+
+2017-05-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-general.h (enum oacc_loop_flags): Add OLF_REDUCTION enum.
+	* omp-low.c (lower_oacc_head_mark): Use it to mark OpenACC
+	reductions.
+	* omp-offload.c (oacc_loop_auto_partitions): Don't assign gang
+	level parallelism to orphan reductions.
+
+2017-05-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-general.c (oacc_verify_routine_clauses): Emit a warning when
+	the user doesn't supply a gang, worker, vector or seq clause to an
+	OpenACC routine construct.
+
+2017-04-24  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (lower_omp_target): Don't privatize firstprivate VLAs.
+
+2017-04-19  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (convert_to_firstprivate_int): Handle pointer types.
+	(convert_from_firstprivate_int): Likewise.  Create local storage for
+	the values being pointed too.  Add new argument orig_type.
+	(lower_omp_target): Allow pointer types with GOMP_MAP_FIRSTPRIVATE_INT.
+
+2017-04-13  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* gimplify.c (gimplify_oacc_declare_1): Remove GOMP_MAP_FORCE_* cases.
+
+2017-04-05  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (scan_sharing_clauses): Update handling of OpenACC declare
+	create, copyin and deviceptr to have local lifetimes.
+	(lower_omp_target): Handle GOMP_MAP_DECLARE_{ALLOCATE,DEALLOCATE}.
+	* tree-pretty-print.c (dump_omp_clause): Likewise.
+
+2017-02-27  Chung-Lin Tang  <cltang@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+
+	* config/nvptx/nvptx.c (gangprivate_shared_size): New global variable.
+	(gangprivate_shared_align): Likewise.
+	(gangprivate_shared_sym): Likewise.
+	(gangprivate_shared_hmap): Likewise.
+	(nvptx_option_override): Initialize gangprivate_shared_sym.
+	(nvptx_file_end): Output gangprivate_shared_sym.
+	(nvptx_goacc_expand_accel_var): New function.
+	(nvptx_set_current_function): New function.
+	(TARGET_SET_CURRENT_FUNCTION): Define hook.
+	(TARGET_GOACC_EXPAND_ACCEL): Likewise.
+	* doc/tm.texi (TARGET_GOACC_EXPAND_ACCEL_VAR): Document new hook.
+	* doc/tm.texi.in (TARGET_GOACC_EXPAND_ACCEL_VAR): Likewise.
+	* expr.c (expand_expr_real_1): Remap decls marked with the
+	"oacc gangprivate" atttribute.
+	* omp-low.c (scan_sharing_clauses): Strip out any "oacc gangprivate"
+	attributes from acc loop private clauses.
+	* target.def (expand_accel_var): New hook.
+
+2017-02-23  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-offload.c (inform_oacc_loop): New function.
+	(execute_oacc_device_lower): Use it to display loop parallelism.
+
+2017-02-08  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* config/nvptx/nvptx.c (nvptx_adjust_reduction_type): New function.
+	(nvptx_goacc_reduction_setup): Use it to adjust the type of ref_to_res.
+	(nvptx_goacc_reduction_fini): Likewise.
+	(nvptx_goacc_reduction_teardown): Likewise.
+	* omp-low.c (lower_oacc_reductions): Handle reduction decls mapped
+	with GOMP_MAP_FIRSTPRIVATE_POINTER.
+	* omp-offload.c (default_goacc_reduction): Retype ref_to_res as
+	necessary.
+
+2017-01-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (demote_firstprivate_pointer): New function.
+	(gimplify_scan_omp_clauses): Enable target_map_pointers_as_0len_arrays
+	and target_map_scalars_firstprivate in OpenACC and gfortran.
+	(gimplify_adjust_omp_clauses): Demote FIRSTPRIVATE_POINTERS for OpenACC
+	retuction variables.
+	* omp-low.c (lower_omp_target): Adjust receiver reference of decls for
+	fortran dummy arguments.
+
+2017-01-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (maybe_lookup_field_in_outer_ctx): New function.
+	(convert_to_firstprivate_int): New function.
+	(convert_from_firstprivate_int): New function.
+	(lower_omp_target): Enable GOMP_MAP_FIRSTPRIVATE_INT in OpenACC.
+
+2017-01-10  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	PR other/76739
+	* gimplify.c (gimplify_scan_omp_clauses): For dynamic array map kinds,
+	make sure bias in each dimension are put into firstprivate variables.
+	* tree-pretty-print.c (dump_omp_clauses): Add cases for printing
+	GOMP_MAP_DYNAMIC_ARRAY map kinds.
+	* omp-low.c (struct omp_context):
+	Add 'hash_map<tree_operand_hash, tree> *dynamic_arrays' field, also
+	added include of "tree-hash-traits.h".
+	(append_field_to_record_type): New function.
+	(create_dynamic_array_descr_type): Likewise.
+	(create_dynamic_array_descr_init_code): Likewise.
+	(new_omp_context): Add initialize of dynamic_arrays field.
+	(delete_omp_context): Add delete of dynamic_arrays field.
+	(scan_sharing_clauses): For dynamic array map kinds, check for
+	supported dimension structure, and install dynamic array variable into
+	current omp_context.
+	(lower_omp_target): Add handling for dynamic array map kinds.
+	(dynamic_array_lookup): New function.
+	(dynamic_array_reference_start): Likewise.
+	(scan_for_op): Likewise.
+	(scan_for_reference): Likewise.
+	(da_create_bias): Likewise.
+	(da_dimension_peel): Likewise.
+	(lower_omp_1): Add case to look for start of dynamic array reference,
+	and handle bias adjustments for the code sequence.
+
+2016-11-10  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gimplify.c (gimplify_scan_omp_clauses): Update handling of ACC
+	UPDATE variables.
+
+2016-10-19  Thomas Schwinge  <thomas@codesourcery.com>
+
+	PR other/70945
+	* targhooks.c (default_libc_has_function): Update comment.
+	* target.def (libc_has_function): Likewise.
+	* doc/tm.texi: Regenerate.
+	* coretypes.h (enum function_class): Add
+	function_glibc_finite_math.
+	* config/darwin.c (darwin_libc_has_function): Handle it.
+	* lto-streamer.h (enum lto_section_type): Rename
+	LTO_section_offload_table to LTO_section_offload_data.  Adjust all
+	users.
+	* lto-cgraph.c (void output_offload_data): New function, split out
+	of output_offload_tables.  Adjust all users.  Stream the target's
+	function_glibc_finite_math property.
+	(input_offload_data): New function, split out of
+	input_offload_tables.  Adjust all users.  Handle mismatch between
+	the target's and the offloading target's
+	function_glibc_finite_math property.
+
+2015-12-28  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* omp-offload.c (maybe_discard_oacc_function): New simplification
+	broken out of ...
+	(execute_oacc_device_lower): ... here.  Call it.
+
+2015-11-03  Tom de Vries  <tom@codesourcery.com>
+
+	* common.opt (foffload-alias): New option.
+	* flag-types.h (enum offload_alias): New enum.
+	* omp-low.c (install_var_field): Handle flag_offload_alias.
+	* doc/invoke.texi (@item Code Generation Options): Add -foffload-alias.
+	(@item -foffload-alias): New item.
+
+2015-10-16  Tom de Vries  <tom@codesourcery.com>
+
+	* tree-pretty-print.c (dump_omp_clause): Fix infinite recursion in
+	default label.
+
+2015-09-23  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* omp-low.c (lower_omp_for): Remap any variables present in
+	OMP_CLAUSE_GANG, OMP_CLAUSE_WORKER, OMP_CLAUSE_VECTOR because they
+	will be used later by expand_omp_for.
+
+2015-08-20  Thomas Schwinge  <thomas@codesourcery.com>
+	    Joseph Myers  <joseph@codesourcery.com>
+
+	* doc/invoke.texi (-ffixed-@var{reg}): Document conflict with
+	Fortran options.
+	* gcc.c (add_omp_infile_spec_func, spec_lang_mask_accept): New.
+	(driver_self_specs): Add spec to use %:add-omp-infile().
+	(static_spec_functions): Add add-omp-infile.
+	(struct switchstr): Add lang_mask field.  Expand comment.
+	(struct infile): Add lang_mask field.
+	(add_infile, save_switch, do_spec): Add lang_mask argument.
+	(driver_unknown_option_callback, driver_wrong_lang_callback)
+	(driver_handle_option, process_command, do_self_spec)
+	(driver::do_spec_on_infiles, driver::maybe_run_linker): All
+	callers changed.
+	(give_switch): Check languages of switch against
+	spec_lang_mask_accept.
+	(driver::maybe_putenv_OFFLOAD_TARGETS): Don't free
+	offload_targets.
+	* gcc.h (do_spec): Update prototype.
+
+2015-07-22  Tom de Vries  <tom@codesourcery.com>
+
+	* omp-expand.c (expand_omp_for): Set loop->safelen to INT_MAX if
+	marked_independent.
+
+2015-07-14  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* cfgloop.h (struct loop): Add 'bool marked_independent' field.
+	* omp-expand.c (struct omp_region): Add 'int kind' and
+	'bool independent' fields.
+	(expand_omp_for): Set 'marked_independent' field for loop
+	corresponding to region.
+	(find_omp_for_region_data): New function.
+	(build_omp_regions_1): Set kind field.  Call
+	find_omp_for_region_data for GIMPLE_OMP_FOR statements.
+
+2015-07-09  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* tree-ssa-tail-merge.c (same_succ::equal): Add EQ check for
+	the gimple statements.
+
+2015-09-29  Tom de Vries  <tom@codesourcery.com>
+
+	* omp-expand.c (expand_omp_for_generic): Only set address taken
+	for istart0 and end0 unless necessary.
+
+2015-06-16  Chung-Lin Tang  <cltang@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* omp-expand.c (struct omp_region): Add inside_kernels_p field.
+	(expand_omp_for_generic): Adjust to generate a 'sequential' loop
+	when GOMP builtin arguments are BUILT_IN_NONE.
+	(expand_omp_for): Use expand_omp_for_generic to generate a
+	non-parallelized loop for OMP_FORs inside OpenACC kernels regions.
+	(expand_omp): Mark inside_kernels_p field true for regions
+	nested inside OpenACC kernels constructs.
+
+2015-05-13  Bernd Schmidt  <bernds@codesourcery.com>
+
+	* config/nvptx/nvptx-opts.h: New file.
+	* config/nvptx/nvptx.c (nvptx_file_start): Print the correct .target.
+	* config/nvptx/nvptx.h: Include "nvptx-opts.h".
+	(ASM_SPEC): Define.
+	(TARGET_SM35): New macro.
+	* config/nvptx/nvptx.md (atomic_fetch_<logic><mode>): Enable with the
+	correct predicate.
+	* config/nvptx/nvptx.opt (ptx_isa, sm_30, sm_35): New enum and its
+	values.
+	(misa=): New option.
+
+2015-05-13  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* except.c (finish_eh_generation): Don't finalize exeception
+	handlers for functions representing OpenACC offloaded regions.
+
+2015-05-13  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* omp-low.c (lower_omp_regimplify_p): Adjust re-gimplification
+	case.
+
+2015-05-13  Bernd Schmidt  <bernds@codesourcery.com>
+
+	* common.opt (Xoffload): New option.
+	* config/nvptx/mkoffload.c (main): Add COLLECT_MKOFFLOAD_OPTIONS.
+	* doc/invoke.texi (-Xoffload): Document.
+	* gcc.c (mkoffload_options): New static variable.
+	(display_help): Mention -Xoffload
+	(driver_handle_option): Handle it.
+	(add_mkoffload_option): New static function.
+	(set_collect_gcc_options): If offloading, set
+	COLLECT_MKOFFLOAD_OPTIONS.
+
+Copyright (C) 2015-2018 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

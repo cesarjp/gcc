@@ -386,6 +386,60 @@ OACC_2.0.1 {
 	acc_pcreate;
 } OACC_2.0;
 
+OACC_2.5 {
+  global:
+	acc_copyin_async;
+	acc_copyin_async_32_h_;
+	acc_copyin_async_64_h_;
+	acc_copyin_async_array_h_;
+	acc_copyout_async;
+	acc_copyout_async_32_h_;
+	acc_copyout_async_64_h_;
+	acc_copyout_async_array_h_;
+	acc_copyout_finalize;
+	acc_copyout_finalize_32_h_;
+	acc_copyout_finalize_64_h_;
+	acc_copyout_finalize_array_h_;
+	acc_copyout_finalize_async;
+	acc_copyout_finalize_async_32_h_;
+	acc_copyout_finalize_async_64_h_;
+	acc_copyout_finalize_async_array_h_;
+	acc_create_async;
+	acc_create_async_32_h_;
+	acc_create_async_64_h_;
+	acc_create_async_array_h_;
+	acc_delete_async;
+	acc_delete_async_32_h_;
+	acc_delete_async_64_h_;
+	acc_delete_async_array_h_;
+	acc_delete_finalize;
+	acc_delete_finalize_32_h_;
+	acc_delete_finalize_64_h_;
+	acc_delete_finalize_array_h_;
+	acc_delete_finalize_async;
+	acc_delete_finalize_async_32_h_;
+	acc_delete_finalize_async_64_h_;
+	acc_delete_finalize_async_array_h_;
+	acc_get_default_async;
+	acc_get_default_async_h_;
+	acc_memcpy_from_device_async;
+	acc_memcpy_to_device_async;
+	acc_prof_lookup;
+	acc_prof_register;
+	acc_prof_unregister;
+	acc_register_library;
+	acc_set_default_async;
+	acc_set_default_async_h_;
+	acc_update_device_async;
+	acc_update_device_async_32_h_;
+	acc_update_device_async_64_h_;
+	acc_update_device_async_array_h_;
+	acc_update_self_async;
+	acc_update_self_async_32_h_;
+	acc_update_self_async_64_h_;
+	acc_update_self_async_array_h_;
+} OACC_2.0.1;
+
 GOACC_2.0 {
   global:
 	GOACC_data_end;
@@ -404,6 +458,13 @@ GOACC_2.0.1 {
 	GOACC_parallel_keyed;
 } GOACC_2.0;
 
+GOACC_2.0.GOMP_4_BRANCH {
+  global:
+	GOMP_set_offload_targets;
+	GOACC_parallel_keyed_v2;
+} GOACC_2.0.1;
+
+
 GOMP_PLUGIN_1.0 {
   global:
 	GOMP_PLUGIN_malloc;
@@ -420,3 +481,15 @@ GOMP_PLUGIN_1.1 {
   global:
 	GOMP_PLUGIN_target_task_completion;
 } GOMP_PLUGIN_1.0;
+
+GOMP_PLUGIN_1.2 {
+  global:
+	GOMP_PLUGIN_acc_thread_default_async;
+} GOMP_PLUGIN_1.1;
+
+# TODO
+GOMP_PLUGIN_1.3 {
+  global:
+	GOMP_PLUGIN_goacc_profiling_dispatch;
+	GOMP_PLUGIN_goacc_thread;
+} GOMP_PLUGIN_1.2;

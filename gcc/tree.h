@@ -1557,6 +1557,9 @@ extern tree maybe_wrap_with_location (tree, location_t);
 #define OMP_CLAUSE_VECTOR_LENGTH_EXPR(NODE) \
   OMP_CLAUSE_OPERAND ( \
     OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_VECTOR_LENGTH), 0)
+#define OMP_CLAUSE_BIND_NAME(NODE) \
+  OMP_CLAUSE_OPERAND ( \
+    OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_BIND), 0)
 
 #define OMP_CLAUSE_DEPEND_KIND(NODE) \
   (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_DEPEND)->omp_clause.subcode.depend_kind)
@@ -1582,6 +1585,9 @@ extern tree maybe_wrap_with_location (tree, location_t);
 /* Nonzero if this map clause is for an ACC parallel reduction variable.  */
 #define OMP_CLAUSE_MAP_IN_REDUCTION(NODE) \
   TREE_PRIVATE (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_MAP))
+/* Nozero if this map is loaded to private storage inside offloaded region.  */
+#define OMP_CLAUSE_MAP_PRIVATE(NODE) \
+  TREE_NOTHROW (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_MAP))
 
 #define OMP_CLAUSE_PROC_BIND_KIND(NODE) \
   (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_PROC_BIND)->omp_clause.subcode.proc_bind_kind)
@@ -1697,6 +1703,11 @@ extern tree maybe_wrap_with_location (tree, location_t);
   OMP_CLAUSE_OPERAND (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE__GRIDDIM_), 0)
 #define OMP_CLAUSE__GRIDDIM__GROUP(NODE) \
   OMP_CLAUSE_OPERAND (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE__GRIDDIM_), 1)
+
+#define OMP_CLAUSE_DEVICE_TYPE_DEVICES(NODE) \
+  OMP_CLAUSE_OPERAND (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_DEVICE_TYPE), 0)
+#define OMP_CLAUSE_DEVICE_TYPE_CLAUSES(NODE) \
+  OMP_CLAUSE_OPERAND (OMP_CLAUSE_SUBCODE_CHECK (NODE, OMP_CLAUSE_DEVICE_TYPE), 1)
 
 /* SSA_NAME accessors.  */
 

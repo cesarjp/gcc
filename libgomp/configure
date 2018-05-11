@@ -649,6 +649,10 @@ PLUGIN_NVPTX
 CUDA_DRIVER_LIB
 CUDA_DRIVER_INCLUDE
 offload_targets
+USE_LIBFFI_FALSE
+USE_LIBFFI_TRUE
+LIBFFIINCS
+LIBFFI
 libtool_VERSION
 ac_ct_FC
 FCFLAGS
@@ -2655,7 +2659,6 @@ else
   GENINSRC_TRUE='#'
   GENINSRC_FALSE=
 fi
-
 
 
 # -------
@@ -15139,6 +15142,28 @@ $as_echo "#define LIBGOMP_OFFLOADED_ONLY 1" >>confdefs.h
 
 fi
 
+# Prepare libffi when necessary.
+
+LIBFFI=
+LIBFFIINCS=
+if test -d ../libffi; then
+
+$as_echo "#define USE_LIBFFI 1" >>confdefs.h
+
+   LIBFFI=../libffi/libffi_convenience.la
+   LIBFFIINCS='-I$(top_srcdir)/../libffi/include -I../libffi/include'
+fi
+
+
+ if test -d ../libffi; then
+  USE_LIBFFI_TRUE=
+  USE_LIBFFI_FALSE='#'
+else
+  USE_LIBFFI_TRUE='#'
+  USE_LIBFFI_FALSE=
+fi
+
+
 # Plugins for offload execution, configure.ac fragment.  -*- mode: autoconf -*-
 #
 # Copyright (C) 2014-2018 Free Software Foundation, Inc.
@@ -15392,13 +15417,10 @@ if test x"$enable_offload_targets" != x; then
   for tgt in `echo $enable_offload_targets | sed -e 's#,# #g'`; do
     tgt_dir=`echo $tgt | grep '=' | sed 's/.*=//'`
     tgt=`echo $tgt | sed 's/=.*//'`
-    tgt_name=
     case $tgt in
       *-intelmic-* | *-intelmicemul-*)
-	tgt_name=intelmic
 	;;
       nvptx*)
-        tgt_name=nvptx
 	PLUGIN_NVPTX=$tgt
 	PLUGIN_NVPTX_CPPFLAGS=$CUDA_DRIVER_CPPFLAGS
 	PLUGIN_NVPTX_LDFLAGS=$CUDA_DRIVER_LDFLAGS
@@ -15444,15 +15466,15 @@ rm -f core conftest.err conftest.$ac_objext \
 	  ;;
 	esac
 	;;
-      hsa*)
+      hsa)
 	case "${target}" in
 	  x86_64-*-*)
 	    case " ${CC} ${CFLAGS} " in
 	      *" -m32 "*)
 	        PLUGIN_HSA=0
+		tgt=
 		;;
 	      *)
-	        tgt_name=hsa
 	        PLUGIN_HSA=$tgt
 	        PLUGIN_HSA_CPPFLAGS=$HSA_RUNTIME_CPPFLAGS
 	        PLUGIN_HSA_LDFLAGS="$HSA_RUNTIME_LDFLAGS"
@@ -15470,7 +15492,7 @@ rm -f core conftest.err conftest.$ac_objext \
 	        LDFLAGS=$PLUGIN_HSA_save_LDFLAGS
 	        LIBS=$PLUGIN_HSA_save_LIBS
 	        case $PLUGIN_HSA in
-	          hsa*)
+		  hsa)
 	            HSA_PLUGIN=0
 	            as_fn_error "HSA run-time package required for HSA support" "$LINENO" 5
 	            ;;
@@ -15480,6 +15502,7 @@ rm -f core conftest.err conftest.$ac_objext \
     	    ;;
 	  *-*-*)
 	    PLUGIN_HSA=0
+	    tgt=
             ;;
         esac
         ;;
@@ -15487,16 +15510,16 @@ rm -f core conftest.err conftest.$ac_objext \
 	as_fn_error "unknown offload target specified" "$LINENO" 5
 	;;
     esac
-    if test x"$tgt_name" = x; then
+    if test x"$tgt" = x; then
       # Don't configure libgomp for this offloading target if we don't build
       # the corresponding plugin.
       continue
     elif test x"$offload_targets" = x; then
-      offload_targets=$tgt_name
+      offload_targets=$tgt
     else
-      offload_targets=$offload_targets,$tgt_name
+      offload_targets=$offload_targets:$tgt
     fi
-    if test "$tgt_name" = hsa; then
+    if test "$tgt" = hsa; then
       # Offloading compilation is all handled by the target compiler.
       :
     elif test x"$tgt_dir" != x; then
@@ -16258,7 +16281,7 @@ with_gnu_ld=$lt_cv_prog_gnu_ld
   fi
 
   ldver=`$LD --version 2>/dev/null |
-         sed -e 's/GNU gold /GNU ld /;s/GNU ld version /GNU ld /;s/GNU ld ([^)]*) /GNU ld /;s/GNU ld \([0-9.][0-9.]*\).*/\1/; q'`
+         sed -e 's/GNU gold /GNU ld /;s/GNU ld .* \(.*\)/\1/; q'`
 
   libgomp_gnu_ld_version=`echo $ldver | \
          $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
@@ -17047,6 +17070,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${MAINTAINER_MODE_TRUE}" && test -z "${MAINTAINER_MODE_FALSE}"; then
   as_fn_error "conditional \"MAINTAINER_MODE\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${USE_LIBFFI_TRUE}" && test -z "${USE_LIBFFI_FALSE}"; then
+  as_fn_error "conditional \"USE_LIBFFI\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${PLUGIN_NVPTX_TRUE}" && test -z "${PLUGIN_NVPTX_FALSE}"; then

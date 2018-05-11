@@ -5498,7 +5498,7 @@ macro, a reasonable default is used.
 @end defmac
 
 @deftypefn {Target Hook} bool TARGET_LIBC_HAS_FUNCTION (enum function_class @var{fn_class})
-This hook determines whether a function from a class of functions
+This hook determines properties, such as whether a class of functions
 @var{fn_class} is present at the runtime.
 @end deftypefn
 
@@ -6027,6 +6027,12 @@ This hook should return the maximum size of a particular dimension,
 or zero if unbounded.
 @end deftypefn
 
+@deftypefn {Target Hook} unsigned TARGET_GOACC_ADJUST_PARALLELISM (unsigned @var{this_mask}, unsigned @var{outer_mask})
+This hook allows the accelerator compiler to remove any unused
+parallelism exposed in the current loop @var{THIS_MASK}, and the
+enclosing loop @var{OUTER_MASK}.  It returns an adjusted mask.
+@end deftypefn
+
 @deftypefn {Target Hook} bool TARGET_GOACC_FORK_JOIN (gcall *@var{call}, const int *@var{dims}, bool @var{is_fork})
 This hook can be used to convert IFN_GOACC_FORK and IFN_GOACC_JOIN
 function calls to target-specific gimple, or indicate whether they
@@ -6044,6 +6050,14 @@ instructions.  @var{call} is gimple statement containing the call to
 the function.  This hook removes statement @var{call} after the
 expanded sequence has been inserted.  This hook is also responsible
 for allocating any storage for reductions when necessary.
+@end deftypefn
+
+@deftypefn {Target Hook} rtx TARGET_GOACC_EXPAND_ACCEL_VAR (tree @var{var})
+This hook, if defined, is used by accelerator target back-ends to expand
+specially handled kinds of VAR_DECL expressions.  A particular use is to
+place variables with specific attributes inside special accelarator
+memories.  A return value of NULL indicates that the target does not
+handle this VAR_DECL, and normal RTL expanding is resumed.
 @end deftypefn
 
 @node Anchored Addresses

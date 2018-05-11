@@ -511,6 +511,7 @@ Objective-C and Objective-C++ Dialects}.
 -static-libmpx  -static-libmpxwrappers @gol
 -shared  -shared-libgcc  -symbolic @gol
 -T @var{script}  -Wl,@var{option}  -Xlinker @var{option} @gol
+-Xoffload @var{option} @gol
 -u @var{symbol}  -z @var{keyword}}
 
 @item Directory Options
@@ -532,6 +533,7 @@ Objective-C and Objective-C++ Dialects}.
 -fasynchronous-unwind-tables @gol
 -fno-gnu-unique @gol
 -finhibit-size-directive  -fno-common  -fno-ident @gol
+-foffload-alias=@r{[}none@r{|}pointer@r{|}all@r{]}  -foffload-force @gol
 -fpcc-struct-return  -fpic  -fPIC  -fpie  -fPIE  -fno-plt @gol
 -fno-jump-tables @gol
 -frecord-gcc-switches @gol
@@ -2136,17 +2138,23 @@ freestanding and hosted environments.
 Enable handling of OpenACC directives @code{#pragma acc} in C/C++ and
 @code{!$acc} in Fortran.  When @option{-fopenacc} is specified, the
 compiler generates accelerated code according to the OpenACC Application
-Programming Interface v2.0 @w{@uref{https://www.openacc.org}}.  This option
+Programming Interface v2.5 @w{@uref{https://www.openacc.org}}.  This option
 implies @option{-pthread}, and thus is only supported on targets that
 have support for @option{-pthread}.
+
+See @uref{https://gcc.gnu.org/wiki/OpenACC} for more information.
 
 @item -fopenacc-dim=@var{geom}
 @opindex fopenacc-dim
 @cindex OpenACC accelerator programming
 Specify default compute dimensions for parallel offload regions that do
 not explicitly specify.  The @var{geom} value is a triple of
-':'-separated sizes, in order 'gang', 'worker' and, 'vector'.  A size
-can be omitted, to use a target-specific default value.
+':'-separated sizes, in order 'gang', 'worker' and, 'vector'.  If a size
+is to be deferred until execution '-' can be used, alternatively a size
+can be omitted to use a target-specific default value.  When deferring
+to runtime, the environment variable @var{GOMP_OPENACC_DIM} can be set.
+It has the same format as the option value, except that '-' is not
+permitted.
 
 @item -fopenmp
 @opindex fopenmp
@@ -12548,6 +12556,11 @@ For example, @option{-Wl,-Map,output.map} passes @option{-Map output.map} to the
 linker.  When using the GNU linker, you can also get the same effect with
 @option{-Wl,-Map=output.map}.
 
+@item -Xoffload @var{option}
+@opindex Xoffload
+Pass @var{option} as an option to the mkoffload program during the linking
+phase.  This program is used to generate images for offloaded code.
+
 @item -u @var{symbol}
 @opindex u
 Pretend the symbol @var{symbol} is undefined, to force linking of
@@ -12790,6 +12803,15 @@ pointer overflow is invalid.
 This option implies @option{-fno-wrapv} @option{-fno-wrapv-pointer} and when
 negated implies @option{-fwrapv} @option{-fwrapv-pointer}.
 
+@item -foffload-force
+@opindex -foffload-force
+The option @option{-foffload-force} forces offloading if the compiler
+wanted to avoid it.  For example, when there isn't sufficient
+parallelism in certain offloading constructs, the compiler may come to
+the conclusion that offloading incurs too much overhead (for data
+transfers, for example), and unless overridden with this flag, it then
+suggests to the runtime (libgomp) to avoid offloading.
+
 @item -fexceptions
 @opindex fexceptions
 Enable exception handling.  Generates extra code needed to propagate
@@ -12945,6 +12967,16 @@ would cause trouble if the function is split in the middle, and the
 two halves are placed at locations far apart in memory.  This option is
 used when compiling @file{crtstuff.c}; you should not need to use it
 for anything else.
+
+@item -foffload-alias=@r{[}none@r{|}pointer@r{|}all@r{]}
+@opindex -foffload-alias
+The option @option{-foffload-alias=none} instructs the compiler to assume that
+objects references and pointer dereferences in an offload region do not alias.
+The option @option{-foffload-alias=pointer} instruct the compiler to assume that
+objects references in an offload region do not alias.  The option
+@option{-foffload-alias=all} instructs the compiler to make no assumptions about
+aliasing in offload regions.  The default value is
+@option{-foffload-alias=none}.
 
 @item -fverbose-asm
 @opindex fverbose-asm
@@ -13140,6 +13172,10 @@ macro in the machine description macro file.
 
 This flag does not have a negative form, because it specifies a
 three-way choice.
+
+Note that this flag may conflict with the @option{-ffixed-form} as
+well as @option{-ffixed-line-length-none} and
+@option{-ffixed-line-length-<n>} options of the Fortran front end.
 
 @item -fcall-used-@var{reg}
 @opindex fcall-used

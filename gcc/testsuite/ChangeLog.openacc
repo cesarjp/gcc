@@ -1,0 +1,539 @@
+2018-04-10  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gcc.target/nvptx/oacc-autopar.c: New test.
+
+2018-03-28  Tom de Vries  <tom@codesourcery.com>
+
+	PR testsuite/85106
+	* lib/scanoffloadtree.exp: New file.
+
+2018-03-28  Tom de Vries  <tom@codesourcery.com>
+
+	PR testsuite/85106
+	* gcc.dg/ipa/ipa-icf-38.c: New test.
+	* gcc.dg/ipa/ipa-icf-38a.c: New test.
+	* lib/scandump.exp (dump-base): New proc.
+	(scan-dump, scan-dump-times, scan-dump-not, scan-dump-dem)
+	(scan-dump-dem-not): Add and handle parameter for suffix of the dump
+	base.
+	* lib/scanipa.exp: Add "" argument to scan-dump calls.
+	* lib/scanrtl.exp: Same.
+	* lib/scantree.exp: Same.
+	* lib/scanwpaipa.exp: New file.
+	* lib/gcc-dg.exp: Include scanwpaipa.exp.
+
+2018-03-27  Cesar Philippidis  <cesar@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* testsuite/libgomp.oacc-c-c++-common/vred2d-128.c: New test.
+	* testsuite/libgomp.oacc-fortran/gemm.f90: New test.
+
+2018-01-31  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/reduction-8.c: New test.
+
+2018-01-31  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/large_array.c: New test.
+
+2017-10-11  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/derived-types.f90: Adjust test case.
+
+2017-07-25  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* c-c++-common/goacc/dtype-1.c: Adjust testcase.
+	* gfortran.dg/goacc/dtype-1.f95: Likewise.
+
+2017-05-17  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-c++-common/goacc/finalize-1.c: New file.
+	* gfortran.dg/goacc/finalize-1.f: Likewise.
+
+	* c-c++-common/goacc/data-2.c: Update.
+	* g++.dg/goacc/template.C: Likewise.
+	* gcc.dg/goacc/nested-function-1.c: Likewise.
+	* gfortran.dg/goacc/enter-exit-data.f95: Likewise.
+	* gfortran.dg/goacc/nested-function-1.f90: Likewise.
+
+2017-05-15  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-c++-common/cpp/openacc-define-3.c: Update.
+	* gfortran.dg/openacc-define-3.f90: Likewise.
+
+2017-05-09  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/update-if_present-1.c: Update test case.
+
+2017-05-05  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* g++.dg/goacc/update-1.C: Update.
+	* gcc.dg/goacc/nested-function-1.c: Likewise.
+	* gfortran.dg/goacc/nested-function-1.f90: Likewise.
+
+2017-05-04  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/update-if_present-1.c: New test.
+	* c-c++-common/goacc/update-if_present-2.c: New test.
+	* g++.dg/goacc/update-1.C: New test.
+	* gfortran.dg/goacc/update-if_present-1.f90: New test.
+	* gfortran.dg/goacc/update-if_present-2.f90: New test.
+
+2017-05-03  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/loop-auto-1.c: Adjust test case to conform to
+	the new behavior of the auto clause in OpenACC 2.5.
+	* c-c++-common/goacc/loop-auto-2.c: Likewise.
+	* gcc.dg/goacc/loop-processing-1.c: Likewise.
+	* c-c++-common/goacc/loop-auto-3.c: New test.
+	* gfortran.dg/goacc/loop-auto-1.f90: New test.
+
+2017-05-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/orphan-reductions-1.c: New test.
+	* c-c++-common/goacc/orphan-reductions-2.c: New test.
+	* c-c++-common/goacc/routine-4.c: Update test case.
+	* gcc.dg/goacc/loop-processing-1.c: Likewise.
+	* gfortran.dg/goacc/orphan-reductions-1.f90: New test.
+	* gfortran.dg/goacc/orphan-reductions-2.f90: New test.
+
+2017-05-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc-gomp/nesting-fail-1.c: Update usage and expected
+	output of OpenACC routines.
+	* c-c++-common/goacc/Wparentheses-1.c: Likewise.
+	* c-c++-common/goacc/nesting-fail-1.c: Likewise.
+	* c-c++-common/goacc/routine-1.c: Likewise.
+	* c-c++-common/goacc/routine-2.c: Likewise.
+	* c-c++-common/goacc/routine-5.c: Likewise.
+	* c-c++-common/goacc/routine-level-of-parallelism-1.c: Likewise.
+	* c-c++-common/goacc/routine-level-of-parallelism-2.c: Likewise.
+	* c-c++-common/goacc/routine-nohost-1.c: Likewise.
+	* c-c++-common/goacc/routine-nohost-2.c: Likewise.
+	* g++.dg/goacc/routine-1.C: Likewise.
+	* g++.dg/goacc/routine-2.C: Likewise.
+	* g++.dg/goacc/template.C: Likewise.
+	* gfortran.dg/goacc/dtype-1.f95: Likewise.
+	* gfortran.dg/goacc/pr71704.f90: Likewise.
+	* gfortran.dg/goacc/pr72741-2.f: Likewise.
+	* gfortran.dg/goacc/routine-6.f90: Likewise.
+	* gfortran.dg/goacc/routine-8.f90: Likewise.
+	* gfortran.dg/goacc/routine-9.f90: Likewise.
+	* gfortran.dg/goacc/routine-level-of-parallelism-1.f90: Likewise.
+	* gfortran.dg/goacc/routine-without-clauses.f90: New test.
+
+2017-04-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/routine-10.f90: New test.
+
+2017-04-26  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/reduction-7.c: New test.
+	* g++.dg/goacc/reductions-1.C: New test.
+
+2017-04-19  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/declare-allocatable-1.f90: Update test case to
+	exercise allocatable scalars.
+
+2017-04-13  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* gfortran.dg/goacc/data-tree.f95: Remove "force_" from dump scan.
+	* gfortran.dg/goacc/kernels-tree.f95: Likewise.
+	* gfortran.dg/goacc/data-tree.f95: Likewise.
+	* gfortran.dg/goacc/reduction-promotions.f90: Likewise.
+	* gfortran.dg/goacc/combined-directives.f90: Likewise.
+	* gfortran.dg/goacc/default-4.f: Likewise.
+	* gfortran.dg/declare-2.f95: Adjust error scan.
+	* c-c++-common/goacc/acc-data-chain.c: Remove "force_" from dump scan.
+	* c-c++-common/goacc/default-4.c: Likewise.
+	* c-c++-common/goacc/declare-2.c: Move present_or_copyin/create tests
+	from here to...
+	* c-c++-common/goacc/declare-1.c: ...here.
+
+2017-04-05  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/declare-allocatable-1.f90: New test.
+
+2017-03-31  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/routine-bind-1.f90: New test.
+
+2017-02-23  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/note-parallelism.c: New test.
+	* gfortran.dg/goacc/note-parallelism.f90: New test.
+
+2017-02-22  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/combined-directives-3.c: New test.
+	* c-c++-common/goacc/loop-2-kernels.c (void K): Adjust test.
+	* c-c++-common/goacc/loop-2-parallel.c (void P): Adjust test.
+	* c-c++-common/goacc/loop-3.c (void p2): Adjust test.
+
+2017-07-11  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* gfortran.dg/goacc/kernels-alias-3.f95: XFAIL one tree scanning
+	test.
+
+2017-01-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/implicitly-private.f90: New test.
+
+2016-11-10  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/derived-types.f90: New test.
+
+2016-10-03  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/loop-2.f95: Change expected tile clause
+	warnings to errors.
+	* gfortran.dg/goacc/loop-5.f95: Likewise.
+	* gfortran.dg/goacc/sie.f95: Likewise.
+	* gfortran.dg/goacc/tile-1.f90: New test.
+	* gfortran.dg/goacc/tile-2.f90: New test.
+
+2016-10-02  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	PR fortran/77371
+	* gfortran.dg/goacc/pr77371-1.f90: New test.
+	* gfortran.dg/goacc/pr77371-2.f90: New test.
+
+2016-09-15  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/common-block-1.f90: New test.
+	* gfortran.dg/goacc/common-block-2.f90: New test.
+
+2016-08-29  Cesar Philippidis  <cesar@codesourcery.com>
+
+	PR fortran/72715
+	* gfortran.dg/goacc/loop-3-2.f95: Error on do concurrent loops.
+	* gfortran.dg/goacc/loop-3.f95: Likewise.
+	* gfortran.dg/goacc/pr72715.f90: New test.
+
+2016-08-26  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/routine-6.f90: Remove errors deferred to the
+	resolving stage.
+	* gfortran.dg/goacc/routine-9.f90: New test.
+	* gfortran.dg/goacc/routine-nested-parallelism.f: New test.
+	* gfortran.dg/goacc/routine-nested-parallelism.f90: New test.
+
+2016-12-06  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/acc-data-chain.c: New test.
+
+2016-08-17  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-c++-common/goacc/routine-1.c: Update.
+	* c-c++-common/goacc/routine-2.c: Likewise.
+	* c-c++-common/goacc/routine-nohost-1.c: Likewise.
+	* g++.dg/goacc/routine-2.C: Likewise.
+	* c-c++-common/goacc/routine-nohost-2.c: New file.
+
+	* c-c++-common/goacc/oaccdevlow-routine.c: Update.
+	* c-c++-common/goacc/routine-5.c: Likewise.
+	* c-c++-common/goacc/routine-level-of-parallelism-1.c: Likewise.
+	* c-c++-common/goacc/routine-level-of-parallelism-2.c: New file.
+
+	* c-c++-common/goacc/routine-2.c: Update, and move some test
+	into...
+	* c-c++-common/goacc/routine-level-of-parallelism-1.c: ... this
+	new file.
+
+2016-08-16  Cesar Philippidis  <cesar@codesourcery.com>
+	    Thomas Schwinge  <thomas@codesourcery.com>
+
+	PR fortran/72741
+	* gfortran.dg/goacc/pr72741-2.f: New test.
+	* gfortran.dg/goacc/pr72741-intrinsic-1.f: Add test coverage.
+	* gfortran.dg/goacc/pr72741-intrinsic-2.f: Likewise.
+	* gfortran.dg/goacc/pr72741.f90: Likewise.
+
+2016-08-12  Cesar Philippidis  <cesar@codesourcery.com>
+	    Thomas Schwinge  <thomas@codesourcery.com>
+
+	PR fortran/72741
+	* gfortran.dg/goacc/pr72741-intrinsic-1.f: New file.
+	* gfortran.dg/goacc/pr72741-intrinsic-2.f: Likewise.
+
+2016-07-28  Cesar Philippidis  <cesar@codesourcery.com>
+
+	PR fortran/72741
+	* gfortran.dg/goacc/pr72741.f90: New test.
+
+2016-07-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/fixed-1.f: Add test coverage.
+	* gfortran.dg/goacc/routine-7.f90: New test.
+
+2016-05-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/kernels-loop-offload-alias-none.c: Add xfails.
+	* c-c++-common/goacc/kernels-loop-offload-alias-ptr.c: Likewise.
+	* c-c++-common/goacc/kernels-offload-alias-2.c: Likewise.
+	* c-c++-common/goacc/kernels-offload-alias-3.c: Likewise.
+	* c-c++-common/goacc/kernels-offload-alias-6.c: Likewise.
+	* c-c++-common/goacc/kernels-offload-alias.c: Likewise.
+	* c-c++-common/goacc/kernels-parallel-loop-data-enter-exit.c:
+	Likewise.
+	* g++.dg/goacc/data-1.C: New test.
+
+2016-01-12  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* gcc.dg/goacc/kern-1.c: New.
+
+2016-01-07  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* g++.dg/goacc/routine-2.C: Add more coverage.
+
+2016-01-05  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* c-c++-common/goacc/parallel-reduction.c: Add -w.
+	* c-c++-common/goacc/routine-1.c: Add -w.
+	* c-c++-common/goacc/routine-3.c: Add -w.
+	* c-c++-common/goacc/routine-6.c: Add -w.
+	* g++.dg/goacc/template.C: Add -w.
+	* gfortran.dg/goacc/parallel-tree.f95: Add -w.
+	* gfortran.dg/goacc/routine-4.f90: Add -w.
+
+2015-12-28  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* c-c++-common/goacc/routine-nohost-1.c: Adjust expected dump output.
+
+2015-12-08  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-c++-common/goacc/routine-1.c: Update.
+	* c-c++-common/goacc/routine-2.c: Likewise.
+	* c-c++-common/goacc/routine-5.c: Likewise.
+	* c-c++-common/goacc/routine-8.c: Remove file.
+	* c-c++-common/goacc/routine-9.c: Remove file.
+	* c-c++-common/goacc/routine-nohost-1.c: New file.
+	* g++.dg/goacc/routine-1.C: Likewise.
+	* g++.dg/goacc/routine-2.C: Likewise.
+
+2016-03-19  Thomas Schwinge  <thomas@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* gcc/testsuite/gfortran.dg/goacc/kernels-alias-3.f95: Specify
+	"-foffload-alias=all".
+	* gcc/testsuite/gfortran.dg/goacc/kernels-alias-4.f95: Likewise.
+
+2015-12-17  Thomas Schwinge  <thomas@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* c-c++-common/goacc/kernels-alias-3.c: Specify
+	"-foffload-alias=all".
+	* c-c++-common/goacc/kernels-alias-4.c: Likewise.
+	* c-c++-common/goacc/kernels-alias-5.c: Likewise.
+	* c-c++-common/goacc/kernels-alias-6.c: Likewise.
+	* c-c++-common/goacc/kernels-alias-7.c: Likewise.
+	* c-c++-common/goacc/kernels-alias-8.c: Likewise.
+	* c-c++-common/goacc/kernels-alias-ipa-pta-3.c: Likewise.
+	* c-c++-common/goacc/kernels-counter-var-redundant-load.c:
+	Likewise.
+
+2015-12-17  Tom de Vries  <tom@codesourcery.com>
+
+	* c-c++-common/goacc/kernels-offload-alias-2.c: New test.
+	* c-c++-common/goacc/kernels-offload-alias-3.c: New test.
+	* c-c++-common/goacc/kernels-offload-alias-4.c: New test.
+	* c-c++-common/goacc/kernels-offload-alias-5.c: New test.
+	* c-c++-common/goacc/kernels-offload-alias-6.c: New test.
+	* c-c++-common/goacc/kernels-offload-alias.c: New test.
+
+2015-11-03  Tom de Vries  <tom@codesourcery.com>
+
+	* c-c++-common/goacc/kernels-loop-offload-alias-none.c: New test.
+	* c-c++-common/goacc/kernels-loop-offload-alias-ptr.c: New test.
+
+2016-01-12  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/mod-array.f90: New test.
+
+2015-08-15  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* c-c++-common/goacc/dtype-1.c: Remove bogus routine tests.
+
+2015-07-17  Julian Brown  <julian@codesourcery.com>
+
+	* c-c++-common/goacc/dtype-1.c: Update test for new behaviour.
+	* c-c++-common/goacc/dtype-2.c: Likewise.
+	* c-c++-common/goacc/dtype-3.c: Likewise.
+	* c-c++-common/goacc/dtype-4.c: Likewise.
+	* gfortran.dg/goacc/dtype-1.f95: Likewise.
+	* gfortran.dg/goacc/dtype-2.f95: Likewise.
+	* gfortran.dg/goacc/dtype-3.f: Likewise.
+
+2015-09-29  Tom de Vries  <tom@codesourcery.com>
+
+	* c-c++-common/goacc/kernels-acc-loop-smaller-equal.c: New test.
+
+2015-09-29  Tom de Vries  <tom@codesourcery.com>
+
+	* c-c++-common/goacc/kernels-acc-loop-reduction.c: New test.
+
+2015-06-23  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* c-c++-common/goacc/kernels-loop-acc-loop.c: New test.
+	* c-c++-common/goacc/kernels-loop-2-acc-loop.c: New test.
+	* c-c++-common/goacc/kernels-loop-3-acc-loop.c: New test.
+	* c-c++-common/goacc/kernels-loop-n-acc-loop.c: New test.
+
+2015-06-12  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/dtype-4.c: New test.
+	* gfortran.dg/goacc/dtype-2.f95: Update error messages.
+	* gfortran.dg/goacc/dtype-3.f: New test.
+
+2015-06-10  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/dtype-3.c: New test.
+
+2015-05-13  Thomas Schwinge  <thomas@codesourcery.com>
+	    Bernd Schmidt  <bernds@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+	    Chung-Lin Tang  <cltang@codesourcery.com>
+	    James Norris  <jnorris@codesourcery.com>
+	    Joseph Myers  <joseph@codesourcery.com>
+	    Julian Brown  <julian@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* c-c++-common/goacc/dtype-1.c: Update.
+	* c-c++-common/goacc/dtype-2.c: Likewise.
+	* c-c++-common/goacc/host_data-1.c: Likewise.
+	* c-c++-common/goacc/host_data-2.c: Likewise.
+	* c-c++-common/goacc/host_data-3.c: Likewise.
+	* c-c++-common/goacc/host_data-4.c: Likewise.
+	* c-c++-common/goacc/sb-3.c: Likewise.
+	* c-c++-common/goacc/tile.c: Likewise.
+	* g++.dg/goacc/template-reduction.C: Likewise.
+	* g++.dg/goacc/template.C: Likewise.
+	* gfortran.dg/goacc/coarray.f95: Likewise.
+	* gfortran.dg/goacc/dtype-1.f95: Likewise.
+	* gfortran.dg/goacc/host_data-tree.f95: Likewise.
+	* gfortran.dg/goacc/list.f95: Likewise.
+	* gfortran.dg/goacc/loop-tree-1.f90: Likewise.
+	* gfortran.dg/goacc/parallel-tree.f95: Likewise.
+	* c-c++-common/goacc/executeables-1.c: New file.
+	* c-c++-common/goacc/firstprivate.c: Likewise.
+	* c-c++-common/goacc/private-reduction-1.c: Likewise.
+	* g++.dg/goacc/loop-1.c: Likewise.
+	* g++.dg/goacc/loop-2.c: Likewise.
+	* g++.dg/goacc/loop-3.c: Likewise.
+	* gcc.dg/goacc/sb-1.c: Likewise.
+	* gcc.dg/goacc/sb-2.c: Likewise.
+	* gcc.dg/goacc/sb-3.c: Likewise.
+	* gfortran.dg/goacc/firstprivate-1.f95: Likewise.
+
+2015-05-11  Thomas Schwinge  <thomas@codesourcery.com>
+	    Bernd Schmidt  <bernds@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+	    Chung-Lin Tang  <cltang@codesourcery.com>
+	    James Norris  <jnorris@codesourcery.com>
+	    Joseph Myers  <joseph@codesourcery.com>
+	    Julian Brown  <julian@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* c-c++-common/goacc-gomp/nesting-1.c: Update.
+	* c-c++-common/goacc-gomp/nesting-fail-1.c: Likewise.
+	* c-c++-common/goacc/asyncwait-1.c: Likewise.
+	* c-c++-common/goacc/data-2.c: Likewise.
+	* c-c++-common/goacc/reduction-1.c: Likewise.
+	* c-c++-common/goacc/reduction-2.c: Likewise.
+	* c-c++-common/goacc/reduction-3.c: Likewise.
+	* c-c++-common/goacc/reduction-4.c: Likewise.
+	* gfortran.dg/goacc/cache-1.f95: Likewise.
+	* gfortran.dg/goacc/coarray.f95: Likewise.
+	* gfortran.dg/goacc/coarray_2.f90: Likewise.
+	* gfortran.dg/goacc/combined_loop.f90: Likewise.
+	* gfortran.dg/goacc/cray.f95: Likewise.
+	* gfortran.dg/goacc/declare-1.f95: Likewise.
+	* gfortran.dg/goacc/host_data-tree.f95: Likewise.
+	* gfortran.dg/goacc/loop-1.f95: Likewise.
+	* gfortran.dg/goacc/loop-2.f95: Likewise.
+	* gfortran.dg/goacc/parameter.f95: Likewise.
+	* c-c++-common/goacc/loop-1.c: Enable for C++.
+	* c-c++-common/goacc/kernels-1.c: Rename to...
+	* c-c++-common/goacc/kernels-empty.c: ... this new file.
+	* c-c++-common/goacc/parallel-1.c: Rename to...
+	* c-c++-common/goacc/parallel-empty.c: ... this new file.
+	* c-c++-common/goacc/declare-1.c: New file.
+	* c-c++-common/goacc/declare-2.c: Likewise.
+	* c-c++-common/goacc/dtype-1.c: Likewise.
+	* c-c++-common/goacc/dtype-2.c: Likewise.
+	* c-c++-common/goacc/host_data-1.c: Likewise.
+	* c-c++-common/goacc/host_data-2.c: Likewise.
+	* c-c++-common/goacc/host_data-3.c: Likewise.
+	* c-c++-common/goacc/host_data-4.c: Likewise.
+	* c-c++-common/goacc/kernels-eternal.c: Likewise.
+	* c-c++-common/goacc/kernels-noreturn.c: Likewise.
+	* c-c++-common/goacc/parallel-eternal.c: Likewise.
+	* c-c++-common/goacc/parallel-noreturn.c: Likewise.
+	* c-c++-common/goacc/routine-1.c: Likewise.
+	* c-c++-common/goacc/routine-2.c: Likewise.
+	* c-c++-common/goacc/routine-3.c: Likewise.
+	* c-c++-common/goacc/routine-4.c: Likewise.
+	* c-c++-common/goacc/tile.c: Likewise.
+	* g++.dg/goacc/template-reduction.C: Likewise.
+	* g++.dg/goacc/template.C: Likewise.
+	* gfortran.dg/goacc/declare-2.f95: Likewise.
+	* gfortran.dg/goacc/default.f95: Likewise.
+	* gfortran.dg/goacc/dtype-1.f95: Likewise.
+	* gfortran.dg/goacc/dtype-2.f95: Likewise.
+	* gfortran.dg/goacc/update.f95: Likewise.
+
+2015-05-11  James Norris  <jnorris@codesourcery.com>
+
+        * c-c++-common/goacc/asyncwait-1: Update messages.
+
+2015-10-12  Tom de Vries  <tom@codesourcery.com>
+
+	* c-c++-common/goacc/kernels-counter-var-redundant-load.c: New test.
+
+2016-08-19  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/routine-8.f90: New test.
+	* gfortran.dg/goacc/routine-level-of-parallelism-1.f90: New test.
+
+2015-08-14  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-c++-common/goacc/parallel-reduction.c: New test.
+
+2015-07-07  James Norris  <jnorris@codesourcery.com>
+
+	* c-c++-common/goacc/deviceptr-4.c: New test.
+
+2015-05-13  Cesar Philippidis  <cesar@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* c-c++-common/goacc/private-reduction-1.c: New test.
+
+2015-05-13  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* g++.dg/goacc/loop-1.c: New test.
+	* g++.dg/goacc/loop-2.c: New test.
+	* g++.dg/goacc/loop-3.c: New test.
+
+2015-05-11  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.dg/goacc/modules.f95: New test.
+
+2015-04-21  Tom de Vries  <tom@codesourcery.com>
+	    Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-c++-common/goacc/kernels-loop-data-2.c: New test.
+	* c-c++-common/goacc/kernels-loop-data-enter-exit-2.c: New test.
+	* c-c++-common/goacc/kernels-loop-data-enter-exit.c: New test.
+	* c-c++-common/goacc/kernels-loop-data-update.c: New test.
+	* c-c++-common/goacc/kernels-loop-data.c: New test.
+	* c-c++-common/goacc/kernels-parallel-loop-data-enter-exit.c: New
+	test.
+	* gfortran.dg/goacc/kernels-parallel-loop-data-enter-exit.f95: New
+	test.
+
+Copyright (C) 2015-2018 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

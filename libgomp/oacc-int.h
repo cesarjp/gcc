@@ -40,6 +40,7 @@
 
 #include "openacc.h"
 #include "config.h"
+#include "acc_prof.h"
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdarg.h>
@@ -68,11 +69,20 @@ struct goacc_thread
      strictly push/pop semantics according to lexical scope.  */
   struct target_mem_desc *mapped_data;
 
+  /* Data of the OpenACC Profiling Interface.  */
+  acc_prof_info *prof_info;
+  acc_api_info *api_info;
+  /* Per-thread toggle of OpenACC Profiling Interface callbacks.  */
+  bool prof_callbacks_enabled;
+
   /* These structures form a list: this is the next thread in that list.  */
   struct goacc_thread *next;
 
   /* Target-specific data (used by plugin).  */
   void *target_tls;
+
+  /* Default OpenACC async queue for current thread, exported to plugin.  */
+  int default_async;
 };
 
 #if defined HAVE_TLS || defined USE_EMUTLS
@@ -98,6 +108,22 @@ void goacc_save_and_set_bind (acc_device_t);
 void goacc_restore_bind (void);
 void goacc_lazy_initialize (void);
 void goacc_host_init (void);
+
+void goacc_init_asyncqueues (struct gomp_device_descr *);
+bool goacc_fini_asyncqueues (struct gomp_device_descr *);
+void goacc_async_copyout_unmap_vars (struct target_mem_desc *,
+				     struct goacc_asyncqueue *);
+void goacc_async_free (struct gomp_device_descr *,
+		       struct goacc_asyncqueue *, void *);
+struct goacc_asyncqueue *get_goacc_asyncqueue (int);
+struct goacc_asyncqueue *lookup_goacc_asyncqueue (struct goacc_thread *, bool, int);
+
+void goacc_profiling_initialize (void);
+bool goacc_profiling_setup_p (struct goacc_thread *,
+			      acc_prof_info *, acc_api_info *);
+bool goacc_profiling_dispatch_p (bool);
+void goacc_profiling_dispatch (acc_prof_info *, acc_event_info *,
+			       acc_api_info *);
 
 #ifdef HAVE_ATTRIBUTE_VISIBILITY
 # pragma GCC visibility pop

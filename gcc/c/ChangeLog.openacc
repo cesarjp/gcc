@@ -1,0 +1,86 @@
+2017-07-25  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* c-parser.c (c_parser_oacc_clause_wait): Add representation of wait
+	clause without argument as 'wait (GOMP_ASYNC_NOVAL)', adjust comments.
+
+2017-05-17  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* c-parser.c (c_parser_oacc_data_clause)
+	<PRAGMA_OACC_CLAUSE_DELETE>: Use "GOMP_MAP_RELEASE".
+
+2017-05-16  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_clause_name):  Handle 'finalize' clause.
+	(c_parser_oacc_simple_clause): Add 'finalize' to comments.
+	(c_parser_oacc_all_clauses): Handle PRAGMA_OACC_CLAUSE_FINALIZE.
+	(OACC_EXIT_DATA_CLAUSE_MASK): Add PRAGMA_OACC_CLAUSE_FINALIZE.
+	* c-typeck.c (c_finish_omp_clauses): Handle OMP_CLAUSE_FINALIZE.
+
+2017-05-04  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_clause_name): Add support for if_present.
+	(c_parser_oacc_all_clauses): Likewise.
+	(c_finish_oacc_routine): Likewise.
+	(OACC_UPDATE_CLAUSE_MASK): Add PRAGMA_OACC_CLAUSE_IF_PRESENT.
+	* c-typeck.c (c_finish_omp_clauses): Add support for if_present.
+
+2017-05-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-typeck.c (c_finish_omp_clauses): Emit an error on orphan OpenACC
+	gang reductions.
+
+2017-04-26  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_variable_list): New c_omp_region_type
+	argument.  Use it to specialize handling of OMP_CLAUSE_REDUCTION for
+	OpenACC.
+	(c_parser_omp_clause_reduction): Update call to
+	c_parser_omp_variable_list.  Propage OpenACC errors as necessary.
+	(c_parser_oacc_all_clauses): Update call to
+	p_parser_omp_clause_reduction.
+	(c_parser_omp_all_clauses): Likewise.
+	(c_parser_cilk_all_clauses): Likewise.
+
+2017-04-13  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* c-parser.c (c_parser_omp_clause_name): Remove occurences of
+	PRAGMA_OACC_CLAUSE_PRESENT_OR_COPY/COPYIN/COPYOUT/CREATE, adjust
+	them to non-PRESENT_OR values.
+	(c_parser_oacc_data_clause): Remove PRAGMA_OACC_CLAUSE_PRESENT_OR_*
+	cases, remove FORCE from PRAGMA_OACC_CLAUSE_COPY/COPYIN/COPYOUT/CREATE
+	kinds, update comment description.
+	(c_parser_oacc_all_clauses): Remove PRAGMA_OACC_CLAUSE_PRESENT_OR_*
+	cases.
+	(OACC_DATA_CLAUSE_MASK): Remove PRAGMA_OACC_CLAUSE_PRESENT_OR_*.
+	(OACC_DECLARE_CLAUSE_MASK): Likewise.
+	(c_parser_oacc_declare): Remove GOMP_MAP_FORCE_ALLOC/TO, change to
+	COMP_MAP_ALLOC/TO.
+	(OACC_ENTER_DATA_CLAUSE_MASK): Remove PRAGMA_OACC_CLAUSE_PRESENT_OR_*.
+	(OACC_KERNELS_CLAUSE_MASK): Likewise.
+	(OACC_PARALLEL_CLAUSE_MASK): Likewise.
+
+2017-02-27  Chung-Lin Tang  <cltang@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+
+	* c-parser.c (mark_vars_oacc_gangprivate): New function.
+	(c_parser_oacc_kernels_parallel): Call it to mark gang local variables
+	with attribute "oacc gangprivate".
+
+2017-01-10  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	PR other/76739
+	* c-typeck.c (handle_omp_array_sections_1): Add 'bool &non_contiguous'
+	parameter, adjust recursive call site, add cases for allowing
+	pointer based multi-dimensional arrays for OpenACC.
+	(handle_omp_array_sections): Adjust handle_omp_array_sections_1 call,
+	handle non-contiguous case to create dynamic array map.
+
+2015-05-11  James Norris  <jnorris@codesourcery.com>
+
+	* c-parser.c (c_parser_oacc_wait_list): Change error message.
+
+Copyright (C) 2015-2018 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

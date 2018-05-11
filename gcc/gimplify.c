@@ -105,6 +105,12 @@ enum gimplify_omp_var_data
   /* Flag for GOVD_MAP: must be present already.  */
   GOVD_MAP_FORCE_PRESENT = 524288,
 
+  /* Flag for GOVD_MAP, copy to/from private storage inside offloaded region.  */
+  GOVD_MAP_PRIVATE = 1048576,
+
+  /* Flag for OpenACC deviceptrs.  */
+  GOVD_DEVICEPTR = (1<<21),
+
   GOVD_DATA_SHARE_CLASS = (GOVD_SHARED | GOVD_PRIVATE | GOVD_FIRSTPRIVATE
 			   | GOVD_LASTPRIVATE | GOVD_REDUCTION | GOVD_LINEAR
 			   | GOVD_LOCAL)
@@ -191,6 +197,7 @@ struct gimplify_omp_ctx
   bool target_map_scalars_firstprivate;
   bool target_map_pointers_as_0len_arrays;
   bool target_firstprivatize_array_bases;
+  tree clauses;
 };
 
 static struct gimplify_ctx *gimplify_ctxp;
@@ -409,6 +416,7 @@ new_omp_context (enum omp_region_type region_type)
   c->privatized_types = new hash_set<tree>;
   c->location = input_location;
   c->region_type = region_type;
+  c->clauses = NULL_TREE;
   if ((region_type & ORT_TASK) == 0)
     c->default_kind = OMP_CLAUSE_DEFAULT_SHARED;
   else
@@ -6757,6 +6765,32 @@ omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *ctx, tree type)
   lang_hooks.types.omp_firstprivatize_type_sizes (ctx, type);
 }
 
+/* Determine if CTX might contain any gang partitioned loops.  During
+   oacc_dev_low, independent loops are assign gangs at the outermost
+   level, and vectors in the innermost.  */
+
+static bool
+oacc_privatize_reduction (struct gimplify_omp_ctx *ctx)
+{
+  if (ctx == NULL)
+    return false;
+
+  if (ctx->region_type != ORT_ACC)
+    return false;
+
+  for (tree c = ctx->clauses; c; c = OMP_CLAUSE_CHAIN (c))
+    switch (OMP_CLAUSE_CODE (c))
+      {
+      case OMP_CLAUSE_SEQ:
+	return oacc_privatize_reduction (ctx->outer_context);
+      case OMP_CLAUSE_GANG:
+	return true;
+      default:;
+      }
+
+  return true;
+}
+
 /* Add an entry for DECL in the OMP context CTX with FLAGS.  */
 
 static void
@@ -6867,12 +6901,48 @@ omp_add_variable (struct gimplify_omp_ctx *ctx, tree decl, unsigned int flags)
   else
     splay_tree_insert (ctx->variables, (splay_tree_key)decl, flags);
 
-  /* For reductions clauses in OpenACC loop directives, by default create a
-     copy clause on the enclosing parallel construct for carrying back the
-     results.  */
+  /* For OpenACC loop directives, when a reduction is immediately
+     enclosed within an acc parallel or kernels construct, it must
+     have an implied copy data mapping. E.g.
+
+       #pragma acc parallel
+	 {
+	   #pragma acc loop reduction (+:sum)
+
+     a copy clause for sum should be added on the enclosing parallel
+     construct for carrying back the results.  */
   if (ctx->region_type == ORT_ACC && (flags & GOVD_REDUCTION))
     {
       struct gimplify_omp_ctx *outer_ctx = ctx->outer_context;
+
+      bool gang = false, worker = false, vector = false;
+      for (tree c = ctx->clauses; c; c = OMP_CLAUSE_CHAIN (c))
+	{
+	  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_GANG)
+	    gang = true;
+	  else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_WORKER)
+	    worker = true;
+	  else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_VECTOR)
+	    vector = true;
+	}
+
+      /* Reduction data maps need to be marked as private for worker
+	 and vector loops, in order to ensure that value of the
+	 reduction carried back to the host.  Set new copy map as
+	 'private' if sure we're not gang-partitioning.  */
+      bool map_private, update_data_map = false;
+
+      if (gang)
+	map_private = false;
+      else if (worker || vector)
+	map_private = true;
+      else
+	map_private = oacc_privatize_reduction (ctx->outer_context);
+
+      if (ctx->outer_context
+	  && ctx->outer_context->region_type == ORT_ACC_PARALLEL)
+	update_data_map = true;
+
       while (outer_ctx)
 	{
 	  n = splay_tree_lookup (outer_ctx->variables, (splay_tree_key)decl);
@@ -6889,17 +6959,28 @@ omp_add_variable (struct gimplify_omp_ctx *ctx, tree decl, unsigned int flags)
 		  gcc_assert (!(n->value & GOVD_FIRSTPRIVATE)
 			      && (n->value & GOVD_MAP));
 		}
-	      else if (outer_ctx->region_type == ORT_ACC_PARALLEL)
+	      else if (update_data_map
+		       && outer_ctx->region_type == ORT_ACC_PARALLEL)
 		{
 		  /* Remove firstprivate and make it a copy map.  */
 		  n->value &= ~GOVD_FIRSTPRIVATE;
 		  n->value |= GOVD_MAP;
+
+		  /* If not gang-partitioned, add MAP_PRIVATE on the map
+		     clause.  */
+		  if (map_private)
+		    n->value |= GOVD_MAP_PRIVATE;
 		}
 	    }
-	  else if (outer_ctx->region_type == ORT_ACC_PARALLEL)
+	  else if (update_data_map
+		   && outer_ctx->region_type == ORT_ACC_PARALLEL)
 	    {
-	      splay_tree_insert (outer_ctx->variables, (splay_tree_key)decl,
-				 GOVD_MAP | GOVD_SEEN);
+	      unsigned f = GOVD_MAP | GOVD_SEEN;
+
+	      /* If not gang-partitioned, add MAP_PRIVATE on the map clause.  */
+	      if (map_private)
+		f |= GOVD_MAP_PRIVATE;
+	      splay_tree_insert (outer_ctx->variables, (splay_tree_key)decl, f);
 	      break;
 	    }
 	  outer_ctx = outer_ctx->outer_context;
@@ -7079,15 +7160,20 @@ oacc_default_clause (struct gimplify_omp_ctx *ctx, tree decl, unsigned flags)
 {
   const char *rkind;
   bool on_device = false;
+  bool is_private = false;
   bool declared = is_oacc_declared (decl);
   tree type = TREE_TYPE (decl);
 
   if (lang_hooks.decls.omp_privatize_by_reference (decl))
     type = TREE_TYPE (type);
 
+  if (RECORD_OR_UNION_TYPE_P (type))
+    is_private = lang_hooks.decls.omp_disregard_value_expr (decl, false);
+
   if ((ctx->region_type & (ORT_ACC_PARALLEL | ORT_ACC_KERNELS)) != 0
       && is_global_var (decl)
-      && device_resident_p (decl))
+      && device_resident_p (decl)
+      && !is_private)
     {
       on_device = true;
       flags |= GOVD_MAP_TO_ONLY;
@@ -7098,7 +7184,9 @@ oacc_default_clause (struct gimplify_omp_ctx *ctx, tree decl, unsigned flags)
     case ORT_ACC_KERNELS:
       rkind = "kernels";
 
-      if (AGGREGATE_TYPE_P (type))
+      if (is_private)
+	flags |= GOVD_MAP;
+      else if (AGGREGATE_TYPE_P (type))
 	{
 	  /* Aggregates default to 'present_or_copy', or 'present'.  */
 	  if (ctx->default_kind != OMP_CLAUSE_DEFAULT_PRESENT)
@@ -7115,7 +7203,14 @@ oacc_default_clause (struct gimplify_omp_ctx *ctx, tree decl, unsigned flags)
     case ORT_ACC_PARALLEL:
       rkind = "parallel";
 
-      if (on_device || declared)
+      if (TREE_CODE (type) == REFERENCE_TYPE
+	  && TREE_CODE (TREE_TYPE (type)) == POINTER_TYPE)
+	flags |= GOVD_MAP | GOVD_MAP_0LEN_ARRAY;
+      else if (!lang_GNU_Fortran () && TREE_CODE (type) == POINTER_TYPE)
+	flags |= GOVD_MAP | GOVD_MAP_0LEN_ARRAY;
+      else if (is_private)
+	flags |= GOVD_FIRSTPRIVATE;
+      else if (on_device || declared)
 	flags |= GOVD_MAP;
       else if (AGGREGATE_TYPE_P (type))
 	{
@@ -7181,7 +7276,8 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
 	{
 	  tree value = get_base_address (DECL_VALUE_EXPR (decl));
 
-	  if (value && DECL_P (value) && DECL_THREAD_LOCAL_P (value))
+	  if (!(ctx->region_type & ORT_ACC)
+	      && value && DECL_P (value) && DECL_THREAD_LOCAL_P (value))
 	    return omp_notice_threadprivate_variable (ctx, decl, value);
 	}
 
@@ -7213,7 +7309,8 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
   n = splay_tree_lookup (ctx->variables, (splay_tree_key)decl);
   if ((ctx->region_type & ORT_TARGET) != 0)
     {
-      ret = lang_hooks.decls.omp_disregard_value_expr (decl, true);
+      shared = !(ctx->region_type & ORT_ACC);
+      ret = lang_hooks.decls.omp_disregard_value_expr (decl, shared);
       if (n == NULL)
 	{
 	  unsigned nflags = flags;
@@ -7272,6 +7369,7 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
 		        error ("variable %qE declared in enclosing "
 			       "%<host_data%> region", DECL_NAME (decl));
 		      nflags |= GOVD_MAP;
+		      nflags |= (n2->value & GOVD_DEVICEPTR);
 		      if (octx->region_type == ORT_ACC_DATA
 			  && (n2->value & GOVD_MAP_0LEN_ARRAY))
 			nflags |= GOVD_MAP_0LEN_ARRAY;
@@ -7366,6 +7464,8 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
     }
 
   shared = ((flags | n->value) & GOVD_SHARED) != 0;
+  if (ctx->region_type & ORT_ACC)
+    shared = false;
   ret = lang_hooks.decls.omp_disregard_value_expr (decl, shared);
 
   /* If nothing changed, there's nothing left to do.  */
@@ -7527,6 +7627,37 @@ find_decl_expr (tree *tp, int *walk_subtrees, void *data)
   return NULL_TREE;
 }
 
+static void
+demote_firstprivate_pointer (tree decl, gimplify_omp_ctx *ctx)
+{
+  if (!lang_GNU_Fortran ())
+    return;
+
+  while (ctx)
+    {
+      if (ctx->region_type == ORT_ACC_PARALLEL
+	  || ctx->region_type == ORT_ACC_KERNELS)
+	break;
+      ctx = ctx->outer_context;
+    }
+
+  if (ctx == NULL)
+    return;
+
+  tree clauses = ctx->clauses;
+
+  for (tree c = clauses; c; c = OMP_CLAUSE_CHAIN (c))
+    {
+      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
+	  && OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER
+	  && OMP_CLAUSE_DECL (c) == decl)
+	{
+	  OMP_CLAUSE_SET_MAP_KIND (c, GOMP_MAP_POINTER);
+	  return;
+	}
+    }
+}
+
 /* Scan the OMP clauses in *LIST_P, installing mappings into a new
    and previous omp contexts.  */
 
@@ -7541,10 +7672,11 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
   tree *prev_list_p = NULL;
 
   ctx = new_omp_context (region_type);
+  ctx->clauses = *list_p;
   outer_ctx = ctx->outer_context;
   if (code == OMP_TARGET)
     {
-      if (!lang_GNU_Fortran ())
+      if (!lang_GNU_Fortran () || (region_type & ORT_ACC))
 	ctx->target_map_pointers_as_0len_arrays = true;
       ctx->target_map_scalars_firstprivate = true;
     }
@@ -7555,8 +7687,11 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
       case OMP_TARGET_DATA:
       case OMP_TARGET_ENTER_DATA:
       case OMP_TARGET_EXIT_DATA:
+	//case OACC_DATA:
       case OACC_DECLARE:
       case OACC_HOST_DATA:
+	//case OACC_PARALLEL:
+	//case OACC_KERNELS:
 	ctx->target_firstprivatize_array_bases = true;
       default:
 	break;
@@ -7669,6 +7804,7 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	  if (!(region_type & ORT_ACC))
 	    check_non_private = "reduction";
 	  decl = OMP_CLAUSE_DECL (c);
+	  demote_firstprivate_pointer (decl, ctx->outer_context);
 	  if (TREE_CODE (decl) == MEM_REF)
 	    {
 	      tree type = TREE_TYPE (decl);
@@ -7846,6 +7982,7 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	    case OACC_ENTER_DATA:
 	    case OACC_EXIT_DATA:
 	    case OACC_HOST_DATA:
+	    case OACC_UPDATE:
 	      if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER
 		  || (OMP_CLAUSE_MAP_KIND (c)
 		      == GOMP_MAP_FIRSTPRIVATE_REFERENCE))
@@ -7877,8 +8014,28 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	  if (OMP_CLAUSE_SIZE (c) == NULL_TREE)
 	    OMP_CLAUSE_SIZE (c) = DECL_P (decl) ? DECL_SIZE_UNIT (decl)
 				  : TYPE_SIZE_UNIT (TREE_TYPE (decl));
-	  if (gimplify_expr (&OMP_CLAUSE_SIZE (c), pre_p,
-			     NULL, is_gimple_val, fb_rvalue) == GS_ERROR)
+	  if (OMP_CLAUSE_SIZE (c)
+	      && TREE_CODE (OMP_CLAUSE_SIZE (c)) == TREE_LIST
+	      && GOMP_MAP_DYNAMIC_ARRAY_P (OMP_CLAUSE_MAP_KIND (c)))
+	    {
+	      tree dims = OMP_CLAUSE_SIZE (c);
+	      for (tree t = dims; t; t = TREE_CHAIN (t))
+		{
+		  /* If a dimension bias isn't a constant, we have to ensure
+		     that the value gets transferred to the offload target.  */
+		  tree low_bound = TREE_PURPOSE (t);
+		  if (TREE_CODE (low_bound) != INTEGER_CST)
+		    {
+		      low_bound = get_initialized_tmp_var (low_bound, pre_p,
+							   NULL, false);
+		      omp_add_variable (ctx, low_bound,
+					GOVD_FIRSTPRIVATE | GOVD_SEEN);
+		      TREE_PURPOSE (t) = low_bound;
+		    }
+		}
+	    }
+	  else if (gimplify_expr (&OMP_CLAUSE_SIZE (c), pre_p,
+				  NULL, is_gimple_val, fb_rvalue) == GS_ERROR)
 	    {
 	      remove = true;
 	      break;
@@ -7999,7 +8156,8 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 		    = splay_tree_lookup (ctx->variables, (splay_tree_key)decl);
 		  bool ptr = (OMP_CLAUSE_MAP_KIND (c)
 			      == GOMP_MAP_ALWAYS_POINTER);
-		  if (n == NULL || (n->value & GOVD_MAP) == 0)
+		  if ((n == NULL || (n->value & GOVD_MAP) == 0)
+		      && code != OACC_UPDATE)
 		    {
 		      tree l = build_omp_clause (OMP_CLAUSE_LOCATION (c),
 						 OMP_CLAUSE_MAP);
@@ -8253,6 +8411,8 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	  if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ALWAYS_TO
 	      || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ALWAYS_TOFROM)
 	    flags |= GOVD_MAP_ALWAYS_TO;
+	  else if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FORCE_DEVICEPTR)
+	    flags |= GOVD_DEVICEPTR;
 	  goto do_add;
 
 	case OMP_CLAUSE_DEPEND:
@@ -8564,6 +8724,9 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	case OMP_CLAUSE_NOGROUP:
 	case OMP_CLAUSE_THREADS:
 	case OMP_CLAUSE_SIMD:
+	case OMP_CLAUSE_IF_PRESENT:
+	case OMP_CLAUSE_FINALIZE:
+	case OMP_CLAUSE_DEVICE_TYPE:
 	  break;
 
 	case OMP_CLAUSE_DEFAULTMAP:
@@ -8592,13 +8755,16 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	  ctx->default_kind = OMP_CLAUSE_DEFAULT_KIND (c);
 	  break;
 
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
 	default:
 	  gcc_unreachable ();
 	}
 
       if (code == OACC_DATA
 	  && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
-	  && OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER)
+	  && (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER
+	      || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_REFERENCE))
 	remove = true;
       if (remove)
 	*list_p = OMP_CLAUSE_CHAIN (c);
@@ -8734,6 +8900,63 @@ struct gimplify_adjust_omp_clauses_data
   gimple_seq *pre_p;
 };
 
+/* Return true if clause contains an array_ref of DECL.  */
+
+static bool
+omp_clause_matching_array_ref (tree clause, tree decl)
+{
+  tree cdecl = OMP_CLAUSE_DECL (clause);
+
+  if (TREE_CODE (cdecl) != ARRAY_REF)
+    return false;
+
+  return TREE_OPERAND (cdecl, 0) == decl;
+}
+
+/* Inside OpenACC parallel and kernels regions, the implicit data
+   clauses for arrays must respect the explicit data clauses set by a
+   containing acc data region.  Specifically, care must be taken
+   pointers or if an subarray of a local array is specified in an acc
+   data region, so that the referenced array inside the offloaded
+   region has a present data clasue for that array with an
+   approporiate subarray argument.  This function returns the tree
+   node of the acc data clause that utilizes DECL as an argument.  */
+
+static tree
+gomp_needs_data_present (tree decl)
+{
+  gimplify_omp_ctx *ctx = NULL;
+  bool found_match = false;
+  tree c = NULL_TREE;
+
+  if (TREE_CODE (TREE_TYPE (decl)) != ARRAY_TYPE)
+    return NULL_TREE;
+
+  if (gimplify_omp_ctxp->region_type != ORT_ACC_PARALLEL
+      && gimplify_omp_ctxp->region_type != ORT_ACC_KERNELS)
+    return NULL_TREE;
+
+  for (ctx = gimplify_omp_ctxp->outer_context; !found_match && ctx;
+       ctx = ctx->outer_context)
+    {
+      if (ctx->region_type != ORT_ACC_DATA)
+	break;
+
+      for (c = ctx->clauses; c; c = OMP_CLAUSE_CHAIN (c))
+	{
+	  if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
+	    continue;
+	  if (omp_clause_matching_array_ref (c, decl))
+	    return c;
+	  else if (OMP_CLAUSE_DECL (c) == decl
+	      && OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_POINTER)
+	  return c;
+	}
+    }
+
+  return NULL_TREE;
+}
+
 /* For all variables that were not actually used within the context,
    remove PRIVATE, SHARED, and FIRSTPRIVATE clauses.  */
 
@@ -8866,7 +9089,8 @@ gimplify_adjust_omp_clauses_1 (splay_tree_node n, void *data)
       /* Not all combinations of these GOVD_MAP flags are actually valid.  */
       switch (flags & (GOVD_MAP_TO_ONLY
 		       | GOVD_MAP_FORCE
-		       | GOVD_MAP_FORCE_PRESENT))
+		       | GOVD_MAP_FORCE_PRESENT
+		       | GOVD_DEVICEPTR))
 	{
 	case 0:
 	  kind = GOMP_MAP_TOFROM;
@@ -8883,11 +9107,61 @@ gimplify_adjust_omp_clauses_1 (splay_tree_node n, void *data)
 	case GOVD_MAP_FORCE_PRESENT:
 	  kind = GOMP_MAP_FORCE_PRESENT;
 	  break;
+	case GOVD_DEVICEPTR:
+	  kind = GOMP_MAP_FORCE_DEVICEPTR;
+	  break;
 	default:
 	  gcc_unreachable ();
 	}
       OMP_CLAUSE_SET_MAP_KIND (clause, kind);
-      if (DECL_SIZE (decl)
+      if ((flags & GOVD_MAP_PRIVATE)
+	  && TREE_CODE (OMP_CLAUSE_DECL (clause)) == VAR_DECL)
+	OMP_CLAUSE_MAP_PRIVATE (clause) = 1;
+      tree c2 = gomp_needs_data_present (decl);
+      /* Handle OpenACC pointers that were declared inside acc data
+	 regions.  */
+      if (c2 != NULL && OMP_CLAUSE_MAP_KIND (c2) == GOMP_MAP_POINTER)
+	{
+	  OMP_CLAUSE_SET_MAP_KIND (clause, GOMP_MAP_POINTER);
+	  OMP_CLAUSE_SIZE (clause) = unshare_expr (OMP_CLAUSE_SIZE (c2));
+	}
+      /* Handle OpenACC subarrays that were declared inside acc data
+	 regions.  */
+      else if (c2 != NULL)
+	{
+	  tree first = OMP_CLAUSE_DECL (c2);
+
+	  /* Adjust the existing clause to make it a present data
+	     clause with the proper subarray attributes.  */
+	  OMP_CLAUSE_DECL (clause) = unshare_expr (first);
+	  OMP_CLAUSE_SET_MAP_KIND (clause, GOMP_MAP_FORCE_PRESENT);
+	  OMP_CLAUSE_SIZE (clause) = unshare_expr (OMP_CLAUSE_SIZE (c2));
+
+	  /* Create a new data clause for the firstprivate pointer.  */
+	  tree nc = build_omp_clause (OMP_CLAUSE_LOCATION (clause),
+				      OMP_CLAUSE_MAP);
+	  OMP_CLAUSE_DECL (nc) = decl;
+	  OMP_CLAUSE_SET_MAP_KIND (nc, GOMP_MAP_FIRSTPRIVATE_POINTER);
+
+	  tree t = build_fold_addr_expr (first);
+	  t = fold_convert_loc (OMP_CLAUSE_LOCATION (clause),
+				ptrdiff_type_node, t);
+	  tree ptr = build_fold_addr_expr (decl);
+	  t = fold_build2_loc (OMP_CLAUSE_LOCATION (clause), MINUS_EXPR,
+			       ptrdiff_type_node, t,
+			       fold_convert_loc (OMP_CLAUSE_LOCATION (clause),
+						 ptrdiff_type_node, ptr));
+	  OMP_CLAUSE_SIZE (nc) = t;
+
+	  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+	  gimplify_omp_ctxp = ctx->outer_context;
+	  gimplify_expr (&OMP_CLAUSE_SIZE (nc),
+			 pre_p, NULL, is_gimple_val, fb_rvalue);
+	  gimplify_omp_ctxp = ctx;
+	  OMP_CLAUSE_CHAIN (nc) = OMP_CLAUSE_CHAIN (clause);
+	  OMP_CLAUSE_CHAIN (clause) = nc;
+	}
+      else if (DECL_SIZE (decl)
 	  && TREE_CODE (DECL_SIZE (decl)) != INTEGER_CST)
 	{
 	  tree decl2 = DECL_VALUE_EXPR (decl);
@@ -8914,7 +9188,9 @@ gimplify_adjust_omp_clauses_1 (splay_tree_node n, void *data)
 	  OMP_CLAUSE_CHAIN (nc) = OMP_CLAUSE_CHAIN (clause);
 	  OMP_CLAUSE_CHAIN (clause) = nc;
 	}
-      else if (gimplify_omp_ctxp->target_firstprivatize_array_bases
+      else if ((((gimplify_omp_ctxp->region_type & ORT_ACC)
+		 && lang_GNU_CXX ())
+		|| gimplify_omp_ctxp->target_firstprivatize_array_bases)
 	       && lang_hooks.decls.omp_privatize_by_reference (decl))
 	{
 	  OMP_CLAUSE_DECL (clause) = build_simple_mem_ref (decl);
@@ -9129,11 +9405,16 @@ gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
 		      && kind != GOMP_MAP_FORCE_PRESENT
 		      && kind != GOMP_MAP_POINTER)
 		    {
-		      warning_at (OMP_CLAUSE_LOCATION (c), 0,
-				  "incompatible data clause with reduction "
-				  "on %qE; promoting to present_or_copy",
-				  DECL_NAME (t));
-		      OMP_CLAUSE_SET_MAP_KIND (c, GOMP_MAP_TOFROM);
+		      if (lang_hooks.decls.omp_privatize_by_reference (decl))
+			OMP_CLAUSE_SET_MAP_KIND (c, GOMP_MAP_POINTER);
+		      else
+			{
+			  warning_at (OMP_CLAUSE_LOCATION (c), 0,
+				      "incompatible data clause with reduction "
+				      "on %qE; promoting to present_or_copy",
+				      DECL_NAME (t));
+			  OMP_CLAUSE_SET_MAP_KIND (c, GOMP_MAP_TOFROM);
+			}
 		    }
 		}
 	    }
@@ -9270,13 +9551,16 @@ gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
 	case OMP_CLAUSE_REDUCTION:
 	  decl = OMP_CLAUSE_DECL (c);
 	  /* OpenACC reductions need a present_or_copy data clause.
-	     Add one if necessary.  Error is the reduction is private.  */
+	     Add one if necessary.  Emit error when the reduction is private.  */
 	  if (ctx->region_type == ORT_ACC_PARALLEL)
 	    {
 	      n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
 	      if (n->value & (GOVD_PRIVATE | GOVD_FIRSTPRIVATE))
-		error_at (OMP_CLAUSE_LOCATION (c), "invalid private "
-			  "reduction on %qE", DECL_NAME (decl));
+		{
+		  remove = true;
+		  error_at (OMP_CLAUSE_LOCATION (c), "invalid private "
+			    "reduction on %qE", DECL_NAME (decl));
+		}
 	      else if ((n->value & GOVD_MAP) == 0)
 		{
 		  tree next = OMP_CLAUSE_CHAIN (c);
@@ -9342,8 +9626,13 @@ gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
 	case OMP_CLAUSE_AUTO:
 	case OMP_CLAUSE_SEQ:
 	case OMP_CLAUSE_TILE:
+	case OMP_CLAUSE_IF_PRESENT:
+	case OMP_CLAUSE_FINALIZE:
+	case OMP_CLAUSE_DEVICE_TYPE:
 	  break;
 
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
 	default:
 	  gcc_unreachable ();
 	}
@@ -9398,21 +9687,7 @@ gimplify_oacc_declare_1 (tree clause)
   switch (kind)
     {
       case GOMP_MAP_ALLOC:
-      case GOMP_MAP_FORCE_ALLOC:
-      case GOMP_MAP_FORCE_TO:
-	new_op = GOMP_MAP_DELETE;
-	ret = true;
-	break;
-
-      case GOMP_MAP_FORCE_FROM:
-	OMP_CLAUSE_SET_MAP_KIND (clause, GOMP_MAP_FORCE_ALLOC);
-	new_op = GOMP_MAP_FORCE_FROM;
-	ret = true;
-	break;
-
-      case GOMP_MAP_FORCE_TOFROM:
-	OMP_CLAUSE_SET_MAP_KIND (clause, GOMP_MAP_FORCE_TO);
-	new_op = GOMP_MAP_FORCE_FROM;
+	new_op = GOMP_MAP_RELEASE;
 	ret = true;
 	break;
 
@@ -10854,6 +11129,53 @@ gimplify_omp_target_update (tree *expr_p, gimple_seq *pre_p)
 			     ort, TREE_CODE (expr));
   gimplify_adjust_omp_clauses (pre_p, NULL, &OMP_STANDALONE_CLAUSES (expr),
 			       TREE_CODE (expr));
+  if (TREE_CODE (expr) == OACC_UPDATE
+      && omp_find_clause (OMP_STANDALONE_CLAUSES (expr),
+			  OMP_CLAUSE_IF_PRESENT))
+    {
+      /* The runtime uses GOMP_MAP_{TO,FROM} to denote the if_present
+	 clause.  */
+      for (tree c = OMP_STANDALONE_CLAUSES (expr); c; c = OMP_CLAUSE_CHAIN (c))
+	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP)
+	  switch (OMP_CLAUSE_MAP_KIND (c))
+	    {
+	    case GOMP_MAP_FORCE_TO:
+	      OMP_CLAUSE_SET_MAP_KIND (c, GOMP_MAP_TO);
+	      break;
+	    case GOMP_MAP_FORCE_FROM:
+	      OMP_CLAUSE_SET_MAP_KIND (c, GOMP_MAP_FROM);
+	      break;
+	    default:
+	      break;
+	    }
+    }
+  else if (TREE_CODE (expr) == OACC_EXIT_DATA
+	   && omp_find_clause (OMP_STANDALONE_CLAUSES (expr),
+			       OMP_CLAUSE_FINALIZE))
+    {
+      /* Use GOMP_MAP_DELETE/GOMP_MAP_FORCE_FROM to denote that "finalize"
+	 semantics apply to all mappings of this OpenACC directive.  */
+      bool finalize_marked = false;
+      for (tree c = OMP_STANDALONE_CLAUSES (expr); c; c = OMP_CLAUSE_CHAIN (c))
+	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP)
+	  switch (OMP_CLAUSE_MAP_KIND (c))
+	    {
+	    case GOMP_MAP_FROM:
+	      OMP_CLAUSE_SET_MAP_KIND (c, GOMP_MAP_FORCE_FROM);
+	      finalize_marked = true;
+	      break;
+	    case GOMP_MAP_RELEASE:
+	      OMP_CLAUSE_SET_MAP_KIND (c, GOMP_MAP_DELETE);
+	      finalize_marked = true;
+	      break;
+	    default:
+	      /* Check consistency: libgomp relies on the very first data
+		 mapping clause being marked, so make sure we did that before
+		 any other mapping clauses.  */
+	      gcc_assert (finalize_marked);
+	      break;
+	    }
+    }
   stmt = gimple_build_omp_target (NULL, kind, OMP_STANDALONE_CLAUSES (expr));
 
   gimplify_seq_add_stmt (pre_p, stmt);

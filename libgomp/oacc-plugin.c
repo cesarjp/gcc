@@ -30,17 +30,6 @@
 #include "oacc-plugin.h"
 #include "oacc-int.h"
 
-void
-GOMP_PLUGIN_async_unmap_vars (void *ptr, int async)
-{
-  struct target_mem_desc *tgt = ptr;
-  struct gomp_device_descr *devicep = tgt->device_descr;
-
-  devicep->openacc.async_set_async_func (async);
-  gomp_unmap_vars (tgt, true);
-  devicep->openacc.async_set_async_func (acc_async_sync);
-}
-
 /* Return the target-specific part of the TLS data for the current thread.  */
 
 void *
@@ -48,4 +37,26 @@ GOMP_PLUGIN_acc_thread (void)
 {
   struct goacc_thread *thr = goacc_thread ();
   return thr ? thr->target_tls : NULL;
+}
+
+/* Return the TLS data for the current thread.  */
+/* TODO.  Should we be able to directly call (the static inline function)
+   goacc_thread from within plugin code?  I didn't manage to get the
+   "goacc_tls_data" symbol configured correctly: "[...]/ld:
+   .libs/libgomp-plugin-nvptx.so.1.0.0: hidden symbol `goacc_tls_data' isn't
+   defined".  */
+
+struct goacc_thread *
+GOMP_PLUGIN_goacc_thread (void)
+{
+  return goacc_thread ();
+}
+
+/* Return the default async number from the TLS data for the current thread.  */
+
+int
+GOMP_PLUGIN_acc_thread_default_async (void)
+{
+  struct goacc_thread *thr = goacc_thread ();
+  return thr ? thr->default_async : acc_async_default;
 }

@@ -1290,8 +1290,13 @@ convert_nonlocal_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	case OMP_CLAUSE_SEQ:
 	case OMP_CLAUSE_INDEPENDENT:
 	case OMP_CLAUSE_AUTO:
+	case OMP_CLAUSE_IF_PRESENT:
+	case OMP_CLAUSE_FINALIZE:
 	  break;
 
+	  /* OpenACC bind and nohost clauses are not yet handled here.  */
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
 	  /* The following clause belongs to the OpenACC cache directive, which
 	     is discarded during gimplification.  */
 	case OMP_CLAUSE__CACHE_:
@@ -1312,6 +1317,8 @@ convert_nonlocal_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	case OMP_CLAUSE__LOOPTEMP_:
 	case OMP_CLAUSE__SIMDUID_:
 	case OMP_CLAUSE__GRIDDIM_:
+	  /* OpenACC device_type clauses are not yet handled here.  */
+	case OMP_CLAUSE_DEVICE_TYPE:
 	  /* Anything else.  */
 	default:
 	  gcc_unreachable ();
@@ -1996,8 +2003,13 @@ convert_local_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	case OMP_CLAUSE_SEQ:
 	case OMP_CLAUSE_INDEPENDENT:
 	case OMP_CLAUSE_AUTO:
+	case OMP_CLAUSE_IF_PRESENT:
+	case OMP_CLAUSE_FINALIZE:
 	  break;
 
+	  /* OpenACC bind and nohost clauses are not yet handled here.  */
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
 	  /* The following clause belongs to the OpenACC cache directive, which
 	     is discarded during gimplification.  */
 	case OMP_CLAUSE__CACHE_:
@@ -2018,6 +2030,8 @@ convert_local_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	case OMP_CLAUSE__LOOPTEMP_:
 	case OMP_CLAUSE__SIMDUID_:
 	case OMP_CLAUSE__GRIDDIM_:
+	  /* OpenACC device_type clauses are not yet handled here.  */
+	case OMP_CLAUSE_DEVICE_TYPE:
 	  /* Anything else.  */
 	default:
 	  gcc_unreachable ();

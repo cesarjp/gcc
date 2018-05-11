@@ -27,7 +27,11 @@
 #ifndef OACC_PLUGIN_H
 #define OACC_PLUGIN_H 1
 
+#include "oacc-int.h"
+
 extern void GOMP_PLUGIN_async_unmap_vars (void *, int);
 extern void *GOMP_PLUGIN_acc_thread (void);
+extern struct goacc_thread *GOMP_PLUGIN_goacc_thread (void);
+extern int GOMP_PLUGIN_acc_thread_default_async (void);
 
 #endif

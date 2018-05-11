@@ -3,6 +3,7 @@
 
 program main
   implicit none
+  !$acc routine(abort) seq
 
   print *, "CheCKpOInT"
   !$acc parallel

@@ -1,0 +1,243 @@
+2016-10-03  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* openmp.c (resolve_oacc_positive_int_expr):Promote the
+          warning to an error.
+
+2016-09-15  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* openmp.c (gfc_match_omp_map_clause): Add new common_blocks argument.
+	Propagate it to gfc_match_omp_variable_list.
+	(gfc_match_omp_clauses): Update calls to gfc_match_omp_map_clauses.
+
+2016-08-29  Cesar Philippidis  <cesar@codesourcery.com>
+
+	PR fortran/72715
+	* openmp.c (resolve_oacc_nested_loops): Error on do concurrent loops.
+
+2016-08-26  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.h (enum oacc_function): Make OACC_FUNCTION_SEQ the last
+	entry the enum.
+	(gfc_oacc_routine_name): Add a loc member.
+	(gfc_resolve_oacc_routine_call): Declare.
+	(gfc_resolve_oacc_routines): Declare.
+	* openmp.c (gfc_match_oacc_routine): Make error reporting more
+	precise.  Defer rejection of non-function and subroutine symbols
+	until gfc_resolve_oacc_routines.
+	(struct fortran_omp_context): Add a dims member.
+	(gfc_resolve_oacc_blocks): Update ctx->dims.
+	(gfc_resolve_oacc_routine_call): New function.
+	(gfc_resolve_oacc_routines): New function.
+	* resolve.c (resolve_function): Call gfc_resolve_oacc_routine_call.
+	(resolve_call): Likewise.
+	(resolve_codes): Call gfc_resolve_oacc_routines.
+
+2016-08-16  Cesar Philippidis  <cesar@codesourcery.com>
+
+	PR fortran/72741
+	* openmp.c (gfc_match_oacc_routine): Error on repeated ACC ROUTINE
+	directives.  Consider the optional NAME argument being the current
+	procedure name.
+	* trans-decl.c (add_attributes_to_decl): Use build_oacc_routine_dims
+	to construct the oacc_function attribute arguments.
+
+2016-08-12  Cesar Philippidis  <cesar@codesourcery.com>
+	    Thomas Schwinge  <thomas@codesourcery.com>
+
+	PR fortran/72741
+	* openmp.c (gfc_match_oacc_routine): Check clauses of intrinsic
+	functions.
+
+2016-07-28  Cesar Philippidis  <cesar@codesourcery.com>
+
+	PR fortran/72741
+	* openmp.c (gfc_oacc_routine_dims): Move gfc_error to
+	gfc_match_oacc_routine.  Return OACC_FUNCTION_NONE on error.
+	(gfc_match_oacc_routine): Call gfc_oacc_routine_dims for all
+	routines directives.  Propagate error as appropriate.
+
+2016-07-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.h (enum oacc_function): Define.
+	(oacc_function_type): Declare.
+	(symbol_attribute): Change the type of oacc_function from unsigned
+	to an ENUM_BITFIELD.
+	* module.c (oacc_function): New DECL_MIO_NAME.
+	(mio_symbol_attribute): Set the oacc_function attribute.
+	* openmp.c (gfc_oacc_routine_dims): Change the return type from
+	int to oacc_function.
+	(gfc_match_oacc_routine): Handle intrinsic procedures.
+	* symbol.c (oacc_function_types): Define.
+	* trans-decl.c (add_attributes_to_decl): Update to handle the
+	retyped oacc_function attribute.
+
+2015-12-08  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* gfortran.h (symbol_attribute): Add oacc_function_nohost member.
+	* openmp.c (gfc_match_oacc_routine): Set it.
+	* trans-decl.c (add_attributes_to_decl): Use it to decide whether
+	to generate an OMP_CLAUSE_NOHOST clause.
+	* trans-openmp.c (gfc_trans_omp_clauses_1): Unreachable code to
+	generate an OMP_CLAUSE_NOHOST clause.
+
+2015-10-28  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-openmp.c (gfc_filter_oacc_combined_clauses): Don't zero-
+	initialize loop_clauses when it's already initialized.
+
+2016-05-09  Cesar Philippidis  <cesar@codesourcery.com>
+
+	Backport trunk r235651:
+	2016-04-29  Cesar Philippidis  <cesar@codesourcery.com>
+
+	PR middle-end/70626
+	* trans-openmp.c (gfc_trans_oacc_combined_directive): Duplicate
+	the reduction clause in both parallel and loop directives.
+
+2015-10-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.h (gfc_omp_namelist): Add locus where member.
+	* openmp.c (gfc_free_omp_clauses): Recursively deallocate device_type
+	clauses.
+	(gfc_match_omp_variable_list): New function.
+	(resolve_omp_clauses): Remove where argument and use the where
+	gfc_omp_namespace member when reporting errors.  Use
+	resolve_omp_duplicate_list to check for variables appearing in
+	mulitple clauses.
+	(gfc_match_omp_clauses): Update call to resolve_omp_clauses.
+	(gfc_match_oacc_declare): Likewise.
+	(resolve_omp_do): Likewise.
+	(resolve_oacc_loop): Likewise.
+	(gfc_resolve_oacc_directive): Likewise.
+	(gfc_resolve_omp_directive): Likewise.
+	(gfc_resolve_omp_declare_simd): Likewise.
+	(resolve_oacc_declare_map): New function.
+	(gfc_resolve_oacc_declare): Use it.
+	* trans-openmp.c (gfc_filter_oacc_combined_clauses): New function.
+	(gfc_trans_oacc_combined_directive): Use it.
+
+2015-07-17  Julian Brown  <julian@codesourcery.com>
+
+	* trans-openmp.c (gfc_trans_omp_clauses): Add NULL check for
+	clauses.
+
+2015-07-17  Julian Brown  <julian@codesourcery.com>
+
+	* gfortran.h (gfc_omp_clauses): Change "dtype" int field to
+	"device_types" gfc_expr_list.
+	* openmp.c (gfc_match_omp_clauses): Remove scan_dtype variable (add
+	OMP_CLAUSE_DEVICE_TYPE directly to appropriate bitmasks). Parse all
+	device_type clauses without filtering.
+	(OACC_LOOP_CLAUSE_DEVICE_TYPE_MASK)
+	(OACC_KERNELS_CLAUSE_DEVICE_TYPE_MASK)
+	(OACC_PARALLEL_CLAUSE_DEVICE_TYPE_MASK)
+	(OACC_ROUTINE_CLAUSE_DEVICE_TYPE_MASK)
+	(OACC_UPDATE_CLAUSE_DEVICE_TYPE_MASK): Add OMP_CLAUSE_DEVICE_TYPE.
+	* trans-openmp.c (gfc_trans_omp_clauses): Translate device_type
+	clauses, and split old body into...
+	(gfc_trans_omp_clauses_1): New function.
+
+2015-06-12  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* openmp.c (gfc_match_omp_clauses): Report errors on duplicate
+	device_type entries.
+
+2015-05-11  Thomas Schwinge  <thomas@codesourcery.com>
+	    Bernd Schmidt  <bernds@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+	    Chung-Lin Tang  <cltang@codesourcery.com>
+	    James Norris  <jnorris@codesourcery.com>
+	    Joseph Myers  <joseph@codesourcery.com>
+	    Julian Brown  <julian@codesourcery.com>
+	    Tom de Vries  <tom@codesourcery.com>
+
+	* dump-parse-tree.c (show_namespace): Rewrite handling of OpenACC
+	declare.
+	* gfortran.h (gfc_statement): Add ST_OACC_ATOMIC,
+	ST_OACC_END_ATOMIC.
+	(gfc_omp_clauses): Add routine_bind, dtype, dtype_clauses, nohost,
+	acc_collapse, bind, num_gangs, num_workers, vector_length, tile
+	members.
+	(gfc_oacc_declare, gfc_oacc_routine_name): New typedefs.
+	(gfc_get_oacc_declare, gfc_get_oacc_routine_name): New macros.
+	(gfc_namespace): Add oacc_declare, oacc_routine_clauses,
+	oacc_routine_names, oacc_routine members, remove
+	oacc_declare_clauses member.
+	(gfc_exec_op): Add EXEC_OACC_ROUTINE, EXEC_OACC_ATOMIC,
+	EXEC_OACC_DECLARE.
+	(gfc_code): Add oacc_declare member.
+	(gfc_free_oacc_declares, insert_oacc_declare): New prototypes.
+	* match.h (gfc_match_oacc_atomic): New prototype.
+	* openmp.c (OMP_CLAUSE_HOST_SELF): Rename to...
+	(OMP_CLAUSE_HOST): ... this.  Adjust all users.
+	(OMP_CLAUSE_BIND, OMP_CLAUSE_NOHOST, OMP_CLAUSE_DEVICE_TYPE): New
+	macros.
+	(gfc_free_oacc_declares): New function.
+	(gfc_match_omp_map_clause): Add allow_sections formal parameter.
+	Adjust all users.
+	(gfc_match_omp_clauses): Add dtype_mask formal parameter.  Adjust
+	all users.  Change handling of OMP_CLAUSE_VECTOR_LENGTH,
+	OMP_CLAUSE_NUM_GANGS, OMP_CLAUSE_NUM_WORKERS, OMP_CLAUSE_TILE,
+	OMP_CLAUSE_DEFAULT, OMP_CLAUSE_COLLAPSE.  Handle OMP_CLAUSE_BIND,
+	OMP_CLAUSE_NOHOST, OMP_CLAUSE_DEVICE_TYPE.
+	(OACC_PARALLEL_CLAUSES, OACC_KERNELS_CLAUSES, OACC_LOOP_CLAUSES)
+	(OACC_UPDATE_CLAUSES): Add OMP_CLAUSE_DEVICE_TYPE.
+	(OACC_ROUTINE_CLAUSES, OACC_LOOP_CLAUSE_DEVICE_TYPE_MASK)
+	(OACC_KERNELS_CLAUSE_DEVICE_TYPE_MASK)
+	(OACC_PARALLEL_CLAUSE_DEVICE_TYPE_MASK)
+	(OACC_ROUTINE_CLAUSE_DEVICE_TYPE_MASK)
+	(OACC_UPDATE_CLAUSE_DEVICE_TYPE_MASK): New macros.
+	(gfc_match_oacc_declare, gfc_match_oacc_routine): Rewrite
+	functions.
+	(gfc_match_oacc_update): Add error reporting.
+	(gfc_match_omp_atomic, gfc_match_oacc_atomic): New wrapper
+	functions around...
+	(gfc_match_omp_oacc_atomic): ... this new function.
+	(check_array_not_assumed): Remove pointer check.
+	(oacc_code_to_statement): Handle EXEC_OACC_ATOMIC.
+	(resolve_oacc_loop_blocks): Don't error out for combined OpenACC
+	gang, worker, and vector clauses.
+	(resolve_oacc_cache): Remove function.
+	(gfc_resolve_oacc_declare): Rewrite function.
+	(gfc_resolve_oacc_directive): Handle EXEC_OACC_ATOMIC.  Don't
+	handle EXEC_OACC_CACHE.
+	* parse.c (decode_oacc_directive): Handle "atomic", "end atomic".
+	(case_exec_markers): Add ST_OACC_ATOMIC.
+	(case_decl): Add ST_OACC_DECLARE.
+	(gfc_ascii_statement): Handle ST_OACC_ATOMIC, ST_OACC_END_ATOMIC.
+	(verify_st_order, parse_spec): Remove handling of ST_OACC_DECLARE.
+	(parse_omp_atomic): Rename to...
+	(parse_omp_oacc_atomic): ... this new function.  Add omp_p formal
+	parameter.  Adjust all users.
+	(parse_executable): Handle ST_OACC_ATOMIC.
+	(parse_progunit): Remove handling of OpenACC declare.
+	(is_oacc): Handle EXEC_OACC_ROUTINE.
+	* parse.h (gfc_state_data): Add ext.oacc_declare member.  Remove
+	ext.oacc_declare_clauses member.
+	* resolve.c (gfc_resolve_blocks): Handle EXEC_OACC_ATOMIC,
+	EXEC_OACC_ROUTINE, EXEC_OACC_DECLARE.
+	(gfc_resolve_code): Handle EXEC_OACC_ATOMIC, EXEC_OACC_DECLARE.
+	* st.c (gfc_free_statement): Handle EXEC_OACC_DECLARE,
+	EXEC_OACC_ROUTINE, EXEC_OACC_ATOMIC.
+	* trans-decl.c (find_end, insert_oacc_declare): New functions.
+	(gfc_generate_function_code): Change handling of OpenACC declare.
+	* trans-openmp.c (gfc_omp_clause_copy_ctor): Handle
+	OMP_CLAUSE_REDUCTION.
+	(gfc_trans_omp_clauses): Add appropriate, generate OMP_CLAUSE_SEQ
+	(instead of OMP_CLAUSE_ORDERED), OMP_CLAUSE_AUTO, or
+	OMP_CLAUSE_TILE.
+	(gfc_trans_oacc_combined_directive): Don't set
+	OACC_KERNELS_COMBINED, and OACC_PARALLEL_COMBINED.
+	(gfc_trans_oacc_declare): Rewrite function.
+	(gfc_trans_oacc_directive): Handle EXEC_OACC_ATOMIC,
+	EXEC_OACC_DECLARE.
+	* trans-stmt.c (gfc_trans_block_construct): Change handling of
+	OpenACC declare.
+	* trans.c (trans_code): Handle EXEC_OACC_ATOMIC,
+	EXEC_OACC_DECLARE.
+
+Copyright (C) 2015-2018 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

@@ -88,6 +88,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "trans-types.h"
 #include "trans-array.h"
 #include "trans-const.h"
+#include "trans-stmt.h"
 #include "dependency.h"
 
 static bool gfc_get_array_constructor_size (mpz_t *, gfc_constructor_base);
@@ -5666,6 +5667,7 @@ gfc_array_allocate (gfc_se * se, gfc_expr * expr, tree status, tree errmsg,
   gfc_ref *ref, *prev_ref = NULL, *coref;
   bool allocatable, coarray, dimension, alloc_w_e3_arr_spec = false,
       non_ulimate_coarray_ptr_comp;
+  bool oacc_declare = false;
 
   ref = expr->ref;
 
@@ -5680,6 +5682,7 @@ gfc_array_allocate (gfc_se * se, gfc_expr * expr, tree status, tree errmsg,
       allocatable = expr->symtree->n.sym->attr.allocatable;
       dimension = expr->symtree->n.sym->attr.dimension;
       non_ulimate_coarray_ptr_comp = false;
+      oacc_declare = expr->symtree->n.sym->attr.oacc_declare_create;
     }
   else
     {
@@ -5841,7 +5844,12 @@ gfc_array_allocate (gfc_se * se, gfc_expr * expr, tree status, tree errmsg,
 
   /* Update the array descriptors.  */
   if (dimension)
-    gfc_conv_descriptor_offset_set (&set_descriptor_block, se->expr, offset);
+    {
+      gfc_conv_descriptor_offset_set (&set_descriptor_block, se->expr, offset);
+
+      if (oacc_declare)
+	gfc_trans_oacc_declare_allocate (&set_descriptor_block, expr, true);
+    }
 
   /* Pointer arrays need the span field to be set.  */
   if (is_pointer_array (se->expr)
@@ -6043,9 +6051,9 @@ gfc_trans_array_cobounds (tree type, stmtblock_t * pblock,
 /* Generate code to evaluate non-constant array bounds.  Sets *poffset and
    returns the size (in elements) of the array.  */
 
-static tree
+tree
 gfc_trans_array_bounds (tree type, gfc_symbol * sym, tree * poffset,
-                        stmtblock_t * pblock)
+                        stmtblock_t * pblock, bool init_vla)
 {
   gfc_array_spec *as;
   tree size;
@@ -6122,7 +6130,9 @@ gfc_trans_array_bounds (tree type, gfc_symbol * sym, tree * poffset,
     }
 
   gfc_trans_array_cobounds (type, pblock, sym);
-  gfc_trans_vla_type_sizes (sym, pblock);
+
+  if (init_vla)
+    gfc_trans_vla_type_sizes (sym, pblock);
 
   *poffset = offset;
   return size;
@@ -6186,7 +6196,7 @@ gfc_trans_auto_array_allocation (tree decl, gfc_symbol * sym,
       && !INTEGER_CST_P (sym->ts.u.cl->backend_decl))
     gfc_conv_string_length (sym->ts.u.cl, NULL, &init);
 
-  size = gfc_trans_array_bounds (type, sym, &offset, &init);
+  size = gfc_trans_array_bounds (type, sym, &offset, &init, true);
 
   /* Don't actually allocate space for Cray Pointees.  */
   if (sym->attr.cray_pointee)
@@ -6281,7 +6291,7 @@ gfc_trans_g77_array (gfc_symbol * sym, gfc_wrapped_block * block)
     gfc_conv_string_length (sym->ts.u.cl, NULL, &init);
 
   /* Evaluate the bounds of the array.  */
-  gfc_trans_array_bounds (type, sym, &offset, &init);
+  gfc_trans_array_bounds (type, sym, &offset, &init, true);
 
   /* Set the offset.  */
   if (VAR_P (GFC_TYPE_ARRAY_OFFSET (type)))

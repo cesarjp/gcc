@@ -402,6 +402,8 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
 	default:
 	  break;
 	}
+      append_option (OPT_Xoffload, "-lm", 1);
+      append_option (OPT_Xoffload, "-lgfortran", 1);
     }
 
 #ifdef ENABLE_SHARED_LIBGCC
@@ -439,7 +441,7 @@ int
 lang_specific_pre_link (void)
 {
   if (library)
-    do_spec ("%:include(libgfortran.spec)");
+    do_spec ("%:include(libgfortran.spec)", 0);
 
   return 0;
 }

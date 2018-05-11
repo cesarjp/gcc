@@ -1,0 +1,253 @@
+2018-05-07  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-openmp.c (gfc_omp_finish_clause): Don't create pointer data
+	mappings for deviceptr clauses.
+	(gfc_trans_omp_clauses_1): Likewise.
+
+2017-12-21  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* types.def: (BF_FN_VOID_INT_INT_OMPFN_SIZE_PTR_PTR_PTR_VAR):
+	Define.
+
+2017-10-11  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* openmp.c (match_acc): Add new argument derived_types. Propagate
+	it to gfc_match_omp_clauses.
+	(gfc_match_oacc_enter_data): Update call to match_acc.
+	(gfc_match_oacc_exit_data): Likewise.
+
+2017-07-25  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* trans-openmp.c (gfc_trans_omp_clauses_1): Add representation of wait
+	clause without argument as 'wait (GOMP_ASYNC_NOVAL)'.
+
+2017-06-08  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.h gfc_omp_clauses: Add update_allocatable.
+	* trans-openmp.c (gfc_trans_omp_clauses_1): Set update_allocatable bit
+	in clauses.  Remove GOMP_MAP_FIRSTPRIVATE_POINTER data map promotions
+	for acc update.
+	(gfc_trans_oacc_executable_directive): Use GOMP_MAP_ALWAYS_POINTER
+	for allocatable scalar data clauses inside acc update directives.
+
+2017-05-17  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* openmp.c (gfc_match_omp_clauses) <OMP_CLAUSE_DELETE>: Use
+	"OMP_MAP_RELEASE".
+
+2017-05-16  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* gfortran.h (struct gfc_omp_clauses): Add 'finalize:1' bitfield.
+	* openmp.c (enum omp_mask2): Add OMP_CLAUSE_FINALIZE.
+	(gfc_match_omp_clauses): Handle 'finalize' clause.
+	(OACC_EXIT_DATA_CLAUSES): Add OMP_CLAUSE_FINALIZE.
+	* trans-openmp.c (gfc_trans_omp_clauses_1): Handle finalize bit.
+
+2017-05-15  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* cpp.c (cpp_define_builtins): Update "_OPENACC" to "201510".
+	* gfortran.texi: Update for OpenACC 2.5.
+	* Intrinsic.texi: Likewise.
+	* invoke.texi: Likewise.
+
+2017-05-04  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.h (gfc_omp_clauses): Add if_present member.
+	* openmp.c (enum omp_mask2): Add OMP_CLAUSE_IF_PRESENT.
+	(gfc_match_omp_clauses): Handle it.
+	(OACC_UPDATE_CLAUSES): Add OMP_CLAUSE_IF_PRESENT.
+	* trans-openmp.c (gfc_trans_omp_clauses_1): Generate an omp clause for
+	if_present.
+
+2017-05-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* openmp.c (resolve_oacc_loop_blocks): Emit an error on orphan
+	OpenACC gang reductions.
+
+2017-05-01  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.h (enum oacc_function): Add OACC_FUNCTION_AUTO.
+	* openmp.c (gfc_oacc_routine_dims): Return OACC_FUNCTION_AUTO when no
+	parallelism was detected.
+	(gfc_match_oacc_routine): Emit a warning when the user doesn't
+	supply a gang, worker, vector or seq clause to an OpenACC routine
+	construct.
+
+2017-04-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* openmp.c (gfc_match_oacc_routine): Don't match OpenACC routines
+	when the current function failed to parse due to a syntax error.
+
+2017-04-19  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-decl.c (add_clause): Populate sym->backend_decl so that it
+	can be used to determine if two symbols are unique.
+	* trans-openmp.c (gfc_trans_oacc_executable_directive): Use
+	GOMP_MAP_ALWAYS_POINTER for fortran allocatable pointers.
+	* trans-stmt.c (gfc_trans_allocate): Call
+	gfc_trans_oacc_declare_allocate for declared allocatable pointers.
+	(gfc_trans_deallocate): Likewise.
+
+2017-04-13  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	* openmp.c (enum omp_mask2):
+	Remove OMP_CLAUSE_PRESENT_OR_COPY/COPYIN/COPYOUT/CREATE.
+	(gfc_match_omp_clauses): Remove FORCE flag from OpenACC OMP_MAP_* cases,
+	adjust and remove PRESENT_OR_ values.
+	(OACC_PARALLEL_CLAUSES): Remove OMP_CLAUSE_PRESENT_OR_*.
+	(OACC_KERNELS_CLAUSES): Likewise.
+	(OACC_DATA_CLAUSES): Likewise.
+	(OACC_DECLARE_CLAUSES): Likewise.
+	(OACC_ENTER_DATA_CLAUSES): Likewise.
+
+2017-07-12  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* trans-stmt.c (gfc_trans_deallocate): Call
+	gfc_trans_oacc_declare_allocate for decls with oacc_declare_create
+	attributes set.
+
+2017-04-05  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.h (enum gfc_omp_map_op): Add OMP_MAP_DECLARE_ALLOCATE,
+	OMP_MAP_DECLARE_DEALLOCATE.
+	* openmp.c (gfc_match_oacc_declare): Add support for OMP_MAP_ALLOC and
+	OMP_MAP_TO, as those match the OpenACC 2.5 semantics.
+	* trans-array.c (gfc_array_allocate): Call
+	gfc_trans_oacc_declare_allocate for decls with oacc_declare_create
+	attributes set.
+	* trans-decl.c (add_attributes_to_decl): Enable lowering of OpenACC
+	declared create, copyin and deviceptr clauses.
+	(add_clause): Don't duplicate OpenACC declare clauses.
+	(find_module_oacc_declare_clauses): Relax oacc_declare_create to
+	OMP_MAP_ALLOC, and oacc_declare_copying to OMP_MAP_TO.  This matches
+	the OpenACC 2.5 semantics.
+	* trans-openmp.c (gfc_trans_omp_clauses_1): Handle
+	OMP_MAP_DECLARE_{ALLOCATE,DEALLOCATE}.
+	(gfc_trans_oacc_declare_allocate): New function.
+	* trans-stmt.h: Declare gfc_trans_oacc_declare_allocate.
+
+2017-03-31  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.h (struct gfc_omp_clauses): Add bind_name member.
+	* match.c (gfc_match_call_name): New function.
+	(gfc_match_call): Break out function name parsing to
+	gfc_match_call_name.  Call it.
+	* match.h (gfc_match_call_named): Declare.
+	* openmp.c (gfc_match_oacc_bind_clause): New function.
+	(gfc_match_omp_clauses): Call it to parse the bind clause.
+	* trans-openmp.c (gfc_trans_omp_clauses_1): Lower OMP_CLAUSE_BIND.
+
+	* trans-openmp.c (gfc_trans_omp_clauses_1): Update handling of
+	subarrays with derived types elements.
+
+2017-03-14  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-stmt.h: Remove stale reference to trans-openacc.c.
+
+2017-02-22  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-openmp.c (gfc_trans_oacc_combined_directive): Set the
+	location of combined acc loops.
+
+2017-02-02  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-openmp.c (gfc_omp_finish_clause): Don't emit
+	GOMP_MAP_FIRSTPRIVATE_POINTER for pointers to reference types.
+	(gfc_trans_omp_clauses_1): Likewise.
+
+2017-01-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-openmp.c (gfc_omp_finish_clause): Use GOMP_MAP_POINTER
+	for POINTER_TYPE decls.
+	(gfc_trans_omp_clauses_1): Likewise.
+
+2017-01-27  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* openmp.c (gfc_resolve_oacc_blocks): Populate list of private
+	variables.
+
+2016-11-10  Cesar Philippidis  <cesar@codesourcery.com>
+	    Thomas Schwinge  <thomas@codesourcery.com>
+
+	* openmp.c (gfc_match_omp_variable_list): New allow_derived argument.
+	(gfc_match_omp_map_clause): Update call to
+	gfc_match_omp_variable_list.
+	(gfc_match_omp_clauses): Update calls to gfc_match_omp_map_clause.
+	(gfc_match_oacc_update): Update call to gfc_match_omp_clauses.
+	(resolve_omp_clauses): Permit derived type variables in ACC UPDATE
+	clauses.
+	* trans-openmp.c (gfc_trans_omp_clauses_1): Lower derived type
+	members.
+
+2015-11-27  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* trans-decl.c (add_attributes_to_decl): Identify some presumed
+	TODOs.
+
+2015-10-13  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-array.c (gfc_trans_array_bounds): Add an INIT_VLA argument
+	to control whether VLAs should be initialized.  Don't mark this
+	function as static.
+	(gfc_trans_auto_array_allocation): Update call to
+	gfc_trans_array_bounds.
+	(gfc_trans_g77_array): Likewise.
+	* trans-array.h: Declare gfc_trans_array_bounds.
+	* trans-openmp.c (gfc_scan_nodesc_arrays): New function.
+	(gfc_privatize_nodesc_arrays_1): New function.
+	(gfc_privatize_nodesc_arrays): New function.
+	(gfc_init_nodesc_arrays): New function.
+	(gfc_trans_oacc_construct): Initialize any internal variables for
+	arrays without array descriptors inside the offloaded parallel and
+	kernels region.
+	(gfc_trans_oacc_combined_directive): Likewise.
+
+2015-10-01  Cesar Philippidis  <cesar@codesourcery.com>
+	    Thomas Schwinge  <thomas@codesourcery.com>
+
+	* dump-parse-tree.c (show_omp_clauses): Add missing omp list_types
+	and reorder the switch cases to match the enum in gfortran.h.
+
+2015-09-29  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-openmp.c (gfc_omp_finish_clause): Don't cast ptr into
+	a character pointer.
+	(gfc_trans_omp_clauses_1): Likewise.
+
+2015-08-20  Joseph Myers  <joseph@codesourcery.com>
+
+	* gfortranspec.c (lang_specific_pre_link): Update call to do_spec.
+
+2015-12-09  James Norris  <jnorris@codesourcery.com>
+
+	* openmp.c (gfc_match_omp_clauses): Re-write handling of the
+	deviceptr clause.
+
+2015-06-08  James Norris  <jnorris@codesourcery.com>
+
+	* openmp.c (gfc_match_oacc_declare): Add handling of
+	device_resident and link clauses.
+
+2015-05-13  Bernd Schmidt  <bernds@codesourcery.com>
+
+	* gfortranspec.c (lang_specific_driver): Add -Xoffload options to
+	link -lm and -lgfortran.
+
+2015-05-11  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* trans-openmp.c (gfc_omp_clause_copy_ctor): Permit reductions.
+
+2015-05-11  James Norris  <jnorris@codesourcery.com>
+
+	* openmp.c (check_array_not_assumed): Remove pointer check.
+
+2015-05-11  Cesar Philippidis  <cesar@codesourcery.com>
+
+	* gfortran.h (gfc_omp_clauses): Add acc_collapse member.
+	* openmp.c (gfc_match_omp_clauses): Handle it.
+
+Copyright (C) 2015-2018 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

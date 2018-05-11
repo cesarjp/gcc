@@ -88,7 +88,7 @@ vec<tree, va_gc> *offload_funcs, *offload_vars;
 /* Return level at which oacc routine may spawn a partitioned loop, or
    -1 if it is not a routine (i.e. is an offload fn).  */
 
-static int
+int
 oacc_fn_attrib_level (tree attr)
 {
   tree pos = TREE_VALUE (attr);
@@ -335,7 +335,12 @@ oacc_xform_loop (gcall *call)
        -> chunks=ceil (range/(chunksize*threads*step))
      striding=false,chunking=false
        -> chunk_size=ceil(range/(threads*step)),chunks=1  */
-  push_gimplify_context (true);
+
+  /* If seen_error (), we may introduce an uninitialized var due to
+     gimplification bailing out.  If we gimplify in ssa mode, that will cause an
+     ICE.  If we gimplify in non-ssa mode, then ssa updating will turn it into a
+     default definition, and we avoid the ICE.  */
+  push_gimplify_context (!seen_error ());
 
   switch (code)
     {
@@ -573,9 +578,17 @@ oacc_xform_tile (gcall *call)
 static int oacc_default_dims[GOMP_DIM_MAX];
 static int oacc_min_dims[GOMP_DIM_MAX];
 
+int
+oacc_get_default_dim (int dim)
+{
+  gcc_assert (0 <= dim && dim < GOMP_DIM_MAX);
+  return oacc_default_dims[dim];
+}
+
 /* Parse the default dimension parameter.  This is a set of
-   :-separated optional compute dimensions.  Each specified dimension
-   is a positive integer.  When device type support is added, it is
+   :-separated optional compute dimensions.  Each dimension is either
+   a positive integer, or '-' for a dynamic value computed at
+   runtime.  When device type support is added, it is
    planned to be a comma separated list of such compute dimensions,
    with all but the first prefixed by the colon-terminated device
    type.  */
@@ -610,14 +623,20 @@ oacc_parse_default_dims (const char *dims)
 
 	  if (*pos != ':')
 	    {
-	      long val;
-	      const char *eptr;
+	      long val = 0;
 
-	      errno = 0;
-	      val = strtol (pos, CONST_CAST (char **, &eptr), 10);
-	      if (errno || val <= 0 || (int) val != val)
-		goto malformed;
-	      pos = eptr;
+	      if (*pos == '-')
+		pos++;
+	      else
+		{
+		  const char *eptr;
+
+		  errno = 0;
+		  val = strtol (pos, CONST_CAST (char **, &eptr), 10);
+		  if (errno || val <= 0 || (int) val != val)
+		    goto malformed;
+		  pos = eptr;
+		}
 	      oacc_default_dims[ix] = (int) val;
 	    }
 	}
@@ -657,6 +676,37 @@ oacc_validate_dims (tree fn, tree attrs, int *dims, int level, unsigned used)
       tree val = TREE_VALUE (pos);
       dims[ix] = val ? TREE_INT_CST_LOW (val) : -1;
       pos = TREE_CHAIN (pos);
+    }
+
+  bool check = true;
+#ifdef ACCEL_COMPILER
+  /* When device_type is implemented, we should also check on the
+     target, if device_type has been used to affect the partitioning
+     and/or dimensions.  */
+  check = false;
+#endif
+  if (check
+      && !lookup_attribute ("oacc kernels", DECL_ATTRIBUTES (fn)))
+    {
+      static char const *const axes[] =
+      /* Must be kept in sync with GOMP_DIM enumeration.  */
+	{"gang", "worker", "vector" };
+      for (ix = level >= 0 ? level : 0; ix != GOMP_DIM_MAX; ix++)
+	if (dims[ix] < 0)
+	  ; /* Defaulting axis.  */
+	else if ((used & GOMP_DIM_MASK (ix)) && dims[ix] == 1)
+	  /* There is partitioned execution, but the user requested a
+	     dimension size of 1.  They're probably confused.  */
+	  warning_at (DECL_SOURCE_LOCATION (fn), 0,
+		      "region contains %s partitoned code but"
+		      " is not %s partitioned", axes[ix], axes[ix]);
+	else if (!(used & GOMP_DIM_MASK (ix)) && dims[ix] != 1)
+	  /* The dimension is explicitly partitioned to non-unity, but
+	     no use is made within the region.  */
+	  warning_at (DECL_SOURCE_LOCATION (fn), 0,
+		      "region is %s partitioned but"
+		      " does not contain %s partitioned code",
+		      axes[ix], axes[ix]);
     }
 
   bool changed = targetm.goacc.validate_dims (fn, dims, level);
@@ -864,6 +914,30 @@ DEBUG_FUNCTION void
 debug_oacc_loop (oacc_loop *loop)
 {
   dump_oacc_loop (stderr, loop, 0);
+}
+
+/* Provide diagnostics on OpenACC loops LOOP, its siblings and its
+   children.  */
+
+static void
+inform_oacc_loop (oacc_loop *loop)
+{
+  const char *seq = loop->mask == 0 ? " seq" : "";
+  const char *gang = loop->mask & GOMP_DIM_MASK (GOMP_DIM_GANG)
+    ? " gang" : "";
+  const char *worker = loop->mask & GOMP_DIM_MASK (GOMP_DIM_WORKER)
+    ? " worker" : "";
+  const char *vector = loop->mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)
+    ? " vector" : "";
+
+  dump_printf_loc (MSG_NOTE, loop->loc,
+		   "Detected parallelism <acc loop%s%s%s%s>\n", seq, gang,
+		   worker, vector);
+
+  if (loop->child)
+    inform_oacc_loop (loop->child);
+  if (loop->sibling)
+    inform_oacc_loop (loop->sibling);
 }
 
 /* DFS walk of basic blocks BB onwards, creating OpenACC loop
@@ -1218,6 +1292,13 @@ oacc_loop_fixed_partitions (oacc_loop *loop, unsigned outer_mask)
 	}
     }
 
+  /* FIXME: Ideally, we should be coalescing parallelism here if the
+     hardware supports it.  E.g. Instead of partitioning a loop
+     across worker and vector axes, sometimes the hardware can
+     execute those loops together without resorting to placing
+     extra thread barriers.  */
+  this_mask = targetm.goacc.adjust_parallelism (this_mask, outer_mask);
+
   mask_all |= this_mask;
 
   if (loop->flags & OLF_TILE)
@@ -1280,6 +1361,13 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	 non-innermost available level.  */
       unsigned this_mask = GOMP_DIM_MASK (GOMP_DIM_GANG);
 
+      /* Orphan reductions cannot have gang partitioning.  */
+      if ((loop->flags & OLF_REDUCTION)
+	  && oacc_get_fn_attrib (current_function_decl)
+	  && !lookup_attribute ("omp target entrypoint",
+				DECL_ATTRIBUTES (current_function_decl)))
+	this_mask = GOMP_DIM_MASK (GOMP_DIM_WORKER);
+
       /* Find the first outermost available partition. */
       while (this_mask <= outer_mask)
 	this_mask <<= 1;
@@ -1302,6 +1390,7 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	  this_mask ^= loop->e_mask;
 	}
 
+      this_mask = targetm.goacc.adjust_parallelism (this_mask, outer_mask);
       loop->mask |= this_mask;
     }
 
@@ -1350,6 +1439,8 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	}
 
       loop->mask |= this_mask;
+      loop->mask = targetm.goacc.adjust_parallelism (loop->mask, outer_mask);
+
       if (!loop->mask && noisy)
 	warning_at (loop->loc, 0,
 		    tiling
@@ -1431,6 +1522,17 @@ default_goacc_reduction (gcall *call)
 
       if (!integer_zerop (ref_to_res))
 	{
+	  /* Dummy reduction vars that have GOMP_MAP_FIRSTPRIVATE_POINTER data
+	     mappings gets retyped to (void *).  Adjust the type of ref_to_res
+	     as appropriate.  */
+	  if (TREE_TYPE (TREE_TYPE (ref_to_res)) != TREE_TYPE (var))
+	    {
+	      tree ptype = build_pointer_type (TREE_TYPE (var));
+	      tree t = make_ssa_name (ptype);
+	      tree expr = fold_build1 (NOP_EXPR, ptype, ref_to_res);
+	      gimple_seq_add_stmt (&seq, gimple_build_assign (t, expr));
+	      ref_to_res = t;
+	    }
 	  tree dst = build_simple_mem_ref (ref_to_res);
 	  tree src = var;
 
@@ -1451,6 +1553,28 @@ default_goacc_reduction (gcall *call)
   gsi_replace_with_seq (&gsi, seq, true);
 }
 
+/* Determine whether DECL should be discarded in this offload
+   compilation.  */
+
+static bool
+maybe_discard_oacc_function (tree decl)
+{
+  tree attr = lookup_attribute ("omp declare target", DECL_ATTRIBUTES (decl));
+
+  if (!attr)
+    return false;
+
+  enum omp_clause_code kind = OMP_CLAUSE_NOHOST;
+
+#ifdef ACCEL_COMPILER
+  kind = OMP_CLAUSE_BIND;
+#endif
+  if (omp_find_clause (TREE_VALUE (attr), kind))
+    return true;
+
+  return false;
+}
+
 /* Main entry point for oacc transformations which run on the device
    compiler after LTO, so we know what the target device is at this
    point (including the host fallback).  */
@@ -1458,11 +1582,18 @@ default_goacc_reduction (gcall *call)
 static unsigned int
 execute_oacc_device_lower ()
 {
-  tree attrs = oacc_get_fn_attrib (current_function_decl);
-
-  if (!attrs)
+  tree attr = oacc_get_fn_attrib (current_function_decl);
+  if (!attr)
     /* Not an offloaded function.  */
     return 0;
+
+  if (maybe_discard_oacc_function (current_function_decl))
+    {
+      if (dump_file)
+	fprintf (dump_file, "Discarding function\n");
+      TREE_ASM_WRITTEN (current_function_decl) = 1;
+      return TODO_discard_function;
+    }
 
   /* Parse the default dim argument exactly once.  */
   if ((const void *)flag_openacc_dims != &flag_openacc_dims)
@@ -1484,12 +1615,12 @@ execute_oacc_device_lower ()
   if (is_oacc_kernels && !is_oacc_kernels_parallelized)
     {
       oacc_set_fn_attrib (current_function_decl, NULL, NULL);
-      attrs = oacc_get_fn_attrib (current_function_decl);
+      attr = oacc_get_fn_attrib (current_function_decl);
     }
 
   /* Discover, partition and process the loops.  */
   oacc_loop *loops = oacc_loop_discovery ();
-  int fn_level = oacc_fn_attrib_level (attrs);
+  int fn_level = oacc_fn_attrib_level (attr);
 
   if (dump_file)
     {
@@ -1516,7 +1647,7 @@ execute_oacc_device_lower ()
     }
 
   int dims[GOMP_DIM_MAX];
-  oacc_validate_dims (current_function_decl, attrs, dims, fn_level, used_mask);
+  oacc_validate_dims (current_function_decl, attr, dims, fn_level, used_mask);
 
   if (dump_file)
     {
@@ -1533,6 +1664,8 @@ execute_oacc_device_lower ()
       dump_oacc_loop (dump_file, loops, 0);
       fprintf (dump_file, "\n");
     }
+  if (dump_enabled_p () && loops->child)
+    inform_oacc_loop (loops->child);
 
   /* Offloaded targets may introduce new basic blocks, which require
      dominance information to update SSA.  */
@@ -1682,6 +1815,15 @@ default_goacc_dim_limit (int ARG_UNUSED (axis))
 #else
   return 1;
 #endif
+}
+
+/* Default adjustment of loop parallelism is not required.  */
+
+unsigned
+default_goacc_adjust_parallelism (unsigned this_mask,
+				  unsigned ARG_UNUSED (outer_mask))
+{
+  return this_mask;
 }
 
 namespace {

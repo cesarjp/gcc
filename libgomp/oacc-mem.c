@@ -103,12 +103,30 @@ acc_malloc (size_t s)
 
   struct goacc_thread *thr = goacc_thread ();
 
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
+
   assert (thr->dev);
 
+  void *ret;
   if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
-    return malloc (s);
+    {
+      /* TODO: Should we also generate acc_ev_alloc here?  */
+      ret = malloc (s);
+    }
+  else
+    ret = thr->dev->alloc_func (thr->dev->target_id, s);
 
-  return thr->dev->alloc_func (thr->dev->target_id, s);
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
+
+  return ret;
 }
 
 /* OpenACC 2.0a (3.2.16) doesn't specify what to do in the event
@@ -124,12 +142,23 @@ acc_free (void *d)
 
   struct goacc_thread *thr = goacc_thread ();
 
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
+
   assert (thr && thr->dev);
 
   struct gomp_device_descr *acc_dev = thr->dev;
 
   if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
-    return free (d);
+    {
+      /* TODO: Should we also generate acc_ev_free here?  */
+      free (d);
+
+      goto out;
+    }
 
   gomp_mutex_lock (&acc_dev->lock);
 
@@ -151,44 +180,86 @@ acc_free (void *d)
 
   if (!acc_dev->free_func (acc_dev->target_id, d))
     gomp_fatal ("error in freeing device memory in %s", __FUNCTION__);
+
+ out:
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
+}
+
+static void
+memcpy_tofrom_device (bool from, void *d, void *h, size_t s, int async,
+		      const char *libfnname)
+{
+  /* No need to call lazy open here, as the device pointer must have
+     been obtained from a routine that did that.  */
+  struct goacc_thread *thr = goacc_thread ();
+
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
+  if (profiling_setup_p)
+    {
+      prof_info.async = async; //TODO
+      /* See <https://github.com/OpenACC/openacc-spec/issues/71>.  */
+      prof_info.async_queue = prof_info.async;
+    }
+
+  assert (thr && thr->dev);
+
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    {
+      /* TODO: Should we also generate
+	 acc_ev_enqueue_upload_start/acc_ev_enqueue_upload_end or
+	 acc_ev_enqueue_download_start/acc_ev_enqueue_download_end here?  */
+      if (from)
+	memmove (h, d, s);
+      else
+	memmove (d, h, s);
+
+      goto out;
+    }
+
+  goacc_aq aq = get_goacc_asyncqueue (async);
+  if (from)
+    gomp_copy_dev2host (thr->dev, aq, h, d, s);
+  else
+    gomp_copy_host2dev (thr->dev, aq, d, h, s, /* TODO: cbuf? */ NULL);
+
+ out:
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
 }
 
 void
 acc_memcpy_to_device (void *d, void *h, size_t s)
 {
-  /* No need to call lazy open here, as the device pointer must have
-     been obtained from a routine that did that.  */
-  struct goacc_thread *thr = goacc_thread ();
+  memcpy_tofrom_device (false, d, h, s, acc_async_sync, __FUNCTION__);
+}
 
-  assert (thr && thr->dev);
-
-  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
-    {
-      memmove (d, h, s);
-      return;
-    }
-
-  if (!thr->dev->host2dev_func (thr->dev->target_id, d, h, s))
-    gomp_fatal ("error in %s", __FUNCTION__);
+void
+acc_memcpy_to_device_async (void *d, void *h, size_t s, int async)
+{
+  memcpy_tofrom_device (false, d, h, s, async, __FUNCTION__);
 }
 
 void
 acc_memcpy_from_device (void *h, void *d, size_t s)
 {
-  /* No need to call lazy open here, as the device pointer must have
-     been obtained from a routine that did that.  */
-  struct goacc_thread *thr = goacc_thread ();
+  memcpy_tofrom_device (true, d, h, s, acc_async_sync, __FUNCTION__);
+}
 
-  assert (thr && thr->dev);
-
-  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
-    {
-      memmove (h, d, s);
-      return;
-    }
-
-  if (!thr->dev->dev2host_func (thr->dev->target_id, h, d, s))
-    gomp_fatal ("error in %s", __FUNCTION__);
+void
+acc_memcpy_from_device_async (void *h, void *d, size_t s, int async)
+{
+  memcpy_tofrom_device (true, d, h, s, async, __FUNCTION__);
 }
 
 /* Return the device pointer that corresponds to host data H.  Or NULL
@@ -208,6 +279,9 @@ acc_deviceptr (void *h)
 
   if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
     return h;
+
+  /* In the following, no OpenACC Profiling Interface events can possibly be
+     generated.  */
 
   gomp_mutex_lock (&dev->lock);
 
@@ -246,6 +320,9 @@ acc_hostptr (void *d)
   if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
     return d;
 
+  /* In the following, no OpenACC Profiling Interface events can possibly be
+     generated.  */
+
   gomp_mutex_lock (&acc_dev->lock);
 
   n = lookup_dev (acc_dev->openacc.data_environ, d, 1);
@@ -283,6 +360,9 @@ acc_is_present (void *h, size_t s)
   if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
     return h != NULL;
 
+  /* In the following, no OpenACC Profiling Interface events can possibly be
+     generated.  */
+
   gomp_mutex_lock (&acc_dev->lock);
 
   n = lookup_host (acc_dev, h, s);
@@ -294,7 +374,7 @@ acc_is_present (void *h, size_t s)
 
   gomp_mutex_unlock (&acc_dev->lock);
 
-  return n != NULL;
+  return (n ? 1 : 0);
 }
 
 /* Create a mapping for host [H,+S] -> device [D,+S] */
@@ -313,6 +393,12 @@ acc_map_data (void *h, void *d, size_t s)
 
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
+
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
 
   if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
     {
@@ -347,12 +433,19 @@ acc_map_data (void *h, void *d, size_t s)
 
       tgt = gomp_map_vars (acc_dev, mapnum, &hostaddrs, &devaddrs, &sizes,
 			   &kinds, true, GOMP_MAP_VARS_OPENACC);
+      tgt->list[0].key->refcount = REFCOUNT_INFINITY;
     }
 
   gomp_mutex_lock (&acc_dev->lock);
   tgt->prev = acc_dev->openacc.data_environ;
   acc_dev->openacc.data_environ = tgt;
   gomp_mutex_unlock (&acc_dev->lock);
+
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
 }
 
 void
@@ -366,6 +459,12 @@ acc_unmap_data (void *h)
   /* This is a no-op on shared-memory targets.  */
   if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
     return;
+
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
 
   size_t host_size;
 
@@ -388,6 +487,9 @@ acc_unmap_data (void *h)
       gomp_fatal ("[%p,%d] surrounds %p",
 		  (void *) n->host_start, (int) host_size, (void *) h);
     }
+
+  /* Mark for removal.  */
+  n->refcount = 1;
 
   t = n->tgt;
 
@@ -417,6 +519,12 @@ acc_unmap_data (void *h)
   gomp_mutex_unlock (&acc_dev->lock);
 
   gomp_unmap_vars (t, true);
+
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
 }
 
 #define FLAG_PRESENT (1 << 0)
@@ -424,7 +532,7 @@ acc_unmap_data (void *h)
 #define FLAG_COPY (1 << 2)
 
 static void *
-present_create_copy (unsigned f, void *h, size_t s)
+present_create_copy (unsigned f, void *h, size_t s, int async)
 {
   void *d;
   splay_tree_key n;
@@ -439,6 +547,18 @@ present_create_copy (unsigned f, void *h, size_t s)
 
   if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
     return h;
+
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
+  if (profiling_setup_p)
+    {
+      prof_info.async = async; //TODO
+      /* See <https://github.com/OpenACC/openacc-spec/issues/71>.  */
+      prof_info.async_queue = prof_info.async;
+    }
 
   gomp_mutex_lock (&acc_dev->lock);
 
@@ -460,6 +580,11 @@ present_create_copy (unsigned f, void *h, size_t s)
 	  gomp_fatal ("[%p,+%d] not mapped", (void *)h, (int)s);
 	}
 
+      if (n->refcount != REFCOUNT_INFINITY)
+	{
+	  n->refcount++;
+	  n->dynamic_refcount++;
+	}
       gomp_mutex_unlock (&acc_dev->lock);
     }
   else if (!(f & FLAG_CREATE))
@@ -481,8 +606,12 @@ present_create_copy (unsigned f, void *h, size_t s)
 
       gomp_mutex_unlock (&acc_dev->lock);
 
-      tgt = gomp_map_vars (acc_dev, mapnum, &hostaddrs, NULL, &s, &kinds, true,
-			   GOMP_MAP_VARS_OPENACC);
+      goacc_aq aq = get_goacc_asyncqueue (async);
+
+      tgt = gomp_map_vars_async (acc_dev, aq, mapnum, &hostaddrs, NULL, &s,
+				 &kinds, true, GOMP_MAP_VARS_OPENACC);
+      /* Initialize dynamic refcount.  */
+      tgt->list[0].key->dynamic_refcount = 1;
 
       gomp_mutex_lock (&acc_dev->lock);
 
@@ -493,59 +622,83 @@ present_create_copy (unsigned f, void *h, size_t s)
       gomp_mutex_unlock (&acc_dev->lock);
     }
 
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
+
   return d;
 }
 
 void *
 acc_create (void *h, size_t s)
 {
-  return present_create_copy (FLAG_CREATE, h, s);
+  return present_create_copy (FLAG_PRESENT | FLAG_CREATE, h, s, acc_async_sync);
 }
+
+void
+acc_create_async (void *h, size_t s, int async)
+{
+  present_create_copy (FLAG_PRESENT | FLAG_CREATE, h, s, async);
+}
+
+/* acc_present_or_create used to be what acc_create is now.  */
+/* acc_pcreate is acc_present_or_create by a different name.  */
+#ifdef HAVE_ATTRIBUTE_ALIAS
+strong_alias (acc_create, acc_present_or_create)
+strong_alias (acc_create, acc_pcreate)
+#else
+void *
+acc_present_or_create (void *h, size_t s)
+{
+  return acc_create (h, s);
+}
+
+void *
+acc_pcreate (void *h, size_t s)
+{
+  return acc_create (h, s);
+}
+#endif
 
 void *
 acc_copyin (void *h, size_t s)
 {
-  return present_create_copy (FLAG_CREATE | FLAG_COPY, h, s);
+  return present_create_copy (FLAG_PRESENT | FLAG_CREATE | FLAG_COPY, h, s,
+			      acc_async_sync);
 }
 
-void *
-acc_present_or_create (void *h, size_t s)
+void
+acc_copyin_async (void *h, size_t s, int async)
 {
-  return present_create_copy (FLAG_PRESENT | FLAG_CREATE, h, s);
+  present_create_copy (FLAG_PRESENT | FLAG_CREATE | FLAG_COPY, h, s, async);
 }
 
-/* acc_pcreate is acc_present_or_create by a different name.  */
+/* acc_present_or_copyin used to be what acc_copyin is now.  */
+/* acc_pcopyin is acc_present_or_copyin by a different name.  */
 #ifdef HAVE_ATTRIBUTE_ALIAS
-strong_alias (acc_present_or_create, acc_pcreate)
+strong_alias (acc_copyin, acc_present_or_copyin)
+strong_alias (acc_copyin, acc_pcopyin)
 #else
-void *
-acc_pcreate (void *h, size_t s)
-{
-  return acc_present_or_create (h, s);
-}
-#endif
-
 void *
 acc_present_or_copyin (void *h, size_t s)
 {
-  return present_create_copy (FLAG_PRESENT | FLAG_CREATE | FLAG_COPY, h, s);
+  return acc_copyin (h, s);
 }
 
-/* acc_pcopyin is acc_present_or_copyin by a different name.  */
-#ifdef HAVE_ATTRIBUTE_ALIAS
-strong_alias (acc_present_or_copyin, acc_pcopyin)
-#else
 void *
 acc_pcopyin (void *h, size_t s)
 {
-  return acc_present_or_copyin (h, s);
+  return acc_copyin (h, s);
 }
 #endif
 
-#define FLAG_COPYOUT (1 << 0)
+#define FLAG_COPYOUT  (1 << 0)
+#define FLAG_FINALIZE (1 << 1)
 
 static void
-delete_copyout (unsigned f, void *h, size_t s, const char *libfnname)
+delete_copyout (unsigned f, void *h, size_t s, int async, const char *libfnname)
 {
   size_t host_size;
   splay_tree_key n;
@@ -555,6 +708,18 @@ delete_copyout (unsigned f, void *h, size_t s, const char *libfnname)
 
   if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
     return;
+
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
+  if (profiling_setup_p)
+    {
+      prof_info.async = async; //TODO
+      /* See <https://github.com/OpenACC/openacc-spec/issues/71>.  */
+      prof_info.async_queue = prof_info.async;
+    }
 
   gomp_mutex_lock (&acc_dev->lock);
 
@@ -581,31 +746,113 @@ delete_copyout (unsigned f, void *h, size_t s, const char *libfnname)
 		  (void *) n->host_start, (int) host_size, (void *) h, (int) s);
     }
 
+  if (n->refcount == REFCOUNT_INFINITY)
+    {
+      n->refcount = 0;
+      n->dynamic_refcount = 0;
+    }
+  if (n->refcount < n->dynamic_refcount)
+    {
+      gomp_mutex_unlock (&acc_dev->lock);
+      gomp_fatal ("Dynamic reference counting assert fail\n");
+    }
+
+  if (f & FLAG_FINALIZE)
+    {
+      n->refcount -= n->dynamic_refcount;
+      n->dynamic_refcount = 0;
+    }
+  else if (n->dynamic_refcount)
+    {
+      n->dynamic_refcount--;
+      n->refcount--;
+    }
+
+  if (n->refcount == 0)
+    {
+      if (n->tgt->refcount == 2)
+	{
+	  struct target_mem_desc *tp, *t;
+	  for (tp = NULL, t = acc_dev->openacc.data_environ; t != NULL;
+	       tp = t, t = t->prev)
+	    if (n->tgt == t)
+	      {
+		if (tp)
+		  tp->prev = t->prev;
+		else
+		  acc_dev->openacc.data_environ = t->prev;
+		break;
+	      }
+	}
+
+      if (f & FLAG_COPYOUT)
+	{
+	  goacc_aq aq = get_goacc_asyncqueue (async);
+	  gomp_copy_dev2host (acc_dev, aq, h, d, s);
+	}
+      gomp_remove_var (acc_dev, n);
+    }
+
   gomp_mutex_unlock (&acc_dev->lock);
 
-  if (f & FLAG_COPYOUT)
-    acc_dev->dev2host_func (acc_dev->target_id, h, d, s);
-
-  acc_unmap_data (h);
-
-  if (!acc_dev->free_func (acc_dev->target_id, d))
-    gomp_fatal ("error in freeing device memory in %s", libfnname);
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
 }
 
 void
 acc_delete (void *h , size_t s)
 {
-  delete_copyout (0, h, s, __FUNCTION__);
+  delete_copyout (0, h, s, acc_async_sync, __FUNCTION__);
+}
+
+void
+acc_delete_async (void *h , size_t s, int async)
+{
+  delete_copyout (0, h, s, async, __FUNCTION__);
+}
+
+void
+acc_delete_finalize (void *h , size_t s)
+{
+  delete_copyout (FLAG_FINALIZE, h, s, acc_async_sync, __FUNCTION__);
+}
+
+void
+acc_delete_finalize_async (void *h , size_t s, int async)
+{
+  delete_copyout (FLAG_FINALIZE, h, s, async, __FUNCTION__);
 }
 
 void
 acc_copyout (void *h, size_t s)
 {
-  delete_copyout (FLAG_COPYOUT, h, s, __FUNCTION__);
+  delete_copyout (FLAG_COPYOUT, h, s, acc_async_sync, __FUNCTION__);
+}
+
+void
+acc_copyout_async (void *h, size_t s, int async)
+{
+  delete_copyout (FLAG_COPYOUT, h, s, async, __FUNCTION__);
+}
+
+void
+acc_copyout_finalize (void *h, size_t s)
+{
+  delete_copyout (FLAG_COPYOUT | FLAG_FINALIZE, h, s, acc_async_sync,
+		  __FUNCTION__);
+}
+
+void
+acc_copyout_finalize_async (void *h, size_t s, int async)
+{
+  delete_copyout (FLAG_COPYOUT | FLAG_FINALIZE, h, s, async, __FUNCTION__);
 }
 
 static void
-update_dev_host (int is_dev, void *h, size_t s)
+update_dev_host (int is_dev, void *h, size_t s, int async)
 {
   splay_tree_key n;
   void *d;
@@ -620,6 +867,18 @@ update_dev_host (int is_dev, void *h, size_t s)
 
   gomp_mutex_lock (&acc_dev->lock);
 
+  acc_prof_info prof_info;
+  acc_api_info api_info;
+  bool profiling_setup_p
+    = __builtin_expect (goacc_profiling_setup_p (thr, &prof_info, &api_info),
+			false);
+  if (profiling_setup_p)
+    {
+      prof_info.async = async; //TODO
+      /* See <https://github.com/OpenACC/openacc-spec/issues/71>.  */
+      prof_info.async_queue = prof_info.async;
+    }
+
   n = lookup_host (acc_dev, h, s);
 
   if (!n)
@@ -631,38 +890,113 @@ update_dev_host (int is_dev, void *h, size_t s)
   d = (void *) (n->tgt->tgt_start + n->tgt_offset
 		+ (uintptr_t) h - n->host_start);
 
+  goacc_aq aq = get_goacc_asyncqueue (async);
+
   if (is_dev)
-    acc_dev->host2dev_func (acc_dev->target_id, d, h, s);
+    gomp_copy_host2dev (acc_dev, aq, d, h, s, /* TODO: cbuf? */ NULL);
   else
-    acc_dev->dev2host_func (acc_dev->target_id, h, d, s);
+    gomp_copy_dev2host (acc_dev, aq, h, d, s);
 
   gomp_mutex_unlock (&acc_dev->lock);
+  
+  if (profiling_setup_p)
+    {
+      thr->prof_info = NULL;
+      thr->api_info = NULL;
+    }
 }
 
 void
 acc_update_device (void *h, size_t s)
 {
-  update_dev_host (1, h, s);
+  update_dev_host (1, h, s, acc_async_sync);
+}
+
+void
+acc_update_device_async (void *h, size_t s, int async)
+{
+  update_dev_host (1, h, s, async);
 }
 
 void
 acc_update_self (void *h, size_t s)
 {
-  update_dev_host (0, h, s);
+  update_dev_host (0, h, s, acc_async_sync);
+}
+
+void
+acc_update_self_async (void *h, size_t s, int async)
+{
+  update_dev_host (0, h, s, async);
+}
+
+void
+gomp_acc_declare_allocate (bool allocate, size_t mapnum, void **hostaddrs,
+			   size_t *sizes, unsigned short *kinds)
+{
+  gomp_debug (0, "  %s: processing\n", __FUNCTION__);
+
+  if (allocate)
+    {
+      assert (mapnum == 3);
+
+      /* Allocate memory for the array data.  */
+      uintptr_t data = (uintptr_t) acc_create (hostaddrs[0], sizes[0]);
+
+      /* Update the PSET.  */
+      acc_update_device (hostaddrs[1], sizes[1]);
+      void *pset = acc_deviceptr (hostaddrs[1]);
+      acc_memcpy_to_device (pset, &data, sizeof (uintptr_t));
+    }
+  else
+    {
+      /* Deallocate memory for the array data.  */
+      void *data = acc_deviceptr (hostaddrs[0]);
+      acc_free (data);
+    }
+
+  gomp_debug (0, "  %s: end\n", __FUNCTION__);
 }
 
 void
 gomp_acc_insert_pointer (size_t mapnum, void **hostaddrs, size_t *sizes,
-			 void *kinds)
+			 void *kinds, int async)
 {
   struct target_mem_desc *tgt;
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
 
+  if (acc_is_present (*hostaddrs, *sizes))
+    {
+      splay_tree_key n;
+      gomp_mutex_lock (&acc_dev->lock);
+      n = lookup_host (acc_dev, *hostaddrs, *sizes);
+      gomp_mutex_unlock (&acc_dev->lock);
+
+      tgt = n->tgt;
+      for (size_t i = 0; i < tgt->list_count; i++)
+	if (tgt->list[i].key == n)
+	  {
+	    for (size_t j = 0; j < mapnum; j++)
+	      if (i + j < tgt->list_count && tgt->list[i + j].key)
+		{
+		  tgt->list[i + j].key->refcount++;
+		  tgt->list[i + j].key->dynamic_refcount++;
+		}
+	    return;
+	  }
+      /* Should not reach here.  */
+      gomp_fatal ("Dynamic refcount incrementing failed for pointer/pset");
+    }
+
   gomp_debug (0, "  %s: prepare mappings\n", __FUNCTION__);
-  tgt = gomp_map_vars (acc_dev, mapnum, hostaddrs,
-		       NULL, sizes, kinds, true, GOMP_MAP_VARS_OPENACC);
+  goacc_aq aq = get_goacc_asyncqueue (async);
+  tgt = gomp_map_vars_async (acc_dev, aq, mapnum, hostaddrs,
+			     NULL, sizes, kinds, true, GOMP_MAP_VARS_OPENACC);
   gomp_debug (0, "  %s: mappings prepared\n", __FUNCTION__);
+
+  /* Initialize dynamic refcount.  */
+  tgt->list[0].key->dynamic_refcount = 1;
 
   gomp_mutex_lock (&acc_dev->lock);
   tgt->prev = acc_dev->openacc.data_environ;
@@ -671,13 +1005,17 @@ gomp_acc_insert_pointer (size_t mapnum, void **hostaddrs, size_t *sizes,
 }
 
 void
-gomp_acc_remove_pointer (void *h, bool force_copyfrom, int async, int mapnum)
+gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
+			 int finalize, int mapnum)
 {
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
   splay_tree_key n;
   struct target_mem_desc *t;
   int minrefs = (mapnum == 1) ? 2 : 3;
+
+  if (!acc_is_present (h, s))
+    return;
 
   gomp_mutex_lock (&acc_dev->lock);
 
@@ -693,40 +1031,68 @@ gomp_acc_remove_pointer (void *h, bool force_copyfrom, int async, int mapnum)
 
   t = n->tgt;
 
-  struct target_mem_desc *tp;
-
-  if (t->refcount == minrefs)
+  if (n->refcount < n->dynamic_refcount)
     {
-      /* This is the last reference, so pull the descriptor off the
-	 chain. This avoids gomp_unmap_vars via gomp_unmap_tgt from
-	 freeing the device memory. */
-      t->tgt_end = 0;
-      t->to_free = 0;
-
-      for (tp = NULL, t = acc_dev->openacc.data_environ; t != NULL;
-	   tp = t, t = t->prev)
-	{
-	  if (n->tgt == t)
-	    {
-	      if (tp)
-		tp->prev = t->prev;
-	      else
-		acc_dev->openacc.data_environ = t->prev;
-	      break;
-	    }
-	}
+      gomp_mutex_unlock (&acc_dev->lock);
+      gomp_fatal ("Dynamic reference counting assert fail\n");
     }
 
-  if (force_copyfrom)
-    t->list[0].copy_from = 1;
+  if (finalize)
+    {
+      n->refcount -= n->dynamic_refcount;
+      n->dynamic_refcount = 0;
+    }
+  else if (n->dynamic_refcount)
+    {
+      n->dynamic_refcount--;
+      n->refcount--;
+    }
 
   gomp_mutex_unlock (&acc_dev->lock);
 
-  /* If running synchronously, unmap immediately.  */
-  if (async < acc_async_noval)
-    gomp_unmap_vars (t, true);
-  else
-    t->device_descr->openacc.register_async_cleanup_func (t, async);
+  if (n->refcount == 0)
+    {
+      if (t->refcount == minrefs)
+	{
+	  /* This is the last reference, so pull the descriptor off the
+	     chain. This prevents gomp_unmap_vars via gomp_unmap_tgt from
+	     freeing the device memory. */
+	  struct target_mem_desc *tp;
+	  for (tp = NULL, t = acc_dev->openacc.data_environ; t != NULL;
+	       tp = t, t = t->prev)
+	    {
+	      if (n->tgt == t)
+		{
+		  if (tp)
+		    tp->prev = t->prev;
+		  else
+		    acc_dev->openacc.data_environ = t->prev;
+		  break;
+		}
+	    }
+	}
+
+      /* Set refcount to 1 to allow gomp_unmap_vars to unmap it.  */
+      n->refcount = 1;
+      t->refcount = minrefs;
+      for (size_t i = 0; i < t->list_count; i++)
+	if (t->list[i].key == n)
+	  {
+	    t->list[i].copy_from = force_copyfrom ? 1 : 0;
+	    break;
+	  }
+
+      /* If running synchronously, unmap immediately.  */
+      if (async < acc_async_noval)
+	gomp_unmap_vars (t, true);
+      else
+	{
+	  goacc_aq aq = get_goacc_asyncqueue (async);        
+	  goacc_async_copyout_unmap_vars (t, aq);
+	}
+    }
+
+  gomp_mutex_unlock (&acc_dev->lock);
 
   gomp_debug (0, "  %s: mappings restored\n", __FUNCTION__);
 }

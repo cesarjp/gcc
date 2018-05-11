@@ -315,6 +315,16 @@ enum save_state
 { SAVE_NONE = 0, SAVE_EXPLICIT, SAVE_IMPLICIT
 };
 
+/* Flags to keep track of ACC routine states.  */
+enum oacc_function
+{ OACC_FUNCTION_NONE = 0,
+  OACC_FUNCTION_GANG,
+  OACC_FUNCTION_WORKER,
+  OACC_FUNCTION_VECTOR,
+  OACC_FUNCTION_SEQ,
+  OACC_FUNCTION_AUTO
+};
+
 /* Strings for all symbol attributes.  We use these for dumping the
    parse tree, in error messages, and also when reading and writing
    modules.  In symbol.c.  */
@@ -324,6 +334,7 @@ extern const mstring intents[];
 extern const mstring access_types[];
 extern const mstring ifsrc_types[];
 extern const mstring save_status[];
+extern const mstring oacc_function_types[];
 
 /* Strings for DTIO procedure names.  In symbol.c.  */
 extern const mstring dtio_procs[];
@@ -900,7 +911,8 @@ typedef struct
   unsigned oacc_declare_link:1;
 
   /* This is an OpenACC acclerator function at level N - 1  */
-  unsigned oacc_function:3;
+  ENUM_BITFIELD (oacc_function) oacc_function:3;
+  unsigned oacc_function_nohost:1;
 
   /* Attributes set by compiler extensions (!GCC$ ATTRIBUTES).  */
   unsigned ext_attr:EXT_ATTR_NUM;
@@ -1186,7 +1198,9 @@ enum gfc_omp_map_op
   OMP_MAP_RELEASE,
   OMP_MAP_ALWAYS_TO,
   OMP_MAP_ALWAYS_FROM,
-  OMP_MAP_ALWAYS_TOFROM
+  OMP_MAP_ALWAYS_TOFROM,
+  OMP_MAP_DECLARE_ALLOCATE,
+  OMP_MAP_DECLARE_DEALLOCATE
 };
 
 enum gfc_omp_linear_op
@@ -1338,12 +1352,16 @@ typedef struct gfc_omp_clauses
   struct gfc_expr *num_gangs_expr;
   struct gfc_expr *num_workers_expr;
   struct gfc_expr *vector_length_expr;
+  struct gfc_symbol *routine_bind;
+  gfc_expr_list *device_types;
+  struct gfc_omp_clauses *dtype_clauses;
   gfc_expr_list *wait_list;
   gfc_expr_list *tile_list;
   unsigned async:1, gang:1, worker:1, vector:1, seq:1, independent:1;
-  unsigned wait:1, par_auto:1, gang_static:1;
+  unsigned wait:1, par_auto:1, gang_static:1, nohost:1, acc_collapse:1, bind:1;
+  unsigned if_present:1, finalize:1, update_allocatable:1;
   locus loc;
-
+  char bind_name[GFC_MAX_SYMBOL_LEN+1];
 }
 gfc_omp_clauses;
 
@@ -1730,6 +1748,7 @@ typedef struct gfc_oacc_routine_name
   struct gfc_symbol *sym;
   struct gfc_omp_clauses *clauses;
   struct gfc_oacc_routine_name *next;
+  locus loc;
 }
 gfc_oacc_routine_name;
 
@@ -3114,6 +3133,7 @@ bool gfc_check_intrinsic_standard (const gfc_intrinsic_sym*, const char**,
 				      bool, locus);
 
 /* match.c -- FIXME */
+gfc_omp_namelist *gfc_copy_omp_namelist (gfc_omp_namelist *);
 void gfc_free_iterator (gfc_iterator *, int);
 void gfc_free_forall_iterator (gfc_forall_iterator *);
 void gfc_free_alloc_list (gfc_alloc *);
@@ -3150,6 +3170,8 @@ void gfc_resolve_oacc_directive (gfc_code *, gfc_namespace *);
 void gfc_resolve_oacc_declare (gfc_namespace *);
 void gfc_resolve_oacc_parallel_loop_blocks (gfc_code *, gfc_namespace *);
 void gfc_resolve_oacc_blocks (gfc_code *, gfc_namespace *);
+void gfc_resolve_oacc_routine_call (gfc_symbol *, locus *);
+void gfc_resolve_oacc_routines (gfc_namespace *);
 
 /* expr.c */
 void gfc_free_actual_arglist (gfc_actual_arglist *);

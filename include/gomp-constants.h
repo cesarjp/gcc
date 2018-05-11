@@ -40,6 +40,8 @@
 #define GOMP_MAP_FLAG_SPECIAL_0		(1 << 2)
 #define GOMP_MAP_FLAG_SPECIAL_1		(1 << 3)
 #define GOMP_MAP_FLAG_SPECIAL_2		(1 << 4)
+#define GOMP_MAP_FLAG_SPECIAL_3		(1 << 5)
+#define GOMP_MAP_FLAG_SPECIAL_4		(1 << 6)
 #define GOMP_MAP_FLAG_SPECIAL		(GOMP_MAP_FLAG_SPECIAL_1 \
 					 | GOMP_MAP_FLAG_SPECIAL_0)
 /* Flag to force a specific behavior (or else, trigger a run-time error).  */
@@ -128,6 +130,32 @@ enum gomp_map_kind
     /* Decrement usage count and deallocate if zero.  */
     GOMP_MAP_RELEASE =			(GOMP_MAP_FLAG_SPECIAL_2
 					 | GOMP_MAP_DELETE),
+    /* Mapping kinds for dynamic arrays.  */
+    GOMP_MAP_DYNAMIC_ARRAY =		(GOMP_MAP_FLAG_SPECIAL_3),
+    GOMP_MAP_DYNAMIC_ARRAY_TO =		(GOMP_MAP_DYNAMIC_ARRAY
+					 | GOMP_MAP_TO),
+    GOMP_MAP_DYNAMIC_ARRAY_FROM =	(GOMP_MAP_DYNAMIC_ARRAY
+					 | GOMP_MAP_FROM),
+    GOMP_MAP_DYNAMIC_ARRAY_TOFROM =	(GOMP_MAP_DYNAMIC_ARRAY
+					 | GOMP_MAP_TOFROM),
+    GOMP_MAP_DYNAMIC_ARRAY_FORCE_TO =	(GOMP_MAP_DYNAMIC_ARRAY_TO
+					 | GOMP_MAP_FLAG_FORCE),
+    GOMP_MAP_DYNAMIC_ARRAY_FORCE_FROM =		(GOMP_MAP_DYNAMIC_ARRAY_FROM
+						 | GOMP_MAP_FLAG_FORCE),
+    GOMP_MAP_DYNAMIC_ARRAY_FORCE_TOFROM =	(GOMP_MAP_DYNAMIC_ARRAY_TOFROM
+						 | GOMP_MAP_FLAG_FORCE),
+    GOMP_MAP_DYNAMIC_ARRAY_ALLOC =		(GOMP_MAP_DYNAMIC_ARRAY
+						 | GOMP_MAP_ALLOC),
+    GOMP_MAP_DYNAMIC_ARRAY_FORCE_ALLOC =	(GOMP_MAP_DYNAMIC_ARRAY
+						 | GOMP_MAP_FORCE_ALLOC),
+    GOMP_MAP_DYNAMIC_ARRAY_FORCE_PRESENT =	(GOMP_MAP_DYNAMIC_ARRAY
+						 | GOMP_MAP_FORCE_PRESENT),
+    /* Mapping kinds for allocatable arrays.  */
+    GOMP_MAP_DECLARE =			(GOMP_MAP_FLAG_SPECIAL_4),
+    GOMP_MAP_DECLARE_ALLOCATE =		(GOMP_MAP_DECLARE
+					 | GOMP_MAP_FORCE_TO),
+    GOMP_MAP_DECLARE_DEALLOCATE =	(GOMP_MAP_DECLARE
+					 | GOMP_MAP_FORCE_FROM),
 
     /* Internal to GCC, not used in libgomp.  */
     /* Do not map, but pointer assign a pointer instead.  */
@@ -156,10 +184,13 @@ enum gomp_map_kind
 #define GOMP_MAP_ALWAYS_P(X) \
   (GOMP_MAP_ALWAYS_TO_P (X) || ((X) == GOMP_MAP_ALWAYS_FROM))
 
+#define GOMP_MAP_DYNAMIC_ARRAY_P(X) \
+  ((X) & GOMP_MAP_DYNAMIC_ARRAY)
 
 /* Asynchronous behavior.  Keep in sync with
    libgomp/{openacc.h,openacc.f90,openacc_lib.h}:acc_async_t.  */
 
+#define GOMP_ASYNC_DEFAULT		0
 #define GOMP_ASYNC_NOVAL		-1
 #define GOMP_ASYNC_SYNC			-2
 
@@ -221,13 +252,14 @@ enum gomp_map_kind
 #define GOMP_LAUNCH_CODE_SHIFT	28
 #define GOMP_LAUNCH_DEVICE_SHIFT 16
 #define GOMP_LAUNCH_OP_SHIFT 0
+#define GOMP_LAUNCH_OP_MASK 0xffff
 #define GOMP_LAUNCH_PACK(CODE,DEVICE,OP)	\
   (((CODE) << GOMP_LAUNCH_CODE_SHIFT)		\
    | ((DEVICE) << GOMP_LAUNCH_DEVICE_SHIFT)	\
-   | ((OP) << GOMP_LAUNCH_OP_SHIFT))
+   | (((OP) & GOMP_LAUNCH_OP_MASK) << GOMP_LAUNCH_OP_SHIFT))
 #define GOMP_LAUNCH_CODE(X) (((X) >> GOMP_LAUNCH_CODE_SHIFT) & 0xf)
 #define GOMP_LAUNCH_DEVICE(X) (((X) >> GOMP_LAUNCH_DEVICE_SHIFT) & 0xfff)
-#define GOMP_LAUNCH_OP(X) (((X) >> GOMP_LAUNCH_OP_SHIFT) & 0xffff)
+#define GOMP_LAUNCH_OP(X) (((X) >> GOMP_LAUNCH_OP_SHIFT) & GOMP_LAUNCH_OP_MASK)
 #define GOMP_LAUNCH_OP_MAX 0xffff
 
 /* Bitmask to apply in order to find out the intended device of a target

@@ -74,6 +74,57 @@ void t2()
 }
 
 
+/* Test conditional vector-partitioned loops.  */
+
+void t3()
+{
+  int n[32], arr[1024], i;
+
+  for (i = 0; i < 1024; i++)
+    arr[i] = 0;
+
+  for (i = 0; i < 32; i++)
+    n[i] = 0;
+
+  #pragma acc parallel copy(n, arr) \
+		       num_gangs(32) num_workers(1) vector_length(32)
+  {
+    int j, k;
+
+    #pragma acc loop gang(static:*)
+    for (j = 0; j < 32; j++)
+      n[j]++;
+
+    #pragma acc loop gang
+    for (j = 0; j < 32; j++)
+      {
+	if ((j % 2) == 0)
+	  {
+	    #pragma acc loop vector
+	    for (k = 0; k < 32; k++)
+	      arr[j * 32 + k]++;
+	  }
+	else
+	  {
+	    #pragma acc loop vector
+	    for (k = 0; k < 32; k++)
+	      arr[j * 32 + k]--;
+	  }
+      }
+
+    #pragma acc loop gang(static:*)
+    for (j = 0; j < 32; j++)
+      n[j]++;
+  }
+
+  for (i = 0; i < 32; i++)
+    assert (n[i] == 2);
+
+  for (i = 0; i < 1024; i++)
+    assert (arr[i] == ((i % 64) < 32) ? 1 : -1);
+}
+
+
 /* Test conditions inside vector-partitioned loops.  */
 
 void t4()
@@ -156,6 +207,79 @@ void t5()
 }
 
 
+/* Test switch containing vector-partitioned loops inside gang-partitioned
+   loops.  */
+
+void t6()
+{
+  int n[32], arr[1024], i;
+
+  for (i = 0; i < 1024; i++)
+    arr[i] = 0;
+
+  for (i = 0; i < 32; i++)
+    n[i] = i % 5;
+
+  #pragma acc parallel copy(n, arr) \
+		       num_gangs(32) num_workers(1) vector_length(32)
+  {
+    int j, k;
+
+    #pragma acc loop gang(static:*)
+    for (j = 0; j < 32; j++)
+      n[j]++;
+
+    #pragma acc loop gang(static:*)
+    for (j = 0; j < 32; j++)
+      switch (n[j])
+	{
+	case 1:
+	  #pragma acc loop vector
+	  for (k = 0; k < 32; k++)
+	    arr[j * 32 + k] += 1;
+	  break;
+
+	case 2:
+	  #pragma acc loop vector
+	  for (k = 0; k < 32; k++)
+	    arr[j * 32 + k] += 2;
+	  break;
+
+	case 3:
+	  #pragma acc loop vector
+	  for (k = 0; k < 32; k++)
+	    arr[j * 32 + k] += 3;
+	  break;
+
+	case 4:
+	  #pragma acc loop vector
+	  for (k = 0; k < 32; k++)
+	    arr[j * 32 + k] += 4;
+	  break;
+
+	case 5:
+	  #pragma acc loop vector
+	  for (k = 0; k < 32; k++)
+	    arr[j * 32 + k] += 5;
+	  break;
+
+	default:
+	  abort ();
+	}
+
+    #pragma acc loop gang(static:*)
+    for (j = 0; j < 32; j++)
+      n[j]++;
+  }
+
+  for (i = 0; i < 32; i++)
+    assert (n[i] == (i % 5) + 2);
+
+  for (i = 0; i < 1024; i++)
+    assert (arr[i] == ((i / 32) % 5) + 1);
+}
+
+
 /* Test trivial operation of vector-single mode.  */
 
 void t7()
@@ -163,6 +287,7 @@ void t7()
   int n = 0;
   #pragma acc parallel copy(n) \
 		       num_gangs(1) num_workers(1) vector_length(32)
+  /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 288 } */
   {
     n++;
   }
@@ -186,6 +311,7 @@ void t8()
 
       #pragma acc parallel copy(arr) \
 			   num_gangs(gangs) num_workers(1) vector_length(32)
+      /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 312 } */
       {
 	int j;
 	#pragma acc loop gang
@@ -215,6 +341,7 @@ void t9()
 
       #pragma acc parallel copy(arr) \
 			   num_gangs(gangs) num_workers(1) vector_length(32)
+      /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 342 } */
       {
 	int j;
 	#pragma acc loop gang
@@ -247,6 +374,7 @@ void t10()
 
       #pragma acc parallel copy(arr) \
 			   num_gangs(gangs) num_workers(1) vector_length(32)
+      /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 375 } */
       {
 	int j;
 	#pragma acc loop gang
@@ -280,6 +408,7 @@ void t11()
 
   #pragma acc parallel copy(arr) \
 		       num_gangs(1024) num_workers(1) vector_length(32)
+  /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 409 } */
   {
     int j;
 
@@ -318,6 +447,7 @@ void t12()
 
   #pragma acc parallel copyout(fizz, buzz, fizzbuzz) \
 		       num_gangs(NUM_GANGS) num_workers(1) vector_length(32)
+  /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 448 } */
   {
     int j;
     
@@ -364,6 +494,7 @@ void t13()
 
   #pragma acc parallel copy(arr) \
 		       num_gangs(8) num_workers(8) vector_length(32)
+  /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 495 } */
   {
     int j;
     #pragma acc loop gang
@@ -381,6 +512,100 @@ void t13()
 }
 
 
+/* Test condition in worker-partitioned mode.  */
+
+void t14()
+{
+  int arr[32 * 32 * 8], i;
+
+  for (i = 0; i < 32 * 32 * 8; i++)
+    arr[i] = i;
+
+  #pragma acc parallel copy(arr) \
+		       num_gangs(8) num_workers(8) vector_length(32)
+  {
+    int j;
+    #pragma acc loop gang
+    for (j = 0; j < 32; j++)
+      {
+	int k;
+	#pragma acc loop worker
+	for (k = 0; k < 8; k++)
+	  {
+	    int m;
+	    if ((k % 2) == 0)
+	      {
+		#pragma acc loop vector
+		for (m = 0; m < 32; m++)
+		  arr[j * 32 * 8 + k * 32 + m]++;
+	      }
+	    else
+	      {
+		#pragma acc loop vector
+		for (m = 0; m < 32; m++)
+		  arr[j * 32 * 8 + k * 32 + m] += 2;
+	      }
+	  }
+      }
+  }
+
+  for (i = 0; i < 32 * 32 * 8; i++)
+    assert (arr[i] == i + ((i / 32) % 2) + 1);
+}
+
+
+/* Test switch in worker-partitioned mode.  */
+
+void t15()
+{
+  int arr[32 * 32 * 8], i;
+
+  for (i = 0; i < 32 * 32 * 8; i++)
+    arr[i] = i;
+
+  #pragma acc parallel copy(arr) \
+		       num_gangs(8) num_workers(8) vector_length(32)
+  {
+    int j;
+    #pragma acc loop gang
+    for (j = 0; j < 32; j++)
+      {
+	int k;
+	#pragma acc loop worker
+	for (k = 0; k < 8; k++)
+	  {
+	    int m;
+	    switch ((j * 32 + k) % 3)
+	    {
+	    case 0:
+	      #pragma acc loop vector
+	      for (m = 0; m < 32; m++)
+		arr[j * 32 * 8 + k * 32 + m]++;
+	      break;
+
+	    case 1:
+	      #pragma acc loop vector
+	      for (m = 0; m < 32; m++)
+		arr[j * 32 * 8 + k * 32 + m] += 2;
+	      break;
+
+	    case 2:
+	      #pragma acc loop vector
+	      for (m = 0; m < 32; m++)
+		arr[j * 32 * 8 + k * 32 + m] += 3;
+	      break;
+
+	    default: ;
+	    }
+	  }
+      }
+  }
+
+  for (i = 0; i < 32 * 32 * 8; i++)
+    assert (arr[i] == i + ((i / 32) % 3) + 1);
+}
+
+
 /* Test worker-single/worker-partitioned transitions.  */
 
 void t16()
@@ -395,6 +620,7 @@ void t16()
 
   #pragma acc parallel copy(n, arr) \
 		       num_gangs(8) num_workers(16) vector_length(32)
+  /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 621 } */
   {
     int j;
     #pragma acc loop gang
@@ -447,6 +673,7 @@ void t17()
 
 	#pragma acc parallel copyin(arr_a) copyout(arr_b) \
 			     num_gangs(num_gangs) num_workers(num_workers) vector_length(32)
+	/* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 674 } */
 	{
 	  int j;
 	  #pragma acc loop gang
@@ -664,6 +891,8 @@ void t21()
 
   #pragma acc parallel copy(arr) \
 		       num_gangs(8) num_workers(8) vector_length(32)
+  /* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "worker" { target *-*-* } 892 } */
+  /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 892 } */
   {
     int j;
     #pragma acc loop gang
@@ -687,6 +916,8 @@ void t22()
 
   #pragma acc parallel copy(arr) \
 		       num_gangs(8) num_workers(8) vector_length(32)
+  /* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "worker" { target *-*-* } 917 } */
+  /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 917 } */
   {
     int j;
     #pragma acc loop gang
@@ -713,6 +944,8 @@ void t23()
 
   #pragma acc parallel copy(arr) \
 		       num_gangs(8) num_workers(8) vector_length(32)
+  /* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "worker" { target *-*-* } 945 } */
+  /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 945 } */
   {
     int j;
     #pragma acc loop gang
@@ -739,6 +972,8 @@ void t24()
 
   #pragma acc parallel copy(arr) \
 		       num_gangs(8) num_workers(8) vector_length(32)
+  /* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "worker" { target *-*-* } 973 } */
+  /* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "vector" { target *-*-* } 973 } */
   {
     int j;
     #pragma acc loop gang
@@ -770,6 +1005,7 @@ void t25()
 
   #pragma acc parallel copy(arr) \
 		       num_gangs(8) num_workers(8) vector_length(32)
+  /* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "worker" { target *-*-* } 1006 } */
   {
     int j;
     #pragma acc loop gang
@@ -790,6 +1026,54 @@ void t25()
 }
 
 
+/* Test multiple conditional vector-partitioned loops in worker-single
+   mode.  */
+
+void t26()
+{
+  int arr[32 * 32], i;
+
+  for (i = 0; i < 32 * 32; i++)
+    arr[i] = i;
+
+  #pragma acc parallel copy(arr) \
+		       num_gangs(8) num_workers(8) vector_length(32)
+  /* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "worker" { target *-*-* } 1039 } */
+  {
+    int j;
+    #pragma acc loop gang
+    for (j = 0; j < 32; j++)
+      {
+	int k;
+	if ((j % 3) == 0)
+	  {
+	    #pragma acc loop vector
+	    for (k = 0; k < 32; k++)
+	      {
+		#pragma acc atomic
+		arr[j * 32 + k] += 3;
+	      }
+	  }
+	else if ((j % 3) == 1)
+	  {
+	    #pragma acc loop vector
+	    for (k = 0; k < 32; k++)
+	      {
+		#pragma acc atomic
+		arr[j * 32 + k] += 7;
+	      }
+	  }
+      }
+  }
+
+  for (i = 0; i < 32 * 32; i++)
+    {
+      int j = (i / 32) % 3;
+      assert (arr[i] == i + ((j == 0) ? 3 : (j == 1) ? 7 : 0));
+    }
+}
+
+
 /* Test worker-single, vector-partitioned, gang-redundant mode.  */
 
 #define ACTUAL_GANGS 8
@@ -805,6 +1089,8 @@ void t27()
 
   #pragma acc parallel copy(n, arr) copyout(ondev) \
 	  num_gangs(ACTUAL_GANGS) num_workers(8) vector_length(32)
+  /* { dg-warning "region is gang partitioned but does not contain gang partitioned code" "gang" { target *-*-* } 1090 } */
+  /* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "worker" { target *-*-* } 1090 } */
   {
     int j;
 
@@ -836,7 +1122,7 @@ void t27()
 
 /* Check if worker-single variables get broadcastd to vectors.  */
 
-#pragma acc routine
+#pragma acc routine seq
 float t28_routine ()
 {
   return 2.71;
@@ -869,8 +1155,10 @@ int main()
 {
   t1();
   t2();
+  t3();
   t4();
   t5();
+  t6();
   t7();
   t8();
   t9();
@@ -878,6 +1166,8 @@ int main()
   t11();
   t12();
   t13();
+  t14();
+  t15();
   t16();
   t17();
   t18();
@@ -888,6 +1178,7 @@ int main()
   t23();
   t24();
   t25();
+  t26();
   t27();
   t28();
 

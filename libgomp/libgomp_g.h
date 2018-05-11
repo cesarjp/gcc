@@ -275,6 +275,7 @@ extern void GOMP_single_copy_end (void *);
 
 /* target.c */
 
+extern void GOMP_set_offload_targets (const char *);
 extern void GOMP_target (int, void (*) (void *), const void *,
 			 size_t, void **, size_t *, unsigned char *);
 extern void GOMP_target_ext (int, void (*) (void *), size_t, void **, size_t *,
@@ -296,6 +297,8 @@ extern void GOMP_teams (unsigned int, unsigned int);
 /* oacc-parallel.c */
 
 extern void GOACC_parallel_keyed (int, void (*) (void *), size_t,
+				  void **, size_t *, unsigned short *, ...);
+extern void GOACC_parallel_keyed_v2 (int, int, void (*) (void *), size_t,
 				  void **, size_t *, unsigned short *, ...);
 extern void GOACC_parallel (int, void (*) (void *), size_t, void **, size_t *,
 			    unsigned short *, int, int, int, int, int, ...);

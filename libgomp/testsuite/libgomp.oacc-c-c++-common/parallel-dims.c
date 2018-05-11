@@ -1,6 +1,8 @@
 /* OpenACC parallelism dimensions clauses: num_gangs, num_workers,
    vector_length.  */
 
+/* { dg-additional-options "-foffload-force" } */
+
 #include <limits.h>
 #include <openacc.h>
 
@@ -107,7 +109,7 @@ int main ()
     int gangs_min, gangs_max, workers_min, workers_max, vectors_min, vectors_max;
     gangs_min = workers_min = vectors_min = INT_MAX;
     gangs_max = workers_max = vectors_max = INT_MIN;
-#pragma acc parallel copy (gangs_actual) \
+#pragma acc parallel copy (gangs_actual) /* { dg-warning "region contains gang partitoned code but is not gang partitioned" } */ \
   num_gangs (GANGS) /* { dg-warning "'num_gangs' value must be positive" "" { target c++ } } */
     {
       /* We're actually executing with num_gangs (1).  */
@@ -136,7 +138,7 @@ int main ()
     int gangs_min, gangs_max, workers_min, workers_max, vectors_min, vectors_max;
     gangs_min = workers_min = vectors_min = INT_MAX;
     gangs_max = workers_max = vectors_max = INT_MIN;
-#pragma acc parallel copy (workers_actual) \
+#pragma acc parallel copy (workers_actual) /* { dg-warning "region contains worker partitoned code but is not worker partitioned" } */ \
   num_workers (WORKERS) /* { dg-warning "'num_workers' value must be positive" "" { target c++ } } */
     {
       /* We're actually executing with num_workers (1).  */
@@ -165,7 +167,8 @@ int main ()
     int gangs_min, gangs_max, workers_min, workers_max, vectors_min, vectors_max;
     gangs_min = workers_min = vectors_min = INT_MAX;
     gangs_max = workers_max = vectors_max = INT_MIN;
-#pragma acc parallel copy (vectors_actual) /* { dg-warning "using vector_length \\(32\\), ignoring 1" "" { target openacc_nvidia_accel_configured } } */ \
+#pragma acc parallel copy (vectors_actual) /* { dg-warning "region contains vector partitoned code but is not vector partitioned" } */ \
+  /* { dg-warning "using vector_length \\(32\\), ignoring 1" "" { target openacc_nvidia_accel_selected } 170 } */ \
   vector_length (VECTORS) /* { dg-warning "'vector_length' value must be positive" "" { target c++ } } */
     {
       /* We're actually executing with vector_length (1), just the GCC nvptx
@@ -209,7 +212,7 @@ int main ()
     int gangs_min, gangs_max, workers_min, workers_max, vectors_min, vectors_max;
     gangs_min = workers_min = vectors_min = INT_MAX;
     gangs_max = workers_max = vectors_max = INT_MIN;
-#pragma acc parallel copy (gangs_actual) \
+#pragma acc parallel copy (gangs_actual) /* { dg-warning "region is gang partitioned but does not contain gang partitioned code" } */ \
   reduction (min: gangs_min, workers_min, vectors_min) reduction (max: gangs_max, workers_max, vectors_max) \
   num_gangs (gangs)
     {
@@ -270,42 +273,11 @@ int main ()
 
   /* GR, WP, VS.  */
   {
-    /* We try with an outrageously large value. */
-#define WORKERS 2 << 20
-    int workers_actual = WORKERS;
-    int gangs_min, gangs_max, workers_min, workers_max, vectors_min, vectors_max;
-    gangs_min = workers_min = vectors_min = INT_MAX;
-    gangs_max = workers_max = vectors_max = INT_MIN;
-#pragma acc parallel copy (workers_actual) /* { dg-warning "using num_workers \\(32\\), ignoring 2097152" "" { target openacc_nvidia_accel_configured } } */ \
-  num_workers (WORKERS)
-    {
-      if (acc_on_device (acc_device_host))
-	{
-	  /* We're actually executing with num_workers (1).  */
-	  workers_actual = 1;
-	}
-      else if (acc_on_device (acc_device_nvidia))
-	{
-	  /* The GCC nvptx back end enforces num_workers (32).  */
-	  workers_actual = 32;
-	}
-      else
-	__builtin_abort ();
-#pragma acc loop worker reduction (min: gangs_min, workers_min, vectors_min) reduction (max: gangs_max, workers_max, vectors_max)
-      for (int i = 100 * workers_actual; i > -100 * workers_actual; --i)
-	{
-	  gangs_min = gangs_max = acc_gang ();
-	  workers_min = workers_max = acc_worker ();
-	  vectors_min = vectors_max = acc_vector ();
-	}
-    }
-    if (workers_actual < 1)
-      __builtin_abort ();
-    if (gangs_min != 0 || gangs_max != 0
-	|| workers_min != 0 || workers_max != workers_actual - 1
-	|| vectors_min != 0 || vectors_max != 0)
-      __builtin_abort ();
-#undef WORKERS
+    /* Factored out to parallel-dims-compile.c.  The maximum num_workers for
+       Titan V for this kernel is 28, so using 32 at runtime will make the
+       execution fail.  OTOH, we want to test the "using num_workers (32),
+       ignoring <n>" warning, which means defaulting to 32 workers.  So, we skip
+       execution for this region.  */
   }
 
   /* GR, WP, VS.  */
@@ -317,7 +289,8 @@ int main ()
        "num_workers (workers)", which will run into "libgomp: cuLaunchKernel
        error: invalid argument".  So, limit ourselves here.  */
     if (acc_get_device_type () == acc_device_nvidia)
-      workers = 32;
+      // Limit to 28 for Titan V.
+      workers = 28;
     int workers_actual = workers;
     int gangs_min, gangs_max, workers_min, workers_max, vectors_min, vectors_max;
     gangs_min = workers_min = vectors_min = INT_MAX;
@@ -361,7 +334,7 @@ int main ()
     int gangs_min, gangs_max, workers_min, workers_max, vectors_min, vectors_max;
     gangs_min = workers_min = vectors_min = INT_MAX;
     gangs_max = workers_max = vectors_max = INT_MIN;
-#pragma acc parallel copy (vectors_actual) /* { dg-warning "using vector_length \\(32\\), ignoring 2097152" "" { target openacc_nvidia_accel_configured } } */ \
+#pragma acc parallel copy (vectors_actual) /* { dg-warning "using vector_length \\(32\\), ignoring 2097152" "" { target openacc_nvidia_accel_selected } } */ \
   vector_length (VECTORS)
     {
       if (acc_on_device (acc_device_host))
@@ -401,7 +374,7 @@ int main ()
     int gangs_min, gangs_max, workers_min, workers_max, vectors_min, vectors_max;
     gangs_min = workers_min = vectors_min = INT_MAX;
     gangs_max = workers_max = vectors_max = INT_MIN;
-#pragma acc parallel copy (vectors_actual) /* { dg-warning "using vector_length \\(32\\), ignoring runtime setting" "" { target openacc_nvidia_accel_configured } } */ \
+#pragma acc parallel copy (vectors_actual) /* { dg-warning "using vector_length \\(32\\), ignoring runtime setting" "" { target openacc_nvidia_accel_selected } } */ \
   vector_length (vectors)
     {
       if (acc_on_device (acc_device_host))
@@ -448,7 +421,7 @@ int main ()
     int gangs_min, gangs_max, workers_min, workers_max, vectors_min, vectors_max;
     gangs_min = workers_min = vectors_min = INT_MAX;
     gangs_max = workers_max = vectors_max = INT_MIN;
-#pragma acc parallel copy (gangs_actual, workers_actual, vectors_actual) /* { dg-warning "using vector_length \\(32\\), ignoring 11" "" { target openacc_nvidia_accel_configured } } */ \
+#pragma acc parallel copy (gangs_actual, workers_actual, vectors_actual) /* { dg-warning "using vector_length \\(32\\), ignoring 11" "" { target openacc_nvidia_accel_selected } } */ \
   num_gangs (gangs) \
   num_workers (WORKERS) \
   vector_length (VECTORS)

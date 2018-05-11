@@ -16115,7 +16115,12 @@ tsubst_omp_clauses (tree clauses, enum c_omp_region_type ort,
 	case OMP_CLAUSE_INDEPENDENT:
 	case OMP_CLAUSE_AUTO:
 	case OMP_CLAUSE_SEQ:
+	case OMP_CLAUSE_IF_PRESENT:
+	case OMP_CLAUSE_FINALIZE:
+	case OMP_CLAUSE_DEVICE_TYPE:
 	  break;
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_NOHOST:
 	default:
 	  gcc_unreachable ();
 	}
@@ -17072,6 +17077,7 @@ tsubst_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl,
       stmt = begin_omp_parallel ();
       RECUR (OMP_BODY (t));
       finish_omp_construct (TREE_CODE (t), stmt, tmp);
+      walk_tree_1 (&OMP_BODY (t), mark_vars_oacc_gangprivate, NULL, NULL, NULL);
       break;
 
     case OMP_PARALLEL:
