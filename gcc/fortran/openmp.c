@@ -2060,8 +2060,7 @@ gfc_match_oacc_declare (void)
 
       if (s->ns->proc_name && s->ns->proc_name->attr.proc == PROC_MODULE)
 	{
-	  if (n->u.map_op != OMP_MAP_FORCE_ALLOC
-	      && n->u.map_op != OMP_MAP_FORCE_TO)
+	  if (n->u.map_op != OMP_MAP_ALLOC && n->u.map_op != OMP_MAP_TO)
 	    {
 	      gfc_error ("Invalid clause in module with !$ACC DECLARE at %L",
 			 &where);
@@ -2069,6 +2068,13 @@ gfc_match_oacc_declare (void)
 	    }
 
 	  module_var = true;
+	}
+
+      if (ns->proc_name->attr.oacc_function)
+	{
+	  gfc_error ("Invalid declare in routine with $!ACC DECLARE at %L",
+		     &where);
+	  return MATCH_ERROR;
 	}
 
       if (s->attr.use_assoc)
@@ -2089,10 +2095,12 @@ gfc_match_oacc_declare (void)
       switch (n->u.map_op)
 	{
 	  case OMP_MAP_FORCE_ALLOC:
+	  case OMP_MAP_ALLOC:
 	    s->attr.oacc_declare_create = 1;
 	    break;
 
 	  case OMP_MAP_FORCE_TO:
+	  case OMP_MAP_TO:
 	    s->attr.oacc_declare_copyin = 1;
 	    break;
 

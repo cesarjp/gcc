@@ -5099,6 +5099,41 @@ gfc_trans_oacc_declare (gfc_code *code)
   return gfc_finish_block (&block);
 }
 
+/* Create an OpenACC enter or exit data construct for an OpenACC declared
+   variable that has been allocated or deallocated.  */
+
+tree
+gfc_trans_oacc_declare_allocate (stmtblock_t *block, gfc_expr *expr,
+				 bool allocate)
+{
+  gfc_omp_clauses *clauses = gfc_get_omp_clauses ();
+  gfc_omp_namelist *p = gfc_get_omp_namelist ();
+  tree oacc_clauses, stmt;
+  enum tree_code construct_code;
+
+  p->sym = expr->symtree->n.sym;
+  p->where = expr->where;
+
+  if (allocate)
+    {
+      p->u.map_op = OMP_MAP_DECLARE_ALLOCATE;
+      construct_code = OACC_ENTER_DATA;
+    }
+  else
+    {
+      p->u.map_op = OMP_MAP_DECLARE_DEALLOCATE;
+      construct_code = OACC_EXIT_DATA;
+    }
+  clauses->lists[OMP_LIST_MAP] = p;
+
+  oacc_clauses = gfc_trans_omp_clauses (block, clauses, expr->where);
+  stmt = build1_loc (input_location, construct_code, void_type_node,
+		     oacc_clauses);
+  gfc_add_expr_to_block (block, stmt);
+
+  return stmt;
+}
+
 tree
 gfc_trans_oacc_directive (gfc_code *code)
 {
