@@ -1297,7 +1297,7 @@ oacc_loop_fixed_partitions (oacc_loop *loop, unsigned outer_mask)
      across worker and vector axes, sometimes the hardware can
      execute those loops together without resorting to placing
      extra thread barriers.  */
-  this_mask = targetm.goacc.adjust_parallelism (this_mask, outer_mask);
+  this_mask = targetm.goacc.adjust_parallelism (this_mask, outer_mask, true);
 
   mask_all |= this_mask;
 
@@ -1390,7 +1390,8 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	  this_mask ^= loop->e_mask;
 	}
 
-      this_mask = targetm.goacc.adjust_parallelism (this_mask, outer_mask);
+      this_mask = targetm.goacc.adjust_parallelism (this_mask, outer_mask,
+						    false);
       loop->mask |= this_mask;
     }
 
@@ -1439,7 +1440,8 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
 	}
 
       loop->mask |= this_mask;
-      loop->mask = targetm.goacc.adjust_parallelism (loop->mask, outer_mask);
+      loop->mask = targetm.goacc.adjust_parallelism (loop->mask, outer_mask,
+						     false);
 
       if (!loop->mask && noisy)
 	warning_at (loop->loc, 0,
@@ -1821,7 +1823,8 @@ default_goacc_dim_limit (int ARG_UNUSED (axis))
 
 unsigned
 default_goacc_adjust_parallelism (unsigned this_mask,
-				  unsigned ARG_UNUSED (outer_mask))
+				  unsigned ARG_UNUSED (outer_mask),
+				  bool ARG_UNUSED (user))
 {
   return this_mask;
 }

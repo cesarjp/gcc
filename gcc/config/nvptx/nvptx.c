@@ -5678,7 +5678,8 @@ nvptx_dim_limit (int axis)
    associated with the offloaded function.  */
 
 static unsigned
-nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask)
+nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask,
+			  bool user)
 {
   if (nvptx_goacc_needs_vl_warp ())
     return inner_mask;
@@ -5688,6 +5689,18 @@ nvptx_adjust_parallelism (unsigned inner_mask, unsigned outer_mask)
   offload_attrs oa;
 
   populate_offload_attrs (&oa);
+
+  /* Worker partitioning requires synchronization barriers to
+     implement worker-single mode.  Unfortunately, the synchronization
+     time using bar.sync increases linearly as more workers are added.
+
+     TODO: it would be more effective to either a) have the runtime
+     allocate more gangs, or b) have the nvptx BE launch larger vector
+     lengths.  Case a) should nicely handle the case where gang-worker
+     parallelism is applied the single, outermost loop inside a
+     parallel region.  */
+  if (!user && outer_mask == 0)
+    inner_mask &= ~GOMP_DIM_MASK (GOMP_DIM_WORKER);
 
   if (oa.vector_length == PTX_WARP_SIZE)
     return inner_mask;
