@@ -44,6 +44,7 @@ typedef void *CUevent;
 typedef void *CUfunction;
 typedef void *CUlinkState;
 typedef void *CUmodule;
+typedef size_t (*CUoccupancyB2DSize)(int);
 typedef void *CUstream;
 
 typedef enum {
@@ -170,6 +171,9 @@ CUresult cuModuleGetGlobal (CUdeviceptr *, size_t *, CUmodule, const char *);
 CUresult cuModuleLoad (CUmodule *, const char *);
 CUresult cuModuleLoadData (CUmodule *, const void *);
 CUresult cuModuleUnload (CUmodule);
+CUresult cuOccupancyMaxPotentialBlockSizeWithFlags(int *, int *, CUfunction,
+						   CUoccupancyB2DSize, size_t,
+						   int, unsigned int);
 CUresult cuStreamCreate (CUstream *, unsigned);
 #define cuStreamDestroy cuStreamDestroy_v2
 CUresult cuStreamDestroy (CUstream);

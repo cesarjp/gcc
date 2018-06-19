@@ -94,6 +94,7 @@ CUDA_ONE_CALL (cuModuleGetGlobal)	\
 CUDA_ONE_CALL (cuModuleLoad)		\
 CUDA_ONE_CALL (cuModuleLoadData)	\
 CUDA_ONE_CALL (cuModuleUnload)		\
+CUDA_ONE_CALL (cuOccupancyMaxPotentialBlockSize) \
 CUDA_ONE_CALL (cuStreamCreate)		\
 CUDA_ONE_CALL (cuStreamDestroy)		\
 CUDA_ONE_CALL (cuStreamQuery)		\
@@ -414,6 +415,7 @@ struct ptx_device
   int num_sms;
   int regs_per_block;
   int regs_per_sm;
+  int driver_version;
 
   struct ptx_image_data *images;  /* Images loaded on device.  */
   pthread_mutex_t image_lock;     /* Lock for above list.  */
@@ -725,6 +727,7 @@ nvptx_open_device (int n)
   ptx_dev->ord = n;
   ptx_dev->dev = dev;
   ptx_dev->ctx_shared = false;
+  ptx_dev->driver_version = 0;
 
   r = CUDA_CALL_NOCHECK (cuCtxGetDevice, &ctx_dev);
   if (r != CUDA_SUCCESS && r != CUDA_ERROR_INVALID_CONTEXT)
@@ -805,6 +808,9 @@ nvptx_open_device (int n)
 			 CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT, dev);
   if (r != CUDA_SUCCESS)
     async_engines = 1;
+
+  CUDA_CALL_ERET (NULL, cuDriverGetVersion, &pi);
+  ptx_dev->driver_version = pi;
 
   ptx_dev->images = NULL;
   pthread_mutex_init (&ptx_dev->image_lock, NULL);
@@ -1120,6 +1126,7 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
   void *hp, *dp;
   struct nvptx_thread *nvthd = nvptx_thread ();
   const char *maybe_abort_msg = "(perhaps abort was called)";
+  int dev_size = nvthd->ptx_dev->num_sms;
 
   function = targ_fn->fn;
 
@@ -1140,8 +1147,7 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 
   if (seen_zero)
     {
-      /* See if the user provided GOMP_OPENACC_DIM environment
-	 variable to specify runtime defaults. */
+      /* Specify runtime defaults. */
       static int default_dims[GOMP_DIM_MAX];
 
       pthread_mutex_lock (&ptx_dev_lock);
@@ -1150,22 +1156,19 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	  for (int i = 0; i < GOMP_DIM_MAX; ++i)
 	    default_dims[i] = GOMP_PLUGIN_acc_default_dim (i);
 
-	  int warp_size, block_size, dev_size, cpu_size;
+	  int warp_size, block_size, cpu_size;
 	  CUdevice dev = nvptx_thread()->ptx_dev->dev;
 	  /* 32 is the default for known hardware.  */
 	  int gang = 0, worker = 32, vector = 32;
-	  CUdevice_attribute cu_tpb, cu_ws, cu_mpc, cu_tpm;
+	  CUdevice_attribute cu_tpb, cu_ws, cu_tpm;
 
 	  cu_tpb = CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK;
 	  cu_ws = CU_DEVICE_ATTRIBUTE_WARP_SIZE;
-	  cu_mpc = CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT;
 	  cu_tpm  = CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR;
 
 	  if (CUDA_CALL_NOCHECK (cuDeviceGetAttribute, &block_size, cu_tpb,
 				 dev) == CUDA_SUCCESS
 	      && CUDA_CALL_NOCHECK (cuDeviceGetAttribute, &warp_size, cu_ws,
-				    dev) == CUDA_SUCCESS
-	      && CUDA_CALL_NOCHECK (cuDeviceGetAttribute, &dev_size, cu_mpc,
 				    dev) == CUDA_SUCCESS
 	      && CUDA_CALL_NOCHECK (cuDeviceGetAttribute, &cpu_size, cu_tpm,
 				    dev) == CUDA_SUCCESS)
@@ -1199,11 +1202,61 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 			     default_dims[GOMP_DIM_VECTOR]);
 	}
       pthread_mutex_unlock (&ptx_dev_lock);
+      int vectors = default_dims[GOMP_DIM_VECTOR];
+      int workers = default_dims[GOMP_DIM_WORKER];
+      int gangs = default_dims[GOMP_DIM_GANG];
+
+      if (nvptx_thread()->ptx_dev->driver_version > 6050)
+	{
+	  int grids, blocks;
+	  CUDA_CALL_ASSERT (cuOccupancyMaxPotentialBlockSize, &grids,
+			    &blocks, function, NULL, 0,
+			    dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR]);
+	  GOMP_PLUGIN_debug (0, "cuOccupancyMaxPotentialBlockSize: "
+			     "grid = %d, block = %d\n", grids, blocks);
+
+	  if (GOMP_PLUGIN_acc_default_dim (GOMP_DIM_GANG) == 0)
+	    gangs = 2 * grids * dev_size;
+
+	  if (GOMP_PLUGIN_acc_default_dim (GOMP_DIM_WORKER) == 0)
+	    workers = blocks / vectors;
+	}
 
       for (i = 0; i != GOMP_DIM_MAX; i++)
 	if (!dims[i])
-	  dims[i] = default_dims[i];
+	  {
+	    switch (i)
+	      {
+	      case GOMP_DIM_GANG:
+		/* The constant 2 was emperically.  The justification
+		   behind it is to prevent the hardware from idling by
+		   throwing twice the amount of work that it can
+		   physically handle.  */
+		dims[i] = gangs;
+		break;
+	      case GOMP_DIM_WORKER:
+		dims[i] = workers;
+		break;
+	      case GOMP_DIM_VECTOR:
+		dims[i] = vectors;
+		break;
+	      default:
+		abort ();
+	      }
+	  }
     }
+
+  /* Check if the accelerator has sufficient hardware resources to
+     launch the offloaded kernel.  */
+  if (dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR]
+      > targ_fn->max_threads_per_block)
+    GOMP_PLUGIN_fatal ("The Nvidia accelerator has insufficient resources to"
+		       " launch '%s' with num_workers = %d and vector_length ="
+		       " %d; recompile the program with 'num_workers = x and"
+		       " vector_length = y' on that offloaded region or "
+		       "'-fopenacc-dim=-:x:y' where x * y <= %d.\n",
+		       targ_fn->launch->fn, dims[GOMP_DIM_WORKER],
+		       dims[GOMP_DIM_VECTOR], targ_fn->max_threads_per_block);
 
   /* This reserves a chunk of a pre-allocated page of memory mapped on both
      the host and the device. HP is a host pointer to the new chunk, and DP is
