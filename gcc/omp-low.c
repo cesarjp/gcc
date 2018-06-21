@@ -5652,6 +5652,10 @@ lower_oacc_head_mark (location_t loc, tree ddvar, tree clauses,
 	  tag |= OLF_TILE;
 	  break;
 
+	case OMP_CLAUSE_REDUCTION:
+	  tag |= OLF_REDUCTION;
+	  break;
+
 	default:
 	  continue;
 	}
