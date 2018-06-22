@@ -38,6 +38,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "gomp-constants.h"
 #include "omp-general.h"
 #include "omp-low.h"
+#include "hash-set.h"
+#include "tree-iterator.h"
 #undef GCC_DIAG_STYLE
 #define GCC_DIAG_STYLE __gcc_tdiag__
 #include "diagnostic-core.h"
@@ -563,7 +565,8 @@ gfc_omp_clause_copy_ctor (tree clause, tree dest, tree src)
   stmtblock_t block, cond_block;
 
   gcc_assert (OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_FIRSTPRIVATE
-	      || OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_LINEAR);
+	      || OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_LINEAR
+	      || OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_REDUCTION);
 
   if ((! GFC_DESCRIPTOR_TYPE_P (type)
        || GFC_TYPE_ARRAY_AKIND (type) != GFC_ARRAY_ALLOCATABLE)
@@ -1045,6 +1048,11 @@ gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
 
   tree decl = OMP_CLAUSE_DECL (c);
 
+  /* This conflicts with the OpenACC changes done to support assumed-size
+     arrays that are implicitly mapped after enter data directive (see
+     libgomp.oacc-fortran/assumed-size.f90) -- doesn't the same apply to
+     OpenMP, too?  */
+#if 0
   /* Assumed-size arrays can't be mapped implicitly, they have to be
      mapped explicitly using array sections.  */
   if (TREE_CODE (decl) == PARM_DECL
@@ -1058,6 +1066,7 @@ gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
 		"implicit mapping of assumed size array %qD", decl);
       return;
     }
+#endif
 
   tree c2 = NULL_TREE, c3 = NULL_TREE, c4 = NULL_TREE;
   if (POINTER_TYPE_P (TREE_TYPE (decl)))
@@ -1094,7 +1103,6 @@ gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
       gfc_start_block (&block);
       tree type = TREE_TYPE (decl);
       tree ptr = gfc_conv_descriptor_data_get (decl);
-      ptr = fold_convert (build_pointer_type (char_type_node), ptr);
       ptr = build_fold_indirect_ref (ptr);
       OMP_CLAUSE_DECL (c) = ptr;
       c2 = build_omp_clause (input_location, OMP_CLAUSE_MAP);
@@ -2141,8 +2149,6 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 		    {
 		      tree type = TREE_TYPE (decl);
 		      tree ptr = gfc_conv_descriptor_data_get (decl);
-		      ptr = fold_convert (build_pointer_type (char_type_node),
-					  ptr);
 		      ptr = build_fold_indirect_ref (ptr);
 		      OMP_CLAUSE_DECL (node) = ptr;
 		      node2 = build_omp_clause (input_location,
@@ -2235,8 +2241,6 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 				       OMP_CLAUSE_SIZE (node), elemsz);
 		    }
 		  gfc_add_block_to_block (block, &se.post);
-		  ptr = fold_convert (build_pointer_type (char_type_node),
-				      ptr);
 		  OMP_CLAUSE_DECL (node) = build_fold_indirect_ref (ptr);
 
 		  if (POINTER_TYPE_P (TREE_TYPE (decl))
@@ -3039,22 +3043,157 @@ gfc_trans_omp_code (gfc_code *code, bool force_empty)
   return stmt;
 }
 
+void gfc_debug_expr (gfc_expr *);
+
+/* Add any array that does not have an array descriptor to the hash_set
+   pointed to by DATA.  */
+
+static int
+gfc_scan_nodesc_arrays (gfc_expr **e, int *walk_subtrees ATTRIBUTE_UNUSED,
+		void *data)
+{
+  hash_set<gfc_symbol *> *arrays = (hash_set<gfc_symbol *> *)data;
+
+  if ((*e)->expr_type == EXPR_VARIABLE)
+    {
+      gfc_symbol *sym = (*e)->symtree->n.sym;
+
+      if (sym->attr.dimension && gfc_is_nodesc_array (sym))
+	arrays->add (sym);
+    }
+
+  return 0;
+}
+
+/* Build a set of internal array variables (lbound, ubound, stride, etc.)
+   that need privatization.  */
+
+static tree
+gfc_privatize_nodesc_arrays_1 (tree *tp, int *walk_subtrees, void *data)
+{
+  hash_set<tree> *decls = (hash_set<tree> *)data;
+
+  if (TREE_CODE (*tp) == MODIFY_EXPR)
+    {
+      tree lhs = TREE_OPERAND (*tp, 0);
+      if (DECL_P (lhs))
+	decls->add (lhs);
+    }
+
+  if (IS_TYPE_OR_DECL_P (*tp))
+    *walk_subtrees = false;
+
+  return NULL;
+}
+
+/* Reinitialize all of the arrays inside ARRAY_SET in BLOCK.  Append private
+   clauses for those arrays in CLAUSES.  */
+
+static tree
+gfc_privatize_nodesc_arrays (hash_set<gfc_symbol *> *array_set,
+			     stmtblock_t *block, tree clauses)
+{
+  hash_set<gfc_symbol *>::iterator its = array_set->begin ();
+  hash_set<tree> *private_decls = new hash_set<tree>;
+
+  for (; its != array_set->end (); ++its)
+    {
+      gfc_symbol *sym = *its;
+      tree parm = gfc_get_symbol_decl (sym);
+      tree type = TREE_TYPE (parm);
+      tree offset, tmp;
+
+      /* Evaluate the bounds of the array.  */
+      gfc_trans_array_bounds (type, sym, &offset, block, false);
+
+      /* Set the offset.  */
+      if (TREE_CODE (GFC_TYPE_ARRAY_OFFSET (type)) == VAR_DECL)
+	gfc_add_modify (block, GFC_TYPE_ARRAY_OFFSET (type), offset);
+
+      /* Set the pointer itself if we aren't using the parameter
+	 directly.  */
+      if (TREE_CODE (parm) != PARM_DECL && DECL_LANG_SPECIFIC (parm)
+	  && GFC_DECL_SAVED_DESCRIPTOR (parm))
+	{
+	  tmp = convert (TREE_TYPE (parm),
+			 GFC_DECL_SAVED_DESCRIPTOR (parm));
+	  gfc_add_modify (block, parm, tmp);
+	}
+    }
+
+  /* Add private clauses for any variables that are used by
+     gfc_trans_array_bounds.  */
+  walk_tree_without_duplicates (&block->head, gfc_privatize_nodesc_arrays_1,
+				private_decls);
+
+  hash_set<tree>::iterator itt = private_decls->begin ();
+
+  for (; itt != private_decls->end (); ++itt)
+    {
+      tree nc = build_omp_clause (input_location, OMP_CLAUSE_PRIVATE);
+      OMP_CLAUSE_DECL (nc) = *itt;
+      OMP_CLAUSE_CHAIN (nc) = clauses;
+      clauses = nc;
+    }
+
+  delete private_decls;
+
+  return clauses;
+}
+
+/* Reinitialize any arrays in CLAUSES used inside CODE which do not contain
+   array descriptors if SCAN_NODESC_ARRAYS is TRUE.  Place the initialization
+   sequences in CODE.  Update CLAUSES to contain OMP_CLAUSE_PRIVATE for any
+   arrays which were initialized.  */
+
+static hash_set<gfc_symbol *> *
+gfc_init_nodesc_arrays (stmtblock_t *inner, tree *clauses, gfc_code *code,
+			bool scan_nodesc_arrays)
+{
+  hash_set<gfc_symbol *> *array_set = NULL;
+
+  if (!scan_nodesc_arrays)
+    return NULL;
+
+  array_set = new hash_set<gfc_symbol *>;
+  gfc_code_walker (&code, gfc_dummy_code_callback, gfc_scan_nodesc_arrays,
+		   array_set);
+
+  if (array_set->elements ())
+    {
+      gfc_start_block (inner);
+      pushlevel ();
+      *clauses = gfc_privatize_nodesc_arrays (array_set, inner, *clauses);
+    }
+  else
+    {
+      delete array_set;
+      array_set = NULL;
+    }
+
+  return array_set;
+}
+
 /* Trans OpenACC directives. */
 /* parallel, kernels, data and host_data. */
 static tree
 gfc_trans_oacc_construct (gfc_code *code)
 {
-  stmtblock_t block;
+  stmtblock_t block, inner;
   tree stmt, oacc_clauses;
   enum tree_code construct_code;
+  bool scan_nodesc_arrays = false;
+  hash_set<gfc_symbol *> *array_set = NULL;
 
   switch (code->op)
     {
       case EXEC_OACC_PARALLEL:
 	construct_code = OACC_PARALLEL;
+	scan_nodesc_arrays = true;
 	break;
       case EXEC_OACC_KERNELS:
 	construct_code = OACC_KERNELS;
+	scan_nodesc_arrays = true;
 	break;
       case EXEC_OACC_DATA:
 	construct_code = OACC_DATA;
@@ -3069,10 +3208,25 @@ gfc_trans_oacc_construct (gfc_code *code)
   gfc_start_block (&block);
   oacc_clauses = gfc_trans_omp_clauses (&block, code->ext.omp_clauses,
 					code->loc);
+
+  array_set = gfc_init_nodesc_arrays (&inner, &oacc_clauses, code,
+				      scan_nodesc_arrays);
+
   stmt = gfc_trans_omp_code (code->block->next, true);
+
+  if (array_set && array_set->elements ())
+    {
+      gfc_add_expr_to_block (&inner, stmt);
+      stmt = gfc_finish_block (&inner);
+      stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
+      delete array_set;
+    }
+
   stmt = build2_loc (input_location, construct_code, void_type_node, stmt,
 		     oacc_clauses);
+
   gfc_add_expr_to_block (&block, stmt);
+
   return gfc_finish_block (&block);
 }
 
@@ -3865,18 +4019,23 @@ gfc_trans_omp_do (gfc_code *code, gfc_exec_op op, stmtblock_t *pblock,
 static tree
 gfc_trans_oacc_combined_directive (gfc_code *code)
 {
-  stmtblock_t block, *pblock = NULL;
+  stmtblock_t block, inner, *pblock = NULL;
   gfc_omp_clauses construct_clauses, loop_clauses;
   tree stmt, oacc_clauses = NULL_TREE;
   enum tree_code construct_code;
+  bool scan_nodesc_arrays = false;
+  hash_set<gfc_symbol *> *array_set = NULL;
+  location_t loc = input_location;
 
   switch (code->op)
     {
       case EXEC_OACC_PARALLEL_LOOP:
 	construct_code = OACC_PARALLEL;
+	scan_nodesc_arrays = true;
 	break;
       case EXEC_OACC_KERNELS_LOOP:
 	construct_code = OACC_KERNELS;
+	scan_nodesc_arrays = true;
 	break;
       default:
 	gcc_unreachable ();
@@ -3925,18 +4084,37 @@ gfc_trans_oacc_combined_directive (gfc_code *code)
       oacc_clauses = gfc_trans_omp_clauses (&block, &construct_clauses,
 					    code->loc);
     }
+
+  array_set = gfc_init_nodesc_arrays (&inner, &oacc_clauses, code,
+				      scan_nodesc_arrays);
+
   if (!loop_clauses.seq)
-    pblock = &block;
+    pblock = (array_set && array_set->elements ()) ? &inner : &block;
   else
     pushlevel ();
   stmt = gfc_trans_omp_do (code, EXEC_OACC_LOOP, pblock, &loop_clauses, NULL);
+
+  if (CAN_HAVE_LOCATION_P (stmt))
+    SET_EXPR_LOCATION (stmt, loc);
+
+  if (array_set && array_set->elements ())
+    gfc_add_expr_to_block (&inner, stmt);
+
   if (TREE_CODE (stmt) != BIND_EXPR)
     stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
   else
     poplevel (0, 0);
-  stmt = build2_loc (input_location, construct_code, void_type_node, stmt,
-		     oacc_clauses);
+
+  if (array_set && array_set->elements ())
+    {
+      stmt = gfc_finish_block (&inner);
+      stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
+      delete array_set;
+    }
+
+  stmt = build2_loc (loc, construct_code, void_type_node, stmt, oacc_clauses);
   gfc_add_expr_to_block (&block, stmt);
+
   return gfc_finish_block (&block);
 }
 
