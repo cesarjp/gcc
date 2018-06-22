@@ -853,10 +853,12 @@ struct splay_tree_key_s {
   uintptr_t tgt_offset;
   /* Reference count.  */
   uintptr_t refcount;
-  /* Dynamic reference count.  */
-  uintptr_t dynamic_refcount;
-  /* Pointer to the original mapping of "omp declare target link" object.  */
-  splay_tree_key link_key;
+  union {
+    /* Pointer to the original mapping of "omp declare target link" object.  */
+    splay_tree_key link_key;
+    /* OpenACC Dynamic reference count.  */
+    uintptr_t dynamic_refcount;
+  } u;
 };
 
 /* The comparison function.  */
