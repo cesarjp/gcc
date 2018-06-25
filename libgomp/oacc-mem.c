@@ -467,7 +467,7 @@ present_create_copy (unsigned f, void *h, size_t s)
       if (n->refcount != REFCOUNT_INFINITY)
 	{
 	  n->refcount++;
-	  n->dynamic_refcount++;
+	  n->u.dynamic_refcount++;
 	}
       gomp_mutex_unlock (&acc_dev->lock);
     }
@@ -493,7 +493,7 @@ present_create_copy (unsigned f, void *h, size_t s)
       tgt = gomp_map_vars (acc_dev, mapnum, &hostaddrs, NULL, &s, &kinds, true,
 			   GOMP_MAP_VARS_OPENACC);
       /* Initialize dynamic refcount.  */
-      tgt->list[0].key->dynamic_refcount = 1;
+      tgt->list[0].key->u.dynamic_refcount = 1;
 
       gomp_mutex_lock (&acc_dev->lock);
 
@@ -596,9 +596,9 @@ delete_copyout (unsigned f, void *h, size_t s, const char *libfnname)
   if (n->refcount == REFCOUNT_INFINITY)
     {
       n->refcount = 0;
-      n->dynamic_refcount = 0;
+      n->u.dynamic_refcount = 0;
     }
-  if (n->refcount < n->dynamic_refcount)
+  if (n->refcount < n->u.dynamic_refcount)
     {
       gomp_mutex_unlock (&acc_dev->lock);
       gomp_fatal ("Dynamic reference counting assert fail\n");
@@ -606,12 +606,12 @@ delete_copyout (unsigned f, void *h, size_t s, const char *libfnname)
 
   if (f & FLAG_FINALIZE)
     {
-      n->refcount -= n->dynamic_refcount;
-      n->dynamic_refcount = 0;
+      n->refcount -= n->u.dynamic_refcount;
+      n->u.dynamic_refcount = 0;
     }
-  else if (n->dynamic_refcount)
+  else if (n->u.dynamic_refcount)
     {
-      n->dynamic_refcount--;
+      n->u.dynamic_refcount--;
       n->refcount--;
     }
 
@@ -747,7 +747,7 @@ gomp_acc_insert_pointer (size_t mapnum, void **hostaddrs, size_t *sizes,
 	      if (i + j < tgt->list_count && tgt->list[i + j].key)
 		{
 		  tgt->list[i + j].key->refcount++;
-		  tgt->list[i + j].key->dynamic_refcount++;
+		  tgt->list[i + j].key->u.dynamic_refcount++;
 		}
 	    return;
 	  }
@@ -761,7 +761,7 @@ gomp_acc_insert_pointer (size_t mapnum, void **hostaddrs, size_t *sizes,
   gomp_debug (0, "  %s: mappings prepared\n", __FUNCTION__);
 
   /* Initialize dynamic refcount.  */
-  tgt->list[0].key->dynamic_refcount = 1;
+  tgt->list[0].key->u.dynamic_refcount = 1;
 
   gomp_mutex_lock (&acc_dev->lock);
   tgt->prev = acc_dev->openacc.data_environ;
@@ -796,7 +796,7 @@ gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
 
   t = n->tgt;
 
-  if (n->refcount < n->dynamic_refcount)
+  if (n->refcount < n->u.dynamic_refcount)
     {
       gomp_mutex_unlock (&acc_dev->lock);
       gomp_fatal ("Dynamic reference counting assert fail\n");
@@ -804,12 +804,12 @@ gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
 
   if (finalize)
     {
-      n->refcount -= n->dynamic_refcount;
-      n->dynamic_refcount = 0;
+      n->refcount -= n->u.dynamic_refcount;
+      n->u.dynamic_refcount = 0;
     }
-  else if (n->dynamic_refcount)
+  else if (n->u.dynamic_refcount)
     {
-      n->dynamic_refcount--;
+      n->u.dynamic_refcount--;
       n->refcount--;
     }
 

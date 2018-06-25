@@ -841,13 +841,13 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 				      kind & typemask, cbufp);
 	    else
 	      {
-		k->link_key = NULL;
+		k->u.link_key = NULL;
 		if (n && n->refcount == REFCOUNT_LINK)
 		  {
 		    /* Replace target address of the pointer with target address
 		       of mapped object in the splay tree.  */
 		    splay_tree_remove (mem_map, n);
-		    k->link_key = n;
+		    k->u.link_key = n;
 		  }
 		size_t align = (size_t) 1 << (kind >> rshift);
 		tgt->list[i].key = k;
@@ -871,7 +871,6 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 		tgt->list[i].offset = 0;
 		tgt->list[i].length = k->host_end - k->host_start;
 		k->refcount = 1;
-		k->dynamic_refcount = 0;
 		tgt->refcount++;
 		array->left = NULL;
 		array->right = NULL;
@@ -964,7 +963,7 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 				kind);
 		  }
 
-		if (k->link_key)
+		if (k->u.link_key)
 		  {
 		    /* Set link pointer on target to the device address of the
 		       mapped object.  */
@@ -1029,8 +1028,8 @@ gomp_remove_var (struct gomp_device_descr *devicep, splay_tree_key k)
 {
   bool is_tgt_unmapped = false;
   splay_tree_remove (&devicep->mem_map, k);
-  if (k->link_key)
-    splay_tree_insert (&devicep->mem_map, (splay_tree_node) k->link_key);
+  if (k->u.link_key)
+    splay_tree_insert (&devicep->mem_map, (splay_tree_node) k->u.link_key);
   if (k->tgt->refcount > 1)
     k->tgt->refcount--;
   else
@@ -1215,7 +1214,7 @@ gomp_load_image_to_device (struct gomp_device_descr *devicep, unsigned version,
       k->tgt = tgt;
       k->tgt_offset = target_table[i].start;
       k->refcount = REFCOUNT_INFINITY;
-      k->link_key = NULL;
+      k->u.link_key = NULL;
       array->left = NULL;
       array->right = NULL;
       splay_tree_insert (&devicep->mem_map, array);
@@ -1247,7 +1246,7 @@ gomp_load_image_to_device (struct gomp_device_descr *devicep, unsigned version,
       k->tgt = tgt;
       k->tgt_offset = target_var->start;
       k->refcount = target_size & link_bit ? REFCOUNT_LINK : REFCOUNT_INFINITY;
-      k->link_key = NULL;
+      k->u.link_key = NULL;
       array->left = NULL;
       array->right = NULL;
       splay_tree_insert (&devicep->mem_map, array);
@@ -1993,9 +1992,9 @@ gomp_exit_data (struct gomp_device_descr *devicep, size_t mapnum,
 	  if (k->refcount == 0)
 	    {
 	      splay_tree_remove (&devicep->mem_map, k);
-	      if (k->link_key)
+	      if (k->u.link_key)
 		splay_tree_insert (&devicep->mem_map,
-				   (splay_tree_node) k->link_key);
+				   (splay_tree_node) k->u.link_key);
 	      if (k->tgt->refcount > 1)
 		k->tgt->refcount--;
 	      else
