@@ -105,6 +105,9 @@ enum gimplify_omp_var_data
   /* Flag for GOVD_MAP: must be present already.  */
   GOVD_MAP_FORCE_PRESENT = 524288,
 
+  /* Flag for OpenACC deviceptrs.  */
+  GOVD_DEVICEPTR = (1<<21),
+
   GOVD_DATA_SHARE_CLASS = (GOVD_SHARED | GOVD_PRIVATE | GOVD_FIRSTPRIVATE
 			   | GOVD_LASTPRIVATE | GOVD_REDUCTION | GOVD_LINEAR
 			   | GOVD_LOCAL)
@@ -7039,15 +7042,20 @@ oacc_default_clause (struct gimplify_omp_ctx *ctx, tree decl, unsigned flags)
 {
   const char *rkind;
   bool on_device = false;
+  bool is_private = false;
   bool declared = is_oacc_declared (decl);
   tree type = TREE_TYPE (decl);
 
   if (lang_hooks.decls.omp_privatize_by_reference (decl))
     type = TREE_TYPE (type);
 
+  if (RECORD_OR_UNION_TYPE_P (type))
+    is_private = lang_hooks.decls.omp_disregard_value_expr (decl, false);
+
   if ((ctx->region_type & (ORT_ACC_PARALLEL | ORT_ACC_KERNELS)) != 0
       && is_global_var (decl)
-      && device_resident_p (decl))
+      && device_resident_p (decl)
+      && !is_private)
     {
       on_device = true;
       flags |= GOVD_MAP_TO_ONLY;
@@ -7058,7 +7066,9 @@ oacc_default_clause (struct gimplify_omp_ctx *ctx, tree decl, unsigned flags)
     case ORT_ACC_KERNELS:
       rkind = "kernels";
 
-      if (AGGREGATE_TYPE_P (type))
+      if (is_private)
+	flags |= GOVD_MAP;
+      else if (AGGREGATE_TYPE_P (type))
 	{
 	  /* Aggregates default to 'present_or_copy', or 'present'.  */
 	  if (ctx->default_kind != OMP_CLAUSE_DEFAULT_PRESENT)
@@ -7075,7 +7085,9 @@ oacc_default_clause (struct gimplify_omp_ctx *ctx, tree decl, unsigned flags)
     case ORT_ACC_PARALLEL:
       rkind = "parallel";
 
-      if (on_device || declared)
+      if (is_private)
+	flags |= GOVD_FIRSTPRIVATE;
+      else if (on_device || declared)
 	flags |= GOVD_MAP;
       else if (AGGREGATE_TYPE_P (type))
 	{
@@ -7141,7 +7153,8 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
 	{
 	  tree value = get_base_address (DECL_VALUE_EXPR (decl));
 
-	  if (value && DECL_P (value) && DECL_THREAD_LOCAL_P (value))
+	  if (!(ctx->region_type & ORT_ACC)
+	      && value && DECL_P (value) && DECL_THREAD_LOCAL_P (value))
 	    return omp_notice_threadprivate_variable (ctx, decl, value);
 	}
 
@@ -7173,7 +7186,8 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
   n = splay_tree_lookup (ctx->variables, (splay_tree_key)decl);
   if ((ctx->region_type & ORT_TARGET) != 0)
     {
-      ret = lang_hooks.decls.omp_disregard_value_expr (decl, true);
+      shared = !(ctx->region_type & ORT_ACC);
+      ret = lang_hooks.decls.omp_disregard_value_expr (decl, shared);
       if (n == NULL)
 	{
 	  unsigned nflags = flags;
@@ -7232,6 +7246,7 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
 		        error ("variable %qE declared in enclosing "
 			       "%<host_data%> region", DECL_NAME (decl));
 		      nflags |= GOVD_MAP;
+		      nflags |= (n2->value & GOVD_DEVICEPTR);
 		      if (octx->region_type == ORT_ACC_DATA
 			  && (n2->value & GOVD_MAP_0LEN_ARRAY))
 			nflags |= GOVD_MAP_0LEN_ARRAY;
@@ -7326,6 +7341,8 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
     }
 
   shared = ((flags | n->value) & GOVD_SHARED) != 0;
+  if (ctx->region_type & ORT_ACC)
+    shared = false;
   ret = lang_hooks.decls.omp_disregard_value_expr (decl, shared);
 
   /* If nothing changed, there's nothing left to do.  */
@@ -8213,6 +8230,8 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	  if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ALWAYS_TO
 	      || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ALWAYS_TOFROM)
 	    flags |= GOVD_MAP_ALWAYS_TO;
+	  else if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FORCE_DEVICEPTR)
+	    flags |= GOVD_DEVICEPTR;
 	  goto do_add;
 
 	case OMP_CLAUSE_DEPEND:
@@ -8828,7 +8847,8 @@ gimplify_adjust_omp_clauses_1 (splay_tree_node n, void *data)
       /* Not all combinations of these GOVD_MAP flags are actually valid.  */
       switch (flags & (GOVD_MAP_TO_ONLY
 		       | GOVD_MAP_FORCE
-		       | GOVD_MAP_FORCE_PRESENT))
+		       | GOVD_MAP_FORCE_PRESENT
+		       | GOVD_DEVICEPTR))
 	{
 	case 0:
 	  kind = GOMP_MAP_TOFROM;
@@ -8844,6 +8864,9 @@ gimplify_adjust_omp_clauses_1 (splay_tree_node n, void *data)
 	  break;
 	case GOVD_MAP_FORCE_PRESENT:
 	  kind = GOMP_MAP_FORCE_PRESENT;
+	  break;
+	case GOVD_DEVICEPTR:
+	  kind = GOMP_MAP_FORCE_DEVICEPTR;
 	  break;
 	default:
 	  gcc_unreachable ();
