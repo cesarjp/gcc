@@ -1228,16 +1228,44 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
   int threads_per_block = threads_per_sm > block_size
     ? block_size : threads_per_sm;
 
-  threads_per_block /= warp_size;
-
   if (threads_per_sm > cpu_size)
     threads_per_sm = cpu_size;
 
-  /* Set default launch geometry.  */
+  /* See if the user provided GOMP_OPENACC_DIM environment variable to
+     specify runtime defaults. */
   static int default_dims[GOMP_DIM_MAX];
+
   pthread_mutex_lock (&ptx_dev_lock);
   if (!default_dims[0])
     {
+      const char *var_name = "GOMP_OPENACC_DIM";
+      /* We only read the environment variable once.  You can't
+	 change it in the middle of execution.  The syntax  is
+	 the same as for the -fopenacc-dim compilation option.  */
+      const char *env_var = getenv (var_name);
+      notify_var (var_name, env_var);
+      if (env_var)
+	{
+	  const char *pos = env_var;
+
+	  for (i = 0; *pos && i != GOMP_DIM_MAX; i++)
+	    {
+	      if (i && *pos++ != ':')
+		break;
+	      if (*pos != ':')
+		{
+		  const char *eptr;
+
+		  errno = 0;
+		  long val = strtol (pos, (char **)&eptr, 10);
+		  if (errno || val < 0 || (unsigned)val != val)
+		    break;
+		  default_dims[i] = (int)val;
+		  pos = eptr;
+		}
+	    }
+	}
+
       /* 32 is the default for known hardware.  */
       int gang = 0, worker = 32, vector = 32;
 
@@ -1266,8 +1294,13 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 
   if (seen_zero)
     {
+      int vectors = dims[GOMP_DIM_VECTOR] > 0
+	? dims[GOMP_DIM_VECTOR] : warp_size;
+      int workers
+	= MIN (threads_per_block, targ_fn->max_threads_per_block) / vectors;
+
       for (i = 0; i != GOMP_DIM_MAX; i++)
- 	if (!dims[i])
+	if (!dims[i])
 	  {
 	    if (default_dims[i] > 0)
 	      dims[i] = default_dims[i];
@@ -1283,10 +1316,10 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 		  : 2 * dev_size;
 		break;
 	      case GOMP_DIM_WORKER:
-		dims[i] = threads_per_block;
+		dims[i] = workers;
 		break;
 	      case GOMP_DIM_VECTOR:
-		dims[i] = warp_size;
+		dims[i] = vectors;
 		break;
 	      default:
 		abort ();
