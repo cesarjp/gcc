@@ -95,6 +95,7 @@ CUDA_ONE_CALL (cuModuleGetGlobal)	\
 CUDA_ONE_CALL (cuModuleLoad)		\
 CUDA_ONE_CALL (cuModuleLoadData)	\
 CUDA_ONE_CALL (cuModuleUnload)		\
+CUDA_ONE_CALL (cuOccupancyMaxPotentialBlockSize) \
 CUDA_ONE_CALL (cuStreamCreate)		\
 CUDA_ONE_CALL (cuStreamDestroy)		\
 CUDA_ONE_CALL (cuStreamQuery)		\
@@ -1148,8 +1149,7 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 
   if (seen_zero)
     {
-      /* See if the user provided GOMP_OPENACC_DIM environment
-	 variable to specify runtime defaults. */
+      /* Set runtime defaults. */
       static int default_dims[GOMP_DIM_MAX];
 
       pthread_mutex_lock (&ptx_dev_lock);
@@ -1163,7 +1163,9 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	  /* 32 is the default for known hardware.  */
 	  int gang = 0, worker = 32, vector = 32;
 	  CUdevice_attribute cu_tpb, cu_ws, cu_mpc, cu_tpm;
+	  int grid, blocks, vectors;
 
+	  vectors = default_dims[GOMP_DIM_VECTOR];
 	  cu_tpb = CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK;
 	  cu_ws = CU_DEVICE_ATTRIBUTE_WARP_SIZE;
 	  cu_mpc = CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT;
@@ -1184,6 +1186,21 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	      gang = (cpu_size / block_size) * dev_size;
 	      worker = block_size / warp_size;
 	      vector = warp_size;
+	    }
+
+	  if (vectors < 0)
+	    vectors = vector;
+
+	  if (nvptx_thread()->ptx_dev->driver_version > 6050)
+	    {
+	      CUDA_CALL_ASSERT (cuOccupancyMaxPotentialBlockSize, &grid,
+				&blocks, function, NULL, 0,
+				dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR]);
+	      GOMP_PLUGIN_debug (0, "cuOccupancyMaxPotentialBlockSize: "
+				 "grid = %d, block = %d\n", grid, blocks);
+
+	      gang = 2 * blocks * dev_size;
+	      worker = blocks / vector;
 	    }
 
 	  /* There is no upper bound on the gang size.  The best size
