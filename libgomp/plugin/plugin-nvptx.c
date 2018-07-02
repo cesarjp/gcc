@@ -63,6 +63,7 @@ CUDA_ONE_CALL (cuCtxSynchronize)	\
 CUDA_ONE_CALL (cuDeviceGet)		\
 CUDA_ONE_CALL (cuDeviceGetAttribute)	\
 CUDA_ONE_CALL (cuDeviceGetCount)	\
+CUDA_ONE_CALL (cuDriverGetVersion)	\
 CUDA_ONE_CALL (cuEventCreate)		\
 CUDA_ONE_CALL (cuEventDestroy)		\
 CUDA_ONE_CALL (cuEventElapsedTime)	\
@@ -414,6 +415,7 @@ struct ptx_device
   int num_sms;
   int regs_per_block;
   int regs_per_sm;
+  int driver_version;
 
   struct ptx_image_data *images;  /* Images loaded on device.  */
   pthread_mutex_t image_lock;     /* Lock for above list.  */
@@ -806,11 +808,17 @@ nvptx_open_device (int n)
   if (r != CUDA_SUCCESS)
     async_engines = 1;
 
+  CUDA_CALL_ERET (NULL, cuDriverGetVersion, &pi);
+  ptx_dev->driver_version = pi;
+
   ptx_dev->images = NULL;
   pthread_mutex_init (&ptx_dev->image_lock, NULL);
 
   if (!init_streams_for_device (ptx_dev, async_engines))
     return NULL;
+
+  GOMP_PLUGIN_debug (0, "Nvidia device %d: Driver Version = %d\n",
+		     ptx_dev->ord, ptx_dev->driver_version);
 
   return ptx_dev;
 }

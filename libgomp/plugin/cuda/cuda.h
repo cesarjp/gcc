@@ -123,6 +123,7 @@ CUresult cuCtxSynchronize (void);
 CUresult cuDeviceGet (CUdevice *, int);
 CUresult cuDeviceGetAttribute (int *, CUdevice_attribute, CUdevice);
 CUresult cuDeviceGetCount (int *);
+CUresult cuDriverGetVersion (int *);
 CUresult cuEventCreate (CUevent *, unsigned);
 #define cuEventDestroy cuEventDestroy_v2
 CUresult cuEventDestroy (CUevent);
