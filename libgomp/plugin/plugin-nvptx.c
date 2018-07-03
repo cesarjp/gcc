@@ -304,6 +304,7 @@ struct ptx_device
   int max_shared_memory_per_multiprocessor;
 
   int binary_version;
+  int driver_version;
 
   /* register_allocation_unit_size and register_allocation_granularity
      were extracted from the "Register Allocation Granularity" in
@@ -519,6 +520,9 @@ nvptx_open_device (int n)
 			 CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT, dev);
   if (r != CUDA_SUCCESS)
     async_engines = 1;
+
+  CUDA_CALL_ERET (NULL, cuDriverGetVersion, &pi);
+  ptx_dev->driver_version = pi;
 
   ptx_dev->images = NULL;
   pthread_mutex_init (&ptx_dev->image_lock, NULL);
@@ -810,6 +814,26 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	? dims[GOMP_DIM_VECTOR] : warp_size;
       int workers
 	= MIN (threads_per_block, targ_fn->max_threads_per_block) / vectors;
+      int gangs = (reg_granularity > 0)
+	? 2 * threads_per_sm / warp_size * dev_size
+	: 2 * dev_size;
+      int grid, blocks;
+
+      vectors = default_dims[GOMP_DIM_VECTOR];
+      if (vectors < 0)
+	vectors = warp_size;
+
+      if (nvptx_thread()->ptx_dev->driver_version > 6050)
+	{
+	  CUDA_CALL_ASSERT (cuOccupancyMaxPotentialBlockSize, &grid,
+			    &blocks, function, NULL, 0,
+			    dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR]);
+	  GOMP_PLUGIN_debug (0, "cuOccupancyMaxPotentialBlockSize: "
+			     "grid = %d, block = %d\n", grid, blocks);
+
+	  gangs = 2 * blocks * dev_size;
+	  workers = blocks / vectors;
+	}
 
       for (i = 0; i != GOMP_DIM_MAX; i++)
 	if (!dims[i])
@@ -823,9 +847,7 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 		   behind it is to prevent the hardware from idling by
 		   throwing twice the amount of work that it can
 		   physically handle.  */
-		dims[i] = (reg_granularity > 0)
-		  ? 2 * threads_per_sm / warp_size * dev_size
-		  : 2 * dev_size;
+		dims[i] = gangs;
 		break;
 	      case GOMP_DIM_WORKER:
 		dims[i] = workers;
