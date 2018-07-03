@@ -811,27 +811,23 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
   if (seen_zero)
     {
       int vectors = dims[GOMP_DIM_VECTOR] > 0
-	? dims[GOMP_DIM_VECTOR] : warp_size;
+	? dims[GOMP_DIM_VECTOR] : default_dims[GOMP_DIM_VECTOR];
       int workers
 	= MIN (threads_per_block, targ_fn->max_threads_per_block) / vectors;
       int gangs = (reg_granularity > 0)
 	? 2 * threads_per_sm / warp_size * dev_size
 	: 2 * dev_size;
-      int grid, blocks;
-
-      vectors = default_dims[GOMP_DIM_VECTOR];
-      if (vectors < 0)
-	vectors = warp_size;
+      int grids, blocks;
 
       if (nvptx_thread()->ptx_dev->driver_version > 6050)
 	{
-	  CUDA_CALL_ASSERT (cuOccupancyMaxPotentialBlockSize, &grid,
+	  CUDA_CALL_ASSERT (cuOccupancyMaxPotentialBlockSize, &grids,
 			    &blocks, function, NULL, 0,
 			    dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR]);
 	  GOMP_PLUGIN_debug (0, "cuOccupancyMaxPotentialBlockSize: "
-			     "grid = %d, block = %d\n", grid, blocks);
+			     "grid = %d, block = %d\n", grids, blocks);
 
-	  gangs = 2 * blocks * dev_size;
+	  gangs = 2 * grids * dev_size;
 	  workers = blocks / vectors;
 	}
 
