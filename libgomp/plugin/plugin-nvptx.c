@@ -1222,10 +1222,8 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
       for (i = 0; i != GOMP_DIM_MAX; i++)
 	if (!dims[i])
 	  {
-	    if (default_dims[i] > 0)
-	      dims[i] = default_dims[i];
-	    else
-	      switch (i) {
+	    switch (i)
+	      {
 	      case GOMP_DIM_GANG:
 		/* The constant 2 was emperically.  The justification
 		   behind it is to prevent the hardware from idling by
