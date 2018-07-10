@@ -44,6 +44,7 @@ typedef void *CUevent;
 typedef void *CUfunction;
 typedef void *CUlinkState;
 typedef void *CUmodule;
+typedef size_t (*CUoccupancyB2DSize)(int);
 typedef void *CUstream;
 
 typedef enum {
@@ -69,8 +70,6 @@ typedef enum {
   CU_DEVICE_ATTRIBUTE_CONCURRENT_KERNELS = 31,
   CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR = 39,
   CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT = 40,
-  CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR = 75,
-  CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR = 76,
   CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_MULTIPROCESSOR = 82
 } CUdevice_attribute;
 
@@ -172,6 +171,9 @@ CUresult cuModuleGetGlobal (CUdeviceptr *, size_t *, CUmodule, const char *);
 CUresult cuModuleLoad (CUmodule *, const char *);
 CUresult cuModuleLoadData (CUmodule *, const void *);
 CUresult cuModuleUnload (CUmodule);
+CUresult cuOccupancyMaxPotentialBlockSizeWithFlags(int *, int *, CUfunction,
+						   CUoccupancyB2DSize, size_t,
+						   int, unsigned int);
 CUresult cuStreamCreate (CUstream *, unsigned);
 #define cuStreamDestroy cuStreamDestroy_v2
 CUresult cuStreamDestroy (CUstream);
