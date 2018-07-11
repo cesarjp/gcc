@@ -3041,7 +3041,7 @@ gfc_trans_omp_code (gfc_code *code, bool force_empty)
 static tree
 gfc_trans_oacc_construct (gfc_code *code)
 {
-  stmtblock_t block, inner;
+  stmtblock_t block;
   tree stmt, oacc_clauses;
   enum tree_code construct_code;
 
