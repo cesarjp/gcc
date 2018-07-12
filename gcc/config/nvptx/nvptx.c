@@ -2872,6 +2872,17 @@ nvptx_reorg_uniform_simt ()
     }
 }
 
+/* Offloading function attributes.  */
+
+struct offload_attrs
+{
+  unsigned mask;
+  int num_gangs;
+  int num_workers;
+  int vector_length;
+  int max_workers;
+};
+
 /* Loop structure of the function.  The entire function is described as
    a NULL loop.  */
 
@@ -4569,6 +4580,56 @@ nvptx_neuter_pars (parallel *par, unsigned modes, unsigned outer)
     nvptx_neuter_pars (par->next, modes, outer);
 }
 
+static void
+populate_offload_attrs (offload_attrs *oa)
+{
+  tree attr = oacc_get_fn_attrib (current_function_decl);
+  tree dims = TREE_VALUE (attr);
+  unsigned ix;
+
+  oa->mask = 0;
+
+  for (ix = 0; ix != GOMP_DIM_MAX; ix++, dims = TREE_CHAIN (dims))
+    {
+      tree t = TREE_VALUE (dims);
+      int size = (t == NULL_TREE) ? 0 : TREE_INT_CST_LOW (t);
+      tree allowed = TREE_PURPOSE (dims);
+
+      if (size != 1 && !(allowed && integer_zerop (allowed)))
+	oa->mask |= GOMP_DIM_MASK (ix);
+
+      switch (ix)
+	{
+	case GOMP_DIM_GANG:
+	  oa->num_gangs = size;
+	  break;
+
+	case GOMP_DIM_WORKER:
+	  oa->num_workers = size;
+	  break;
+
+	case GOMP_DIM_VECTOR:
+	  oa->vector_length = size;
+	  break;
+	}
+    }
+
+  if (oa->vector_length == 0)
+    {
+      /* FIXME: Need a more graceful way to handle large vector
+	 lengths in OpenACC routines.  */
+      if (!lookup_attribute ("omp target entrypoint",
+			     DECL_ATTRIBUTES (current_function_decl)))
+	oa->vector_length = PTX_WARP_SIZE;
+      else
+	oa->vector_length = PTX_VECTOR_LENGTH;
+    }
+  if (oa->num_workers == 0)
+    oa->max_workers = PTX_CTA_SIZE / oa->vector_length;
+  else
+    oa->max_workers = oa->num_workers;
+}
+
 #if WORKAROUND_PTXJIT_BUG_2
 /* Variant of pc_set that only requires JUMP_P (INSN) if STRICT.  This variant
    is needed in the nvptx target because the branches generated for
@@ -4750,27 +4811,19 @@ nvptx_reorg (void)
     {
       /* If we determined this mask before RTL expansion, we could
 	 elide emission of some levels of forks and joins.  */
-      unsigned mask = 0;
-      tree dims = TREE_VALUE (attr);
-      unsigned ix;
+      offload_attrs oa;
 
-      for (ix = 0; ix != GOMP_DIM_MAX; ix++, dims = TREE_CHAIN (dims))
-	{
-	  int size = TREE_INT_CST_LOW (TREE_VALUE (dims));
-	  tree allowed = TREE_PURPOSE (dims);
+      populate_offload_attrs (&oa);
 
-	  if (size != 1 && !(allowed && integer_zerop (allowed)))
-	    mask |= GOMP_DIM_MASK (ix);
-	}
       /* If there is worker neutering, there must be vector
 	 neutering.  Otherwise the hardware will fail.  */
-      gcc_assert (!(mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
-		  || (mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)));
+      gcc_assert (!(oa.mask & GOMP_DIM_MASK (GOMP_DIM_WORKER))
+		  || (oa.mask & GOMP_DIM_MASK (GOMP_DIM_VECTOR)));
 
       /* Discover & process partitioned regions.  */
       parallel *pars = nvptx_discover_pars (&bb_insn_map);
       nvptx_process_pars (pars);
-      nvptx_neuter_pars (pars, mask, 0);
+      nvptx_neuter_pars (pars, oa.mask, 0);
       delete pars;
     }
 
