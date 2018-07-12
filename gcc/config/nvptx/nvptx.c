@@ -6010,6 +6010,17 @@ nvptx_can_change_mode_class (machine_mode, machine_mode, reg_class_t)
   return false;
 }
 
+static GTY(()) tree nvptx_previous_fndecl;
+
+static void
+nvptx_set_current_function (tree fndecl)
+{
+  if (!fndecl || fndecl == nvptx_previous_fndecl)
+    return;
+
+  nvptx_previous_fndecl = fndecl;
+}
+
 #undef TARGET_OPTION_OVERRIDE
 #define TARGET_OPTION_OVERRIDE nvptx_option_override
 
@@ -6142,6 +6153,9 @@ nvptx_can_change_mode_class (machine_mode, machine_mode, reg_class_t)
 
 #undef TARGET_CAN_CHANGE_MODE_CLASS
 #define TARGET_CAN_CHANGE_MODE_CLASS nvptx_can_change_mode_class
+
+#undef TARGET_SET_CURRENT_FUNCTION
+#define TARGET_SET_CURRENT_FUNCTION nvptx_set_current_function
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
