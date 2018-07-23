@@ -81,6 +81,13 @@
 #define WORKAROUND_PTXJIT_BUG_2 1
 #define WORKAROUND_PTXJIT_BUG_3 1
 
+/* Define dimension sizes for known hardware.  */
+#define PTX_VECTOR_LENGTH 32
+#define PTX_WORKER_LENGTH 32
+#define PTX_DEFAULT_RUNTIME_DIM 0 /* Defer to runtime.  */
+#define PTX_WARP_SIZE 32
+#define PTX_CTA_SIZE 1024
+
 /* The various PTX memory areas an object might reside in.  */
 enum nvptx_data_area
 {
@@ -5161,18 +5168,13 @@ nvptx_expand_builtin (tree exp, rtx target, rtx ARG_UNUSED (subtarget),
     default: gcc_unreachable ();
     }
 }
-
-/* Define dimension sizes for known hardware.  */
-#define PTX_VECTOR_LENGTH 32
-#define PTX_WORKER_LENGTH 32
-#define PTX_GANG_DEFAULT  0 /* Defer to runtime.  */
 
 /* Implement TARGET_SIMT_VF target hook: number of threads in a warp.  */
 
 static int
 nvptx_simt_vf ()
 {
-  return PTX_VECTOR_LENGTH;
+  return PTX_WARP_SIZE;
 }
 
 /* Validate compute dimensions of an OpenACC offload or routine, fill
@@ -5216,7 +5218,7 @@ nvptx_goacc_validate_dims (tree decl, int dims[], int fn_level)
       if (dims[GOMP_DIM_WORKER] < 0)
 	dims[GOMP_DIM_WORKER] = PTX_WORKER_LENGTH;
       if (dims[GOMP_DIM_GANG] < 0)
-	dims[GOMP_DIM_GANG] = PTX_GANG_DEFAULT;
+	dims[GOMP_DIM_GANG] = PTX_DEFAULT_RUNTIME_DIM;
       changed = true;
     }
 
