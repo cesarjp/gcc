@@ -831,7 +831,7 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	  GOMP_PLUGIN_debug (0, "cuOccupancyMaxPotentialBlockSize: "
 			     "grid = %d, block = %d\n", grids, blocks);
 
-	  gangs = 2 * grids * dev_size;
+	  gangs = 2 * grids * blocks / 32;
 	  workers = blocks / vectors;
 	}
 
