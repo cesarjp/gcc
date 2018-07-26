@@ -355,6 +355,7 @@ struct ptx_device
   int max_threads_per_block;
   int max_threads_per_multiprocessor;
   int default_dims[GOMP_DIM_MAX];
+  int driver_version;
 
   struct ptx_image_data *images;  /* Images loaded on device.  */
   pthread_mutex_t image_lock;     /* Lock for above list.  */
@@ -666,6 +667,7 @@ nvptx_open_device (int n)
   ptx_dev->ord = n;
   ptx_dev->dev = dev;
   ptx_dev->ctx_shared = false;
+  ptx_dev->driver_version = 0;
 
   r = CUDA_CALL_NOCHECK (cuCtxGetDevice, &ctx_dev);
   if (r != CUDA_SUCCESS && r != CUDA_ERROR_INVALID_CONTEXT)
@@ -758,6 +760,9 @@ nvptx_open_device (int n)
 
   for (int i = 0; i != GOMP_DIM_MAX; i++)
     ptx_dev->default_dims[i] = 0;
+
+  CUDA_CALL_ERET (NULL, cuDriverGetVersion, &pi);
+  ptx_dev->driver_version = pi;
 
   ptx_dev->images = NULL;
   pthread_mutex_init (&ptx_dev->image_lock, NULL);
@@ -1152,11 +1157,39 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 
       {
 	bool default_dim_p[GOMP_DIM_MAX];
+	int vectors = nvthd->ptx_dev->default_dims[GOMP_DIM_VECTOR];
+	int workers = nvthd->ptx_dev->default_dims[GOMP_DIM_WORKER];
+	int gangs = nvthd->ptx_dev->default_dims[GOMP_DIM_GANG];
+
+	/* The CUDA driver occupancy calculator is only available on
+	   CUDA version 6.5 (6050) and newer.  */
+	if (nvthd->ptx_dev->driver_version > 6050)
+	  {
+	    int grids, blocks;
+	    CUDA_CALL_ASSERT (cuOccupancyMaxPotentialBlockSize, &grids,
+			      &blocks, function, NULL, 0,
+			      dims[GOMP_DIM_WORKER] * dims[GOMP_DIM_VECTOR]);
+	    GOMP_PLUGIN_debug (0, "cuOccupancyMaxPotentialBlockSize: "
+			       "grid = %d, block = %d\n", grids, blocks);
+
+	    if (GOMP_PLUGIN_acc_default_dim (GOMP_DIM_GANG) == 0)
+	      gangs = grids * (blocks / warp_size);
+
+	    if (GOMP_PLUGIN_acc_default_dim (GOMP_DIM_WORKER) == 0)
+	      workers = blocks / vectors;
+	  }
+
 	for (i = 0; i != GOMP_DIM_MAX; i++)
 	  {
 	    default_dim_p[i] = !dims[i];
 	    if (default_dim_p[i])
-	      dims[i] = nvthd->ptx_dev->default_dims[i];
+	      switch (i)
+		{
+		case GOMP_DIM_GANG: dims[i] = gangs; break;
+		case GOMP_DIM_WORKER: dims[i] = workers; break;
+		case GOMP_DIM_VECTOR: dims[i] = vectors; break;
+		default: GOMP_PLUGIN_fatal ("invalid dim");
+		}
 	  }
 
 	if (default_dim_p[GOMP_DIM_VECTOR])
