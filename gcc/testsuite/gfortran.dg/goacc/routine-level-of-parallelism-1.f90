@@ -7,7 +7,7 @@ subroutine g_1
 end subroutine g_1
 
 subroutine s_1_2a
-  !$acc routine
+  !$acc routine seq
 end subroutine s_1_2a
 
 subroutine s_1_2b
@@ -15,7 +15,7 @@ subroutine s_1_2b
 end subroutine s_1_2b
 
 subroutine s_1_2c
-  !$acc routine (s_1_2c)
+  !$acc routine (s_1_2c) seq
 end subroutine s_1_2c
 
 subroutine s_1_2d
@@ -25,7 +25,7 @@ end subroutine s_1_2d
 module s_2
 contains
   subroutine s_2_1a
-    !$acc routine
+    !$acc routine seq
   end subroutine s_2_1a
 
   subroutine s_2_1b
@@ -33,7 +33,7 @@ contains
   end subroutine s_2_1b
 
   subroutine s_2_1c
-    !$acc routine (s_2_1c)
+    !$acc routine (s_2_1c) seq
   end subroutine s_2_1c
 
   subroutine s_2_1d
@@ -48,7 +48,7 @@ subroutine test
   interface
      function s_3_1a (a)
        integer a
-       !$acc routine
+       !$acc routine seq
      end function s_3_1a
   end interface
 

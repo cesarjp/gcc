@@ -4,8 +4,7 @@ module m
 contains
   subroutine subr5 (x) 
   implicit none
-  !$acc routine (subr5)
-  !$acc routine (m1int) ! { dg-error "invalid function name" }
+  !$acc routine (subr5) seq
   integer, intent(inout) :: x
   if (x < 1) then
      x = 1
@@ -19,22 +18,21 @@ program main
   implicit none
   interface
     function subr6 (x) 
-    !$acc routine (subr6) ! { dg-error "without list is allowed in interface" }
+    !$acc routine (subr6) seq ! { dg-error "without list is allowed in interface" }
     integer, intent (in) :: x
     integer :: subr6
     end function subr6
   end interface
   integer, parameter :: n = 10
   integer :: a(n), i
-  !$acc routine (subr1) ! { dg-error "invalid function name" }
   external :: subr2
-  !$acc routine (subr2)
+  !$acc routine (subr2) seq
 
   external :: R1, R2
-  !$acc routine (R1 R2 R3) ! { dg-error "Syntax error in \\!\\\$ACC ROUTINE \\( NAME \\) at \\(1\\), expecting .\\). after NAME" }
-  !$acc routine (R1, R2, R3) ! { dg-error "Syntax error in \\!\\\$ACC ROUTINE \\( NAME \\) at \\(1\\), expecting .\\). after NAME" }
-  !$acc routine (R1)
-  !$acc routine (R2)
+  !$acc routine (R1 R2 R3) seq ! { dg-error "Syntax error in \\!\\\$ACC ROUTINE \\( NAME \\) at \\(1\\), expecting .\\). after NAME" }
+  !$acc routine (R1, R2, R3) seq ! { dg-error "Syntax error in \\!\\\$ACC ROUTINE \\( NAME \\) at \\(1\\), expecting .\\). after NAME" }
+  !$acc routine (R1) seq
+  !$acc routine (R2) seq
 
   !$acc parallel
   !$acc loop
@@ -46,7 +44,7 @@ program main
 end program main
 
 subroutine subr1 (x) 
-  !$acc routine
+  !$acc routine seq
   integer, intent(inout) :: x
   if (x < 1) then
      x = 1
@@ -56,7 +54,6 @@ subroutine subr1 (x)
 end subroutine subr1
 
 subroutine subr2 (x) 
-  !$acc routine (subr1) ! { dg-error "invalid function name" }
   integer, intent(inout) :: x
   if (x < 1) then
      x = 1
@@ -66,7 +63,7 @@ subroutine subr2 (x)
 end subroutine subr2
 
 subroutine subr3 (x) 
-  !$acc routine (subr3)
+  !$acc routine (subr3) seq
   integer, intent(inout) :: x
   if (x < 1) then
      x = 1
@@ -76,7 +73,7 @@ subroutine subr3 (x)
 end subroutine subr3
 
 subroutine subr4 (x) 
-  !$acc routine (subr4)
+  !$acc routine (subr4) seq
   integer, intent(inout) :: x
   if (x < 1) then
      x = 1
@@ -86,7 +83,6 @@ subroutine subr4 (x)
 end subroutine subr4
 
 subroutine subr10 (x)
-  !$acc routine (subr10) device ! { dg-error "Unclassifiable OpenACC directive" }
   integer, intent(inout) :: x
   if (x < 1) then
      x = 1
