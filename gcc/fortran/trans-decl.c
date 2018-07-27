@@ -44,7 +44,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "trans-const.h"
 /* Only for gfc_trans_code.  Shouldn't need to include this.  */
 #include "trans-stmt.h"
-#include "gomp-constants.h"
 #include "gimplify.h"
 
 #define MAX_LABEL_VALUE 99999
@@ -1396,26 +1395,7 @@ add_attributes_to_decl (symbol_attribute sym_attr, tree list)
 	list = chainon (list, attr);
       }
 
-  if (sym_attr.omp_declare_target_link)
-    list = tree_cons (get_identifier ("omp declare target link"),
-		      NULL_TREE, list);
-  else if (sym_attr.omp_declare_target)
-    list = tree_cons (get_identifier ("omp declare target"),
-		      NULL_TREE, list);
-
-  if (sym_attr.oacc_function)
-    {
-      tree dims = NULL_TREE;
-      int ix;
-      int level = sym_attr.oacc_function - 1;
-
-      for (ix = GOMP_DIM_MAX; ix--;)
-	dims = tree_cons (build_int_cst (boolean_type_node, ix >= level),
-			  integer_zero_node, dims);
-
-      list = tree_cons (get_identifier ("oacc function"),
-			dims, list);
-    }
+  list = gfc_add_omp_offload_attributes (sym_attr, list);
 
   return list;
 }

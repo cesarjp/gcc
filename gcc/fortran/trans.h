@@ -781,6 +781,7 @@ bool gfc_omp_private_debug_clause (tree, bool);
 bool gfc_omp_private_outer_ref (tree);
 struct gimplify_omp_ctx;
 void gfc_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *, tree);
+tree gfc_add_omp_offload_attributes (symbol_attribute, tree);
 
 /* Runtime library function decls.  */
 extern GTY(()) tree gfor_fndecl_pause_numeric;
