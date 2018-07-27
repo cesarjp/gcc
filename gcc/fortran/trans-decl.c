@@ -1410,7 +1410,7 @@ add_attributes_to_decl (symbol_attribute sym_attr, tree list)
 
       for (ix = GOMP_DIM_MAX; ix--;)
 	dims = tree_cons (build_int_cst (boolean_type_node, ix >= level),
-			  integer_zero_node, dims);
+			  integer_minus_one_node, dims);
 
       list = tree_cons (get_identifier ("oacc function"),
 			dims, list);
