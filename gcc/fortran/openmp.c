@@ -2234,34 +2234,45 @@ gfc_match_oacc_cache (void)
   return MATCH_YES;
 }
 
-/* Determine the loop level for a routine.   */
+/* Determine the loop level for a routine.  Returns OACC_FUNCTION_NONE
+   if any error is detected.  */
 
-static int
+static oacc_function
 gfc_oacc_routine_dims (gfc_omp_clauses *clauses)
 {
   int level = -1;
+  oacc_function ret = OACC_FUNCTION_AUTO;
 
   if (clauses)
     {
       unsigned mask = 0;
 
       if (clauses->gang)
-	level = GOMP_DIM_GANG, mask |= GOMP_DIM_MASK (level);
+	{
+	  level = GOMP_DIM_GANG, mask |= GOMP_DIM_MASK (level);
+	  ret = OACC_FUNCTION_GANG;
+	}
       if (clauses->worker)
-	level = GOMP_DIM_WORKER, mask |= GOMP_DIM_MASK (level);
+	{
+	  level = GOMP_DIM_WORKER, mask |= GOMP_DIM_MASK (level);
+	  ret = OACC_FUNCTION_WORKER;
+	}
       if (clauses->vector)
-	level = GOMP_DIM_VECTOR, mask |= GOMP_DIM_MASK (level);
+	{
+	  level = GOMP_DIM_VECTOR, mask |= GOMP_DIM_MASK (level);
+	  ret = OACC_FUNCTION_VECTOR;
+	}
       if (clauses->seq)
-	level = GOMP_DIM_MAX, mask |= GOMP_DIM_MASK (level);
+	{
+	  level = GOMP_DIM_MAX, mask |= GOMP_DIM_MASK (level);
+	  ret = OACC_FUNCTION_SEQ;
+	}
 
       if (mask != (mask & -mask))
-	gfc_error ("Multiple loop axes specified for routine");
+	ret = OACC_FUNCTION_NONE;
     }
 
-  if (level < 0)
-    level = GOMP_DIM_MAX;
-
-  return level;
+  return ret;
 }
 
 match
@@ -2272,6 +2283,8 @@ gfc_match_oacc_routine (void)
   match m;
   gfc_omp_clauses *c = NULL;
   gfc_oacc_routine_name *n = NULL;
+  oacc_function dims = OACC_FUNCTION_NONE;
+  bool seen_error = false;
 
   old_loc = gfc_current_locus;
 
@@ -2318,17 +2331,15 @@ gfc_match_oacc_routine (void)
 	}
       else
         {
-	  gfc_error ("Syntax error in !$ACC ROUTINE ( NAME ) at %C");
-	  gfc_current_locus = old_loc;
-	  return MATCH_ERROR;
+	  gfc_error ("Syntax error in !$ACC ROUTINE ( NAME ) at %L", &old_loc);
+	  goto cleanup;
 	}
 
       if (gfc_match_char (')') != MATCH_YES)
 	{
-	  gfc_error ("Syntax error in !$ACC ROUTINE ( NAME ) at %C, expecting"
-		     " ')' after NAME");
-	  gfc_current_locus = old_loc;
-	  return MATCH_ERROR;
+	  gfc_error ("Syntax error in !$ACC ROUTINE ( NAME ) at %L, expecting"
+		     " ')' after NAME", &old_loc);
+	  goto cleanup;
 	}
     }
 
@@ -2337,26 +2348,83 @@ gfc_match_oacc_routine (void)
 	  != MATCH_YES))
     return MATCH_ERROR;
 
+  /* Scan for invalid routine geometry.  */
+  dims = gfc_oacc_routine_dims (c);
+  if (dims == OACC_FUNCTION_NONE)
+    {
+      gfc_error ("Multiple loop axes specified in !$ACC ROUTINE at %L",
+		 &old_loc);
+
+      /* Don't abort early, because it's important to let the user
+	 know of any potential duplicate routine directives.  */
+      seen_error = true;
+    }
+  else if (dims == OACC_FUNCTION_AUTO)
+    {
+      gfc_warning (0, "Expected one of %<gang%>, %<worker%>, %<vector%> or "
+		   "%<seq%> clauses in !$ACC ROUTINE at %L", &old_loc);
+      dims = OACC_FUNCTION_SEQ;
+    }
+
   if (sym != NULL)
     {
-      n = gfc_get_oacc_routine_name ();
-      n->sym = sym;
-      n->clauses = NULL;
-      n->next = NULL;
-      if (gfc_current_ns->oacc_routine_names != NULL)
-	n->next = gfc_current_ns->oacc_routine_names;
+      bool needs_entry = true;
 
-      gfc_current_ns->oacc_routine_names = n;
+      /* Scan for any repeated routine directives on 'sym' and report
+	 an error if necessary.  TODO: Extend this function to scan
+	 for compatible DEVICE_TYPE dims.  */
+      for (n = gfc_current_ns->oacc_routine_names; n; n = n->next)
+	if (n->sym == sym)
+	  {
+	    needs_entry = false;
+	    if (dims != gfc_oacc_routine_dims (n->clauses))
+	      {
+		gfc_error ("$!ACC ROUTINE already applied at %L", &old_loc);
+		goto cleanup;
+	      }
+	  }
+
+      if (needs_entry)
+	{
+	  n = gfc_get_oacc_routine_name ();
+	  n->sym = sym;
+	  n->clauses = c;
+	  n->next = NULL;
+	  n->loc = old_loc;
+
+	  if (gfc_current_ns->oacc_routine_names != NULL)
+	    n->next = gfc_current_ns->oacc_routine_names;
+
+	  gfc_current_ns->oacc_routine_names = n;
+	}
+
+      if (seen_error)
+	goto cleanup;
     }
   else if (gfc_current_ns->proc_name)
     {
+      if (gfc_current_ns->proc_name->attr.oacc_function != OACC_FUNCTION_NONE
+	  && !seen_error)
+	{
+	  gfc_error ("!$ACC ROUTINE already applied at %L", &old_loc);
+	  goto cleanup;
+	}
+
       if (!gfc_add_omp_declare_target (&gfc_current_ns->proc_name->attr,
 				       gfc_current_ns->proc_name->name,
 				       &old_loc))
 	goto cleanup;
+
       gfc_current_ns->proc_name->attr.oacc_function
-	= gfc_oacc_routine_dims (c) + 1;
+	= seen_error ? OACC_FUNCTION_SEQ : dims;
+
+      if (seen_error)
+	goto cleanup;
     }
+  else
+    /* Something has gone wrong.  Perhaps there was a syntax error
+       in the program-stmt.  */
+    goto cleanup;
 
   if (n)
     n->clauses = c;

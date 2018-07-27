@@ -316,6 +316,16 @@ enum save_state
 { SAVE_NONE = 0, SAVE_EXPLICIT, SAVE_IMPLICIT
 };
 
+/* Flags to keep track of ACC routine states.  */
+enum oacc_function
+{ OACC_FUNCTION_NONE = 0,
+  OACC_FUNCTION_GANG,
+  OACC_FUNCTION_WORKER,
+  OACC_FUNCTION_VECTOR,
+  OACC_FUNCTION_SEQ,
+  OACC_FUNCTION_AUTO
+};
+
 /* Strings for all symbol attributes.  We use these for dumping the
    parse tree, in error messages, and also when reading and writing
    modules.  In symbol.c.  */
@@ -1726,6 +1736,7 @@ typedef struct gfc_oacc_routine_name
   struct gfc_symbol *sym;
   struct gfc_omp_clauses *clauses;
   struct gfc_oacc_routine_name *next;
+  locus loc;
 }
 gfc_oacc_routine_name;
 
