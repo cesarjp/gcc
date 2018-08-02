@@ -6705,6 +6705,9 @@ nvptx_set_current_function (tree fndecl)
 #undef TARGET_SET_CURRENT_FUNCTION
 #define TARGET_SET_CURRENT_FUNCTION nvptx_set_current_function
 
+#undef TARGET_ASM_BYTE_OP
+#define TARGET_ASM_BYTE_OP "// .byte "
+
 struct gcc_target targetm = TARGET_INITIALIZER;
 
 #include "gt-nvptx.h"
