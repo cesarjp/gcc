@@ -7643,15 +7643,21 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE)
 	      {
 		gcc_assert (is_gimple_omp_oacc (ctx->stmt));
-		if (omp_is_reference (new_var)
-		    && TREE_CODE (TREE_TYPE (new_var)) != POINTER_TYPE)
+		if (omp_is_reference (new_var))
 		  {
 		    /* Create a local object to hold the instance
 		       value.  */
-		    tree type = TREE_TYPE (TREE_TYPE (new_var));
+		    tree type = TREE_TYPE (new_var);
+		    /* Pointer types are mapped onto the device via a
+		       single level of indirection.  */
+		    if (TREE_CODE (type) != POINTER_TYPE)
+		      type = TREE_TYPE (type);
 		    const char *id = IDENTIFIER_POINTER (DECL_NAME (new_var));
 		    tree inst = create_tmp_var (type, id);
-		    gimplify_assign (inst, fold_indirect_ref (x), &fplist);
+		    if (TREE_CODE (TREE_TYPE (new_var)) == POINTER_TYPE)
+		      gimplify_assign (inst, fold_indirect_ref (x), &fplist);
+		    else
+		      gimplify_assign (inst, fold_indirect_ref (x), &fplist);
 		    x = build_fold_addr_expr (inst);
 		  }
 		gimplify_assign (new_var, x, &fplist);
@@ -7879,7 +7885,9 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 		else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE)
 		  {
 		    gcc_assert (is_gimple_omp_oacc (ctx->stmt));
-		    if (!omp_is_reference (var))
+		    /* Handle Fortran allocatable scalars.  */
+		    if (!omp_is_reference (var)
+			&& TREE_CODE (TREE_TYPE (var)) != POINTER_TYPE)
 		      {
 			if (is_gimple_reg (var)
 			    && OMP_CLAUSE_FIRSTPRIVATE_IMPLICIT (c))
