@@ -8699,14 +8699,17 @@ struct gimplify_adjust_omp_clauses_data
   gimple_seq *pre_p;
 };
 
-/* Return true if clause contains an array_ref of DECL.  */
+/* Return true if clause contains an array_ref of DECL or a pointer
+   mapping to DECL.  */
 
 static bool
 omp_clause_matching_array_ref (tree clause, tree decl)
 {
   tree cdecl = OMP_CLAUSE_DECL (clause);
 
-  if (TREE_CODE (cdecl) != ARRAY_REF)
+  if (OMP_CLAUSE_MAP_KIND (clause) == GOMP_MAP_POINTER)
+    return cdecl == decl;
+  else if (TREE_CODE (cdecl) != ARRAY_REF)
     return false;
 
   return TREE_OPERAND (cdecl, 0) == decl;
@@ -8743,8 +8746,7 @@ gomp_needs_data_present (tree decl)
 
       for (c = ctx->clauses; c; c = OMP_CLAUSE_CHAIN (c))
 	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
-	    && (omp_clause_matching_array_ref (c, decl)
-		|| OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_POINTER))
+	    && (omp_clause_matching_array_ref (c, decl)))
 	  return c;
     }
 
