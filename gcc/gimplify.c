@@ -8740,7 +8740,8 @@ gomp_needs_data_present (tree decl)
 	  if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_POINTER
 	      && cdecl == decl)
 	    return c;
-	  else if (TREE_OPERAND (cdecl, 0) == decl)
+	  else if (TREE_CODE (cdecl) == ARRAY_REF
+		   && TREE_OPERAND (cdecl, 0) == decl)
 	    return c;
 	}
     }
