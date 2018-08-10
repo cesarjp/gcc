@@ -1238,7 +1238,8 @@ nvptx_exec (void (*fn), size_t mapnum, void **hostaddrs, void **devaddrs,
 	       the vector-length conservatively, by ignoring
 	       gomp_openacc_dims[GOMP_DIM_VECTOR].  TODO: actually handle
 	       it.  */
-	    int vectors = 0;
+	    int vectors = default_dim_p[GOMP_DIM_VECTOR]
+	      ? 0 : dims[GOMP_DIM_VECTOR];
 	    /* TODO: limit gomp_openacc_dims[GOMP_DIM_WORKER] such that that
 	       gomp_openacc_dims[GOMP_DIM_WORKER] * actual_vectors does not
 	       exceed targ_fn->max_threads_per_block. */
