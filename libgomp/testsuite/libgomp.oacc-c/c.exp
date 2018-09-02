@@ -27,7 +27,7 @@ dg-init
 torture-init
 
 # Turn on OpenACC.
-lappend ALWAYS_CFLAGS "additional_flags=-fopenacc"
+lappend ALWAYS_CFLAGS "additional_flags=-fopenacc -foffload='-misa=sm_35'"
 
 # Gather a list of all tests.
 set tests [lsort [concat \

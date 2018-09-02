@@ -21,7 +21,7 @@ set quadmath_library_path "../libquadmath/.libs"
 dg-init
 
 # Turn on OpenACC.
-lappend ALWAYS_CFLAGS "additional_flags=-fopenacc"
+lappend ALWAYS_CFLAGS "additional_flags=-fopenacc -foffload='-misa=sm_35'"
 
 if { $blddir != "" } {
     set lang_source_re {^.*\.[fF](|90|95|03|08)$}

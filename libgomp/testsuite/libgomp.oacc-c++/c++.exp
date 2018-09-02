@@ -26,7 +26,7 @@ dg-init
 torture-init
 
 # Turn on OpenACC.
-lappend ALWAYS_CFLAGS "additional_flags=-fopenacc"
+lappend ALWAYS_CFLAGS "additional_flags=-fopenacc -foffload='-misa=sm_35'"
 
 # Switch into C++ mode.  Otherwise, the libgomp.oacc-c-c++-common/*.c
 # files would be compiled as C files.
