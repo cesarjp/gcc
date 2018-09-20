@@ -1,6 +1,6 @@
-! Test the output of -fopt-info-note-omp.
+! Test the output of -fopt-info-omp-optimized.
 
-! { dg-additional-options "-fopt-info-note-optimized" }
+! { dg-additional-options "-fopt-info-omp-optimized" }
 
 program test
   implicit none
