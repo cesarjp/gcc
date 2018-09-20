@@ -44,9 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "trans-const.h"
 /* Only for gfc_trans_code.  Shouldn't need to include this.  */
 #include "trans-stmt.h"
-#include "gomp-constants.h"
 #include "gimplify.h"
-#include "omp-general.h"
 
 #define MAX_LABEL_VALUE 99999
 
@@ -1397,39 +1395,7 @@ add_attributes_to_decl (symbol_attribute sym_attr, tree list)
 	list = chainon (list, attr);
       }
 
-  if (sym_attr.omp_declare_target_link)
-    list = tree_cons (get_identifier ("omp declare target link"),
-		      NULL_TREE, list);
-  else if (sym_attr.omp_declare_target)
-    list = tree_cons (get_identifier ("omp declare target"),
-		      NULL_TREE, list);
-
-  if (sym_attr.oacc_function != OACC_FUNCTION_NONE)
-    {
-      omp_clause_code code = OMP_CLAUSE_ERROR;
-      tree clause, dims;
-
-      switch (sym_attr.oacc_function)
-	{
-	case OACC_FUNCTION_GANG:
-	  code = OMP_CLAUSE_GANG;
-	  break;
-	case OACC_FUNCTION_WORKER:
-	  code = OMP_CLAUSE_WORKER;
-	  break;
-	case OACC_FUNCTION_VECTOR:
-	  code = OMP_CLAUSE_VECTOR;
-	  break;
-	case OACC_FUNCTION_SEQ:
-	default:
-	  code = OMP_CLAUSE_SEQ;
-	}
-
-      clause = build_omp_clause (UNKNOWN_LOCATION, code);
-      dims = oacc_build_routine_dims (clause);
-      list = tree_cons (get_identifier ("oacc function"),
-			dims, list);
-    }
+  list = gfc_add_omp_offload_attributes (sym_attr, list);
 
   return list;
 }

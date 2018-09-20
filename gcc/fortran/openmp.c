@@ -2283,7 +2283,7 @@ gfc_match_oacc_routine (void)
   match m;
   gfc_omp_clauses *c = NULL;
   gfc_oacc_routine_name *n = NULL;
-  oacc_function dims = OACC_FUNCTION_NONE;
+  oacc_function dims;
   bool seen_error = false;
 
   old_loc = gfc_current_locus;
@@ -2378,10 +2378,7 @@ gfc_match_oacc_routine (void)
 	  {
 	    needs_entry = false;
 	    if (dims != gfc_oacc_routine_dims (n->clauses))
-	      {
-		gfc_error ("$!ACC ROUTINE already applied at %L", &old_loc);
-		goto cleanup;
-	      }
+	      goto duplicate_routine;
 	  }
 
       if (needs_entry)
@@ -2389,12 +2386,8 @@ gfc_match_oacc_routine (void)
 	  n = gfc_get_oacc_routine_name ();
 	  n->sym = sym;
 	  n->clauses = c;
-	  n->next = NULL;
 	  n->loc = old_loc;
-
-	  if (gfc_current_ns->oacc_routine_names != NULL)
-	    n->next = gfc_current_ns->oacc_routine_names;
-
+	  n->next = gfc_current_ns->oacc_routine_names;
 	  gfc_current_ns->oacc_routine_names = n;
 	}
 
@@ -2405,18 +2398,14 @@ gfc_match_oacc_routine (void)
     {
       if (gfc_current_ns->proc_name->attr.oacc_function != OACC_FUNCTION_NONE
 	  && !seen_error)
-	{
-	  gfc_error ("!$ACC ROUTINE already applied at %L", &old_loc);
-	  goto cleanup;
-	}
+	goto duplicate_routine;
 
       if (!gfc_add_omp_declare_target (&gfc_current_ns->proc_name->attr,
 				       gfc_current_ns->proc_name->name,
 				       &old_loc))
 	goto cleanup;
 
-      gfc_current_ns->proc_name->attr.oacc_function
-	= seen_error ? OACC_FUNCTION_SEQ : dims;
+      gfc_current_ns->proc_name->attr.oacc_function = dims;
 
       if (seen_error)
 	goto cleanup;
@@ -2434,6 +2423,9 @@ gfc_match_oacc_routine (void)
   new_st.op = EXEC_OACC_ROUTINE;
   new_st.ext.omp_clauses = c;
   return MATCH_YES;  
+
+duplicate_routine:
+  gfc_error ("!$ACC ROUTINE already applied at %L", &old_loc);
 
 cleanup:
   gfc_current_locus = old_loc;

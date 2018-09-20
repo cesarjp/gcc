@@ -1281,6 +1281,48 @@ gfc_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *ctx, tree type)
     }
 }
 
+/* Add OpenMP / OpenACC function attributes to LIST.  */
+
+tree
+gfc_add_omp_offload_attributes (symbol_attribute sym_attr, tree list)
+{
+  if (sym_attr.omp_declare_target_link)
+    list = tree_cons (get_identifier ("omp declare target link"),
+		      NULL_TREE, list);
+  else if (sym_attr.omp_declare_target)
+    list = tree_cons (get_identifier ("omp declare target"),
+		      NULL_TREE, list);
+
+  if (sym_attr.oacc_function != OACC_FUNCTION_NONE)
+    {
+      omp_clause_code code;
+      tree clause, dims;
+
+      switch (sym_attr.oacc_function)
+	{
+	case OACC_FUNCTION_GANG:
+	  code = OMP_CLAUSE_GANG;
+	  break;
+	case OACC_FUNCTION_WORKER:
+	  code = OMP_CLAUSE_WORKER;
+	  break;
+	case OACC_FUNCTION_VECTOR:
+	  code = OMP_CLAUSE_VECTOR;
+	  break;
+	case OACC_FUNCTION_SEQ:
+	default:
+	  code = OMP_CLAUSE_SEQ;
+	}
+
+      clause = build_omp_clause (UNKNOWN_LOCATION, code);
+      dims = oacc_build_routine_dims (clause);
+      list = tree_cons (get_identifier ("oacc function"),
+			dims, list);
+    }
+
+  return list;
+}
+
 
 static inline tree
 gfc_trans_add_clause (tree node, tree tail)
