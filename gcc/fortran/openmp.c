@@ -2288,8 +2288,9 @@ match
 gfc_match_oacc_routine (void)
 {
   locus old_loc;
-  gfc_symbol *sym = NULL;
   match m;
+  gfc_intrinsic_sym *isym = NULL;
+  gfc_symbol *sym = NULL;
   gfc_omp_clauses *c = NULL;
   gfc_oacc_routine_name *n = NULL;
   oacc_function dims;
@@ -2311,12 +2312,14 @@ gfc_match_oacc_routine (void)
   if (m == MATCH_YES)
     {
       char buffer[GFC_MAX_SYMBOL_LEN + 1];
-      gfc_symtree *st;
+      gfc_symtree *st = NULL;
 
       m = gfc_match_name (buffer);
       if (m == MATCH_YES)
 	{
-	  st = gfc_find_symtree (gfc_current_ns->sym_root, buffer);
+	  if ((isym = gfc_find_function (buffer)) == NULL
+	      && (isym = gfc_find_subroutine (buffer)) == NULL)
+	    st = gfc_find_symtree (gfc_current_ns->sym_root, buffer);
 	  if (st)
 	    {
 	      sym = st->n.sym;
@@ -2325,7 +2328,7 @@ gfc_match_oacc_routine (void)
 	        sym = NULL;
 	    }
 
-	  if (st == NULL
+	  if ((isym == NULL && st == NULL)
 	      || (sym
 		  && !sym->attr.external
 		  && !sym->attr.function
@@ -2337,6 +2340,13 @@ gfc_match_oacc_routine (void)
 	      gfc_current_locus = old_loc;
 	      return MATCH_ERROR;
 	    }
+
+	  /* Set sym to NULL if it matches the current procedure's
+	     name.  This will simplify the check for duplicate ACC
+	     ROUTINE attributes.  */
+	  if (gfc_current_ns->proc_name
+	      && !strcmp (buffer, gfc_current_ns->proc_name->name))
+	    sym = NULL;
 	}
       else
         {
@@ -2357,15 +2367,30 @@ gfc_match_oacc_routine (void)
 	  != MATCH_YES))
     return MATCH_ERROR;
 
+  /* Scan for invalid routine geometry.  */
   dims = gfc_oacc_routine_dims (c);
   if (dims == OACC_FUNCTION_NONE)
     {
-      gfc_error ("Multiple loop axes specified for routine %C");
-      gfc_current_locus = old_loc;
-      return MATCH_ERROR;
+      gfc_error ("Multiple loop axes specified in !$ACC ROUTINE at %C");
+
+      /* Don't abort early, because it's important to let the user
+	 know of any potential duplicate routine directives.  */
+      seen_error = true;
     }
 
-  if (sym != NULL)
+  if (isym != NULL)
+    {
+      if (c && (c->gang || c->worker || c->vector))
+	{
+	  gfc_error ("Intrinsic symbol specified in !$ACC ROUTINE ( NAME ) "
+		     "at %C, with incompatible clauses specifying the level "
+		     "of parallelism");
+	  goto cleanup;
+	}
+      /* The intrinsic symbol has been marked with a SEQ, or with no clause at
+	 all, which is OK.  */
+    }
+  else if (sym != NULL)
     {
       bool needs_entry = true;
 
