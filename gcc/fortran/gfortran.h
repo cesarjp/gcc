@@ -335,6 +335,7 @@ extern const mstring intents[];
 extern const mstring access_types[];
 extern const mstring ifsrc_types[];
 extern const mstring save_status[];
+extern const mstring oacc_function_types[];
 
 /* Strings for DTIO procedure names.  In symbol.c.  */
 extern const mstring dtio_procs[];
