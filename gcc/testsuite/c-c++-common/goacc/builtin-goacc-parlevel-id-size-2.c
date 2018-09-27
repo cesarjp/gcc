@@ -35,3 +35,5 @@ foo2 (int arg)
   __builtin_goacc_parlevel_size (3);
   /* { dg-error "illegal argument 0 to '__builtin_goacc_parlevel_size'" "" { target *-*-* } .-1 } */
 }
+
+/* { dg-warning "expecting one of" "" { target *-*-* } 16 } */

@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <gomp-constants.h>
 
-#pragma acc routine
+#pragma acc routine /* { dg-warning "expecting one of" } */
 static int __attribute__ ((noinline)) coord ()
 {
   int res = 0;

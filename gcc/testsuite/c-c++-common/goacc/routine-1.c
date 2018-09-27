@@ -55,3 +55,7 @@ int main ()
 
   return 0;
 }
+
+/* { dg-warning "expecting one of" "" { target *-*-* } 23 } */
+/* { dg-warning "expecting one of" "" { target *-*-* } 29 } */
+/* { dg-warning "expecting one of" "" { target *-*-* } 33 } */

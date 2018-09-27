@@ -77,3 +77,5 @@ foo3 (void)
     res += __builtin_goacc_parlevel_size (GOMP_DIM_VECTOR);
   }
 }
+
+/* { dg-warning "expecting one of" "" { target *-*-* } 6 } */
