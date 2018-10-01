@@ -457,7 +457,7 @@ gomp_map_fields_existing (struct target_mem_desc *tgt, splay_tree_key n,
 	      (void *) cur_node.host_end);
 }
 
-static inline uintptr_t
+uintptr_t
 gomp_map_val (struct target_mem_desc *tgt, void **hostaddrs, size_t i)
 {
   if (tgt->list[i].key != NULL)
