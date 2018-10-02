@@ -45,6 +45,44 @@
 #include "plugin-suffix.h"
 #endif
 
+#include <stdio.h>
+#define print_enum(key, name) do { if ((key & 0xff) == name) return #name; } while (0)
+
+const char *
+print_map_kind (short key)
+{
+  print_enum (key, GOMP_MAP_ALLOC);
+  print_enum (key, GOMP_MAP_TO);
+  print_enum (key, GOMP_MAP_FROM);
+  print_enum (key, GOMP_MAP_TOFROM);
+  print_enum (key, GOMP_MAP_POINTER);
+  print_enum (key, GOMP_MAP_TO_PSET);
+  print_enum (key, GOMP_MAP_FORCE_PRESENT);
+  print_enum (key, GOMP_MAP_DELETE);
+  print_enum (key, GOMP_MAP_FORCE_DEVICEPTR);
+  print_enum (key, GOMP_MAP_DEVICE_RESIDENT);
+  print_enum (key, GOMP_MAP_LINK);
+  print_enum (key, GOMP_MAP_FIRSTPRIVATE);
+  print_enum (key, GOMP_MAP_FIRSTPRIVATE_INT);
+  print_enum (key, GOMP_MAP_USE_DEVICE_PTR);
+  print_enum (key, GOMP_MAP_ZERO_LEN_ARRAY_SECTION);
+  print_enum (key, GOMP_MAP_FORCE_ALLOC);
+  print_enum (key, GOMP_MAP_FORCE_TO);
+  print_enum (key, GOMP_MAP_FORCE_FROM);
+  print_enum (key, GOMP_MAP_FORCE_TOFROM);
+  print_enum (key, GOMP_MAP_ALWAYS_TO);
+  print_enum (key, GOMP_MAP_ALWAYS_FROM);
+  print_enum (key, GOMP_MAP_ALWAYS_TOFROM);
+  print_enum (key, GOMP_MAP_STRUCT);
+  print_enum (key, GOMP_MAP_ALWAYS_POINTER);
+  print_enum (key, GOMP_MAP_DELETE_ZERO_LEN_ARRAY_SECTION);
+  print_enum (key, GOMP_MAP_RELEASE);
+  print_enum (key, GOMP_MAP_FIRSTPRIVATE_POINTER);
+  print_enum (key, GOMP_MAP_FIRSTPRIVATE_REFERENCE);
+
+  return "UNKNOWN";
+}
+
 static void gomp_target_init (void);
 
 /* The whole initialization code for offloading plugins is only run one.  */
@@ -531,6 +569,14 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
       gomp_mutex_unlock (&devicep->lock);
       free (tgt);
       return NULL;
+    }
+
+  /* Print all of the data mappings provided by the user.  */
+  gomp_debug (0, "device memory mappings:\n");
+  for (i = 0; i < mapnum; i++)
+    {
+      gomp_debug (0, "%3zu: %16p %10zu %s\n", i, hostaddrs[i], sizes[i],
+		  print_map_kind (get_kind (short_mapkind, kinds, i)));
     }
 
   for (i = 0; i < mapnum; i++)
