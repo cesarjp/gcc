@@ -502,11 +502,11 @@ gomp_map_val (struct target_mem_desc *tgt, void **hostaddrs, size_t i)
     return tgt->list[i].key->tgt->tgt_start
 	   + tgt->list[i].key->tgt_offset
 	   + tgt->list[i].offset;
-  if (tgt->list[i].offset == ~(uintptr_t) 0)
+  if (tgt->list[i].offset == OFFSET_INLINED)
     return (uintptr_t) hostaddrs[i];
-  if (tgt->list[i].offset == ~(uintptr_t) 1)
+  if (tgt->list[i].offset == OFFSET_POINTER)
     return 0;
-  if (tgt->list[i].offset == ~(uintptr_t) 2)
+  if (tgt->list[i].offset == OFFSET_STRUCT)
     return tgt->list[i + 1].key->tgt->tgt_start
 	   + tgt->list[i + 1].key->tgt_offset
 	   + tgt->list[i + 1].offset
@@ -586,7 +586,7 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 	  || (kind & typemask) == GOMP_MAP_FIRSTPRIVATE_INT)
 	{
 	  tgt->list[i].key = NULL;
-	  tgt->list[i].offset = ~(uintptr_t) 0;
+	  tgt->list[i].offset = OFFSET_INLINED;
 	  continue;
 	}
       else if ((kind & typemask) == GOMP_MAP_USE_DEVICE_PTR)
@@ -604,7 +604,7 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 	    = (void *) (n->tgt->tgt_start + n->tgt_offset
 			+ cur_node.host_start);
 	  tgt->list[i].key = NULL;
-	  tgt->list[i].offset = ~(uintptr_t) 0;
+	  tgt->list[i].offset = OFFSET_INLINED;
 	  continue;
 	}
       else if ((kind & typemask) == GOMP_MAP_STRUCT)
@@ -615,7 +615,7 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 	  cur_node.host_end = (uintptr_t) hostaddrs[last]
 			      + sizes[last];
 	  tgt->list[i].key = NULL;
-	  tgt->list[i].offset = ~(uintptr_t) 2;
+	  tgt->list[i].offset = OFFSET_STRUCT;
 	  splay_tree_key n = splay_tree_lookup (mem_map, &cur_node);
 	  if (n == NULL)
 	    {
@@ -648,7 +648,7 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
       else if ((kind & typemask) == GOMP_MAP_ALWAYS_POINTER)
 	{
 	  tgt->list[i].key = NULL;
-	  tgt->list[i].offset = ~(uintptr_t) 1;
+	  tgt->list[i].offset = OFFSET_POINTER;
 	  has_firstprivate = true;
 	  continue;
 	}
@@ -678,7 +678,7 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 	  if (!n)
 	    {
 	      tgt->list[i].key = NULL;
-	      tgt->list[i].offset = ~(uintptr_t) 1;
+	      tgt->list[i].offset = OFFSET_POINTER;
 	      continue;
 	    }
 	}
