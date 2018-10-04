@@ -129,6 +129,11 @@ enum gomp_map_kind
     /* Decrement usage count and deallocate if zero.  */
     GOMP_MAP_RELEASE =			(GOMP_MAP_FLAG_SPECIAL_2
 					 | GOMP_MAP_DELETE),
+    /* Unlike GOMP_MAP_STRUCT, this mapping records the complete size
+       of the struct so that individual fields may be attached and
+       detached by nested and dynamic data regions. */
+    GOMP_MAP_ACC_STRUCT =		(GOMP_MAP_DEEP_COPY
+					 | GOMP_MAP_STRUCT),
     /* In OpenACC, attach a pointer to a mapped struct field.  */
     GOMP_MAP_ATTACH =			(GOMP_MAP_DEEP_COPY | 0),
     /* In OpenACC, detach a pointer to a mapped struct field.  */

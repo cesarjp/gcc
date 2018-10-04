@@ -846,6 +846,7 @@ struct target_mem_desc {
 #define OFFSET_INLINED (~(uintptr_t) 0)
 #define OFFSET_POINTER (~(uintptr_t) 1)
 #define OFFSET_STRUCT (~(uintptr_t) 2)
+#define OFFSET_ACC_STRUCT (~(uintptr_t) 4)
 
 struct splay_tree_key_s {
   /* Address of the host object.  */
@@ -860,6 +861,8 @@ struct splay_tree_key_s {
   uintptr_t refcount;
   /* Dynamic reference count.  */
   uintptr_t dynamic_refcount;
+  /* Deep copy pointer attachment count.  */
+  uintptr_t attachments;
   /* Pointer to the original mapping of "omp declare target link" object.  */
   splay_tree_key link_key;
 };

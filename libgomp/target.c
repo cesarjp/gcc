@@ -74,6 +74,7 @@ print_map_kind (short key)
   print_enum (key, GOMP_MAP_ALWAYS_FROM);
   print_enum (key, GOMP_MAP_ALWAYS_TOFROM);
   print_enum (key, GOMP_MAP_STRUCT);
+  print_enum (key, GOMP_MAP_ACC_STRUCT);
   print_enum (key, GOMP_MAP_ALWAYS_POINTER);
   print_enum (key, GOMP_MAP_DELETE_ZERO_LEN_ARRAY_SECTION);
   print_enum (key, GOMP_MAP_RELEASE);
@@ -459,6 +460,7 @@ gomp_map_fields_existing (struct target_mem_desc *tgt, splay_tree_key n,
 			      &tgt->list[i], kind & typemask, cbuf);
       return;
     }
+  /* Check a GOMP_MAP_ALWAYS_POINTER mapping.  */
   if (sizes[i] == 0)
     {
       if (cur_node.host_start > (uintptr_t) hostaddrs[first - 1])
@@ -488,6 +490,7 @@ gomp_map_fields_existing (struct target_mem_desc *tgt, splay_tree_key n,
 	  return;
 	}
     }
+  /* Why is the lock being manipulated here?  */
   gomp_mutex_unlock (&devicep->lock);
   gomp_fatal ("Trying to map into device [%p..%p) structure element when "
 	      "other mapped elements from the same structure weren't mapped "
@@ -512,6 +515,12 @@ gomp_map_val (struct target_mem_desc *tgt, void **hostaddrs, size_t i)
 	   + tgt->list[i + 1].offset
 	   + (uintptr_t) hostaddrs[i]
 	   - (uintptr_t) hostaddrs[i + 1];
+  if (tgt->list[i].offset == OFFSET_ACC_STRUCT)
+    return tgt->list[i + 2].key->tgt->tgt_start
+	   + tgt->list[i + 2].key->tgt_offset
+	   + tgt->list[i + 2].offset
+	   + (uintptr_t) hostaddrs[i]
+	   - (uintptr_t) hostaddrs[i + 2];
   return tgt->tgt_start + tgt->list[i].offset;
 }
 
@@ -611,11 +620,29 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 	{
 	  size_t first = i + 1;
 	  size_t last = i + sizes[i];
+	  bool acc_dc = (get_kind (short_mapkind, kinds, i+1) & 0xff)
+	    == GOMP_MAP_ACC_STRUCT;
+
+	  /* GOMP_MAP_ACC_STRUCT is a dummy mapping that contains the size
+	     the of the complete struct.  */
 	  cur_node.host_start = (uintptr_t) hostaddrs[i];
-	  cur_node.host_end = (uintptr_t) hostaddrs[last]
-			      + sizes[last];
+	  if (acc_dc)
+	    {
+	      cur_node.host_end = cur_node.host_start + sizes[i+1];
+	      first = i + 2;
+	    }
+	  else
+	    cur_node.host_end = (uintptr_t) hostaddrs[last]
+	      + sizes[last];
 	  tgt->list[i].key = NULL;
-	  tgt->list[i].offset = OFFSET_STRUCT;
+	  if (acc_dc)
+	    {
+	      tgt->list[i].offset = OFFSET_ACC_STRUCT;
+	      tgt->list[i+1].offset = OFFSET_INLINED;
+	      tgt->list[i+1].key = NULL;
+	    }
+	  else
+	    tgt->list[i].offset = OFFSET_STRUCT;
 	  splay_tree_key n = splay_tree_lookup (mem_map, &cur_node);
 	  if (n == NULL)
 	    {
@@ -806,34 +833,41 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 	      case GOMP_MAP_ZERO_LEN_ARRAY_SECTION:
 		continue;
 	      case GOMP_MAP_STRUCT:
-		first = i + 1;
-		last = i + sizes[i];
-		cur_node.host_start = (uintptr_t) hostaddrs[i];
-		cur_node.host_end = (uintptr_t) hostaddrs[last]
-				    + sizes[last];
-		if (tgt->list[first].key != NULL)
-		  continue;
-		n = splay_tree_lookup (mem_map, &cur_node);
-		if (n == NULL)
-		  {
-		    size_t align = (size_t) 1 << (kind >> rshift);
-		    tgt_size -= (uintptr_t) hostaddrs[first]
-				- (uintptr_t) hostaddrs[i];
-		    tgt_size = (tgt_size + align - 1) & ~(align - 1);
-		    tgt_size += (uintptr_t) hostaddrs[first]
-				- (uintptr_t) hostaddrs[i];
-		    field_tgt_base = (uintptr_t) hostaddrs[first];
-		    field_tgt_offset = tgt_size;
-		    field_tgt_clear = last;
-		    tgt_size += cur_node.host_end
-				- (uintptr_t) hostaddrs[first];
+		{
+		  int acc_dc = (get_kind (short_mapkind, kinds, i + 1) & 0xff)
+		    == GOMP_MAP_ACC_STRUCT;
+		  first = acc_dc ? i + 2 : i + 1;
+		  last = i + sizes[i];
+		  cur_node.host_start = (uintptr_t) hostaddrs[i];
+		  if (acc_dc)
+		    cur_node.host_end = cur_node.host_start + sizes[i];
+		  else
+		    cur_node.host_end = (uintptr_t) hostaddrs[last]
+		    + sizes[last];
+		  if (tgt->list[first].key != NULL)
 		    continue;
-		  }
-		for (i = first; i <= last; i++)
-		  gomp_map_fields_existing (tgt, n, first, i, hostaddrs,
-					    sizes, kinds, cbufp);
-		i--;
-		continue;
+		  n = splay_tree_lookup (mem_map, &cur_node);
+		  if (n == NULL)
+		    {
+		      size_t align = (size_t) 1 << (kind >> rshift);
+		      tgt_size -= (uintptr_t) hostaddrs[first]
+			- (uintptr_t) hostaddrs[i];
+		      tgt_size = (tgt_size + align - 1) & ~(align - 1);
+		      tgt_size += (uintptr_t) hostaddrs[first]
+			- (uintptr_t) hostaddrs[i];
+		      field_tgt_base = (uintptr_t) hostaddrs[first];
+		      field_tgt_offset = tgt_size;
+		      field_tgt_clear = last;
+		      tgt_size += cur_node.host_end
+			- (uintptr_t) hostaddrs[first];
+		      continue;
+		    }
+		  for (i = first; i <= last; i++)
+		    gomp_map_fields_existing (tgt, n, first, i, hostaddrs,
+					      sizes, kinds, cbufp);
+		  i--;
+		  continue;
+		}
 	      case GOMP_MAP_ALWAYS_POINTER:
 		cur_node.host_start = (uintptr_t) hostaddrs[i];
 		cur_node.host_end = cur_node.host_start + sizeof (void *);
@@ -917,6 +951,7 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 		  case GOMP_MAP_FORCE_ALLOC:
 		  case GOMP_MAP_FORCE_FROM:
 		  case GOMP_MAP_ALWAYS_FROM:
+		  case GOMP_MAP_ACC_STRUCT:
 		    break;
 		  case GOMP_MAP_TO:
 		  case GOMP_MAP_TOFROM:
