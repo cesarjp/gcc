@@ -861,8 +861,6 @@ struct splay_tree_key_s {
   uintptr_t refcount;
   /* Dynamic reference count.  */
   uintptr_t dynamic_refcount;
-  /* Deep copy pointer attachment count.  */
-  uintptr_t attachments;
   /* Pointer to the original mapping of "omp declare target link" object.  */
   splay_tree_key link_key;
 };
@@ -976,6 +974,9 @@ struct gomp_device_descr
 
   /* Splay tree containing information about mapped memory regions.  */
   struct splay_tree_s mem_map;
+
+  /* Splay tree for the structure fields.  */
+  struct splay_tree_s field_map;
 
   /* Mutex for the mutable data.  */
   gomp_mutex_t lock;
