@@ -431,11 +431,6 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 	    {
 	      switch (kind)
 		{
-		case GOMP_MAP_ALWAYS_POINTER:
-		  gomp_map_vars (acc_dev, 1, &hostaddrs[i], NULL, &sizes[i],
-				 &kinds[i], true,
-				 GOMP_MAP_VARS_ENTER_DATA);
-		  break;
 		case GOMP_MAP_ALLOC:
 		  acc_present_or_create (hostaddrs[i], sizes[i]);
 		  break;
