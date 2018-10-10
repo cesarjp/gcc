@@ -231,7 +231,10 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
 
   devaddrs = gomp_alloca (sizeof (void *) * mapnum);
   for (i = 0; i < mapnum; i++)
-    devaddrs[i] = (void *) gomp_map_val (tgt, hostaddrs, i);
+    {
+      devaddrs[i] = (void *) gomp_map_val (tgt, hostaddrs, i);
+      gomp_debug (0, "devaddrs[%d] = %p\n", i, devaddrs[i]);
+    }
 
   acc_dev->openacc.exec_func (tgt_fn, mapnum, hostaddrs, devaddrs,
 			      async, dims, tgt);

@@ -1391,6 +1391,8 @@ nvptx_alloc (size_t s)
   CUdeviceptr d;
 
   CUDA_CALL_ERET (NULL, cuMemAlloc, &d, s);
+  GOMP_PLUGIN_debug (1, "cuMemAlloc %ld bytes at %p\n", s, (void *) d);
+
   return (void *) d;
 }
 
