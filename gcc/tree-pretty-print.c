@@ -757,6 +757,11 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 	  break;
 	case GOMP_MAP_LINK:
 	  pp_string (pp, "link");
+	case GOMP_MAP_ATTACH:
+	  pp_string (pp, "attach");
+	  break;
+	case GOMP_MAP_DETACH:
+	  pp_string (pp, "detach");
 	  break;
 	default:
 	  gcc_unreachable ();

@@ -14064,6 +14064,10 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 						clauses);
 	  c_name = "auto";
 	  break;
+	case PRAGMA_OACC_CLAUSE_ATTACH:
+	  clauses = c_parser_oacc_data_clause (parser, c_kind, clauses);
+	  c_name = "attach";
+	  break;
 	case PRAGMA_OACC_CLAUSE_COLLAPSE:
 	  clauses = c_parser_omp_clause_collapse (parser, clauses);
 	  c_name = "collapse";
@@ -14091,6 +14095,10 @@ c_parser_oacc_all_clauses (c_parser *parser, omp_clause_mask mask,
 	case PRAGMA_OMP_CLAUSE_DEFAULT:
 	  clauses = c_parser_omp_clause_default (parser, clauses, true);
 	  c_name = "default";
+	  break;
+	case PRAGMA_OACC_CLAUSE_DETACH:
+	  clauses = c_parser_oacc_data_clause (parser, c_kind, clauses);
+	  c_name = "detach";
 	  break;
 	case PRAGMA_OACC_CLAUSE_DEVICE:
 	  clauses = c_parser_oacc_data_clause (parser, c_kind, clauses);
