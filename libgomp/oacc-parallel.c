@@ -51,7 +51,7 @@ find_pointer (int pos, size_t mapnum, unsigned short *kinds)
 
   if (kind == GOMP_MAP_TO_PSET)
     return 3;
-  else if (kind == GOMP_MAP_POINTER)
+  else if (kind == GOMP_MAP_POINTER || kind == GOMP_MAP_ALWAYS_POINTER)
     return 2;
 
   return 0;
@@ -383,6 +383,12 @@ GOACC_enter_exit_data (int device, size_t mapnum,
       if (kind == GOMP_MAP_POINTER || kind == GOMP_MAP_TO_PSET)
 	continue;
 
+      if (kind == GOMP_MAP_STRUCT)
+	{
+	  i += 1;  /* Skip this, and the subsequent GOMP_MAP_ACC_STRUCT.  */
+	  continue;
+	}
+
       if (kind == GOMP_MAP_FORCE_ALLOC
 	  || kind == GOMP_MAP_FORCE_PRESENT
 	  || kind == GOMP_MAP_FORCE_TO
@@ -425,6 +431,11 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 	    {
 	      switch (kind)
 		{
+		case GOMP_MAP_ALWAYS_POINTER:
+		  gomp_map_vars (acc_dev, 1, &hostaddrs[i], NULL, &sizes[i],
+				 &kinds[i], true,
+				 GOMP_MAP_VARS_ENTER_DATA);
+		  break;
 		case GOMP_MAP_ALLOC:
 		  acc_present_or_create (hostaddrs[i], sizes[i]);
 		  break;
@@ -437,9 +448,15 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 		case GOMP_MAP_FORCE_TO:
 		  acc_copyin (hostaddrs[i], sizes[i]);
 		  break;
+		case GOMP_MAP_STRUCT:
+		  gomp_map_vars (acc_dev, sizes[i] + 1, &hostaddrs[i], NULL,
+				 &sizes[i], &kinds[i], true,
+				 GOMP_MAP_VARS_ENTER_DATA);
+		  i += sizes[i];
+		  break;
 		default:
-		  gomp_fatal (">>>> GOACC_enter_exit_data UNHANDLED kind 0x%.2x",
-			      kind);
+		  gomp_fatal (">>>> GOACC_enter_exit_data UNHANDLED kind (%s) 0x%.2x",
+			      print_map_kind (kind), kind);
 		  break;
 		}
 	    }
@@ -466,6 +483,9 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 	  {
 	    switch (kind)
 	      {
+	      case GOMP_MAP_ALWAYS_POINTER:
+		/* Nothing to do here.  */
+		break;
 	      case GOMP_MAP_RELEASE:
 	      case GOMP_MAP_DELETE:
 		if (acc_is_present (hostaddrs[i], sizes[i]))
@@ -483,9 +503,14 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 		else
 		  acc_copyout (hostaddrs[i], sizes[i]);
 		break;
+	      case GOMP_MAP_STRUCT:
+		gomp_exit_data (acc_dev, sizes[i] + 1, &hostaddrs[i],
+				&sizes[i], &kinds[i]);
+		i += sizes[i];
+		break;
 	      default:
-		gomp_fatal (">>>> GOACC_enter_exit_data UNHANDLED kind 0x%.2x",
-			    kind);
+		gomp_fatal (">>>> GOACC_enter_exit_data UNHANDLED kind (%s) 0x%.2x",
+			    print_map_kind (kind), kind);
 		break;
 	      }
 	  }

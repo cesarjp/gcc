@@ -1001,12 +1001,15 @@ enum gomp_map_vars_kind
   GOMP_MAP_VARS_ENTER_DATA
 };
 
+extern const char *print_map_kind (short);
 extern void gomp_acc_insert_pointer (size_t, void **, size_t *, void *);
 extern void gomp_acc_remove_pointer (void *, size_t, bool, int, int, int);
 extern void gomp_acc_declare_allocate (bool, size_t, void **, size_t *,
 				       unsigned short *);
 extern uintptr_t gomp_map_val (struct target_mem_desc *, void **, size_t);
 
+extern void gomp_exit_data (struct gomp_device_descr *, size_t, void **,
+			    size_t *, unsigned short *);
 extern struct target_mem_desc *gomp_map_vars (struct gomp_device_descr *,
 					      size_t, void **, void **,
 					      size_t *, void *, bool,

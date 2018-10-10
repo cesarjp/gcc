@@ -263,7 +263,7 @@ struct gomp_coalesce_buf
 static inline void
 gomp_coalesce_buf_add (struct gomp_coalesce_buf *cbuf, size_t start, size_t len)
 {
-  printf ("gomp_coalesce_buf_add: %lx, %ld\n", start, len);
+  gomp_debug (1, "gomp_coalesce_buf_add: %lx, %ld\n", start, len);
   if (len > MAX_COALESCE_BUF_SIZE || len == 0)
     return;
   if (cbuf->chunk_cnt)
@@ -2043,7 +2043,7 @@ GOMP_target_update_ext (int device, size_t mapnum, void **hostaddrs,
   gomp_update (devicep, mapnum, hostaddrs, sizes, kinds, true);
 }
 
-static void
+void
 gomp_exit_data (struct gomp_device_descr *devicep, size_t mapnum,
 		void **hostaddrs, size_t *sizes, unsigned short *kinds)
 {
