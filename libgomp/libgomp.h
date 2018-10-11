@@ -868,6 +868,13 @@ struct splay_tree_key_s {
   splay_tree_key link_key;
 };
 
+/* Node for the linked list of OpenACC pointer attachments.  */
+struct dc_attach_node {
+  struct dc_attach_node *next;
+  uintptr_t host_start;
+  size_t attach;
+};
+
 /* The comparison function.  */
 
 static inline int
@@ -981,8 +988,8 @@ struct gomp_device_descr
   /* Splay tree for the structure fields.  */
   struct splay_tree_s field_map;
 
-  /* Splay tree to keep track of pointer attachments for OpenACC.  */
-  struct splay_tree_s attach_map;
+  /* Linked list for all fo the OpenACC pointer attachments.  */
+  struct dc_attach_node attach_list;
 
   /* Mutex for the mutable data.  */
   gomp_mutex_t lock;
