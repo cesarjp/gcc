@@ -446,7 +446,7 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 		case GOMP_MAP_STRUCT:
 		  gomp_map_vars (acc_dev, sizes[i] + 1, &hostaddrs[i], NULL,
 				 &sizes[i], &kinds[i], true,
-				 GOMP_MAP_VARS_ENTER_DATA);
+				 GOMP_MAP_VARS_OPENACC_ENTER_DATA);
 		  i += sizes[i];
 		  break;
 		default:

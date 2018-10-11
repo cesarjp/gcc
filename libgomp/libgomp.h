@@ -810,6 +810,8 @@ struct target_var_desc {
   uintptr_t offset;
   /* Actual length.  */
   uintptr_t length;
+  /* True if the attachment counter needs to be updated.  */
+  bool attach;
 };
 
 struct target_mem_desc {
@@ -846,6 +848,7 @@ struct target_mem_desc {
 #define OFFSET_INLINED (~(uintptr_t) 0)
 #define OFFSET_POINTER (~(uintptr_t) 1)
 #define OFFSET_STRUCT (~(uintptr_t) 2)
+#define OFFSET_ACC_POINTER (~(uintptr_t) 3)
 #define OFFSET_ACC_STRUCT (~(uintptr_t) 4)
 
 struct splay_tree_key_s {
@@ -978,6 +981,9 @@ struct gomp_device_descr
   /* Splay tree for the structure fields.  */
   struct splay_tree_s field_map;
 
+  /* Splay tree to keep track of pointer attachments for OpenACC.  */
+  struct splay_tree_s attach_map;
+
   /* Mutex for the mutable data.  */
   gomp_mutex_t lock;
 
@@ -998,7 +1004,8 @@ enum gomp_map_vars_kind
   GOMP_MAP_VARS_OPENACC,
   GOMP_MAP_VARS_TARGET,
   GOMP_MAP_VARS_DATA,
-  GOMP_MAP_VARS_ENTER_DATA
+  GOMP_MAP_VARS_ENTER_DATA,
+  GOMP_MAP_VARS_OPENACC_ENTER_DATA
 };
 
 extern const char *print_map_kind (short);
