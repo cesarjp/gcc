@@ -810,8 +810,6 @@ struct target_var_desc {
   uintptr_t offset;
   /* Actual length.  */
   uintptr_t length;
-  /* True if the attachment counter needs to be updated.  */
-  bool attach;
 };
 
 struct target_mem_desc {
