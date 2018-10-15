@@ -584,6 +584,23 @@ gomp_detach_pointer (struct gomp_device_descr *devicep,
 	  t = n->next->next;
 	  free (n->next);
 	  n->next = t;
+
+	  /* Update the device pointer with contents of the host pointer.  */
+	  struct splay_tree_key_s node;
+	  splay_tree_key k;
+
+	  node.host_start = hostaddr;
+	  node.host_end = hostaddr + sizeof (void *);
+	  k = splay_tree_lookup (&devicep->mem_map, &node);
+
+	  if (k == NULL)
+	    return;
+	  
+	  uintptr_t dev = k->tgt->tgt_start + k->tgt_offset
+	    + hostaddr - k->host_start;
+	  uintptr_t target = *(uintptr_t *)hostaddr;
+	  gomp_copy_host2dev (devicep, (void *) dev, (void *) &target,
+			      sizeof (void *), NULL);
 	}
     }
 }
