@@ -34,7 +34,7 @@ main ()
 
 #pragma acc exit data detach(v.b)
   
-#pragma acc exit data delete(a[:n])
+#pragma acc exit data copyout(a[:n])
 
   for (i = 0; i < 10; i++)
     printf ("%d: %d %d %d\n", i, v.a[i], v.b[i], v.c[i]);

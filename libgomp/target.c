@@ -822,6 +822,12 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 	    }
 	  for (i = first; i <= last; i++)
 	    {
+	      if (acc_dc)
+		{
+		  /* TODO: this seems wrong.  */
+		  tgt->list[i].key = NULL;
+		  tgt->list[i].offset = OFFSET_INLINED;
+		}
 	      if (gomp_map_fields_existing (tgt, n, first, i, hostaddrs,
 					    sizes, kinds, NULL, acc_dc))
 		{
