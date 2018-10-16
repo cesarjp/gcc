@@ -873,32 +873,12 @@ acc_attach_async (void **hostaddr, int async)
   uintptr_t pointer = (uintptr_t) hostaddr;
   uintptr_t pointee = *(uintptr_t *) pointer;
 
-//  printf ("pointer = %lx, pointee = %lx\n", pointer, pointee);
-
-  //gomp_attach_pointer (acc_dev, pointer);
-
-//  printf ("pointer: %d\n", acc_is_present ((void *) pointer, sizeof (void *)));
-//  printf ("pointee: %d\n", acc_is_present ((void *) pointee, sizeof (void *)));
+  if (async != GOMP_ASYNC_NOVAL)
+    acc_wait (async);
   
   if (acc_is_present ((void *) pointer, sizeof (void *))
       && acc_is_present ((void *) pointee, sizeof (void *)))
     {
-//      puts ("found a suitable pointer for attachment");
-//      uintptr_t dpointer, dpointee;
-//      splay_tree_key n, m;
-//
-//      gomp_mutex_lock (&acc_dev->lock);
-//      n = lookup_host (acc_dev, (void *) pointer, sizeof (void *));
-//      m = lookup_host (acc_dev, (void *) pointee, sizeof (void *));
-//      gomp_mutex_unlock (&acc_dev->lock);
-//
-//      dpointer = n->tgt->tgt_start + n->tgt_offset + pointer - n->host_start;
-//      dpointee = m->tgt->tgt_start + m->tgt_offset + pointee - m->host_start;
-//      
-//      printf ("pointer: %lx -> %lx\n", pointer, dpointer);
-//      printf ("pointee: %lx -> %lx\n", pointee, dpointee);
-
-      //struct target_mem_desc *tgt;
       unsigned short kinds = GOMP_MAP_ATTACH;
       size_t size = sizeof (void *);
       
