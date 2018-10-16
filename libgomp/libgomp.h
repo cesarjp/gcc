@@ -1019,6 +1019,8 @@ extern void gomp_acc_remove_pointer (void *, size_t, bool, int, int, int);
 extern void gomp_acc_declare_allocate (bool, size_t, void **, size_t *,
 				       unsigned short *);
 extern uintptr_t gomp_map_val (struct target_mem_desc *, void **, size_t);
+extern size_t gomp_attach_pointer (struct gomp_device_descr *, uintptr_t);
+extern void gomp_detach_pointer (struct gomp_device_descr *, uintptr_t, bool);
 
 extern void gomp_exit_data (struct gomp_device_descr *, size_t, void **,
 			    size_t *, unsigned short *);

@@ -333,6 +333,21 @@ GOACC_data_end (void)
   gomp_debug (0, "  %s: mappings restored\n", __FUNCTION__);
 }
 
+static void
+goacc_exit_struct_data (struct gomp_device_descr *devicep, size_t mapnum,
+			void **hostaddrs, size_t *sizes, unsigned short *kinds)
+{
+  size_t i;
+
+  /* First remove the struct fields, then remove the enclosing struct.  
+     The first non-struct data mapping begins at position 2.  */
+
+  for (i = 2; i <= mapnum; i++)
+    gomp_exit_data (devicep, 1, &hostaddrs[i], &sizes[i], &kinds[i]);
+
+  gomp_exit_data (devicep, 1, &hostaddrs[1], &sizes[1], &kinds[1]);
+}
+
 void
 GOACC_enter_exit_data (int device, size_t mapnum,
 		       void **hostaddrs, size_t *sizes, unsigned short *kinds,
@@ -390,6 +405,7 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 	}
 
       if (kind == GOMP_MAP_FORCE_ALLOC
+	  || kind == GOMP_MAP_ATTACH
 	  || kind == GOMP_MAP_FORCE_PRESENT
 	  || kind == GOMP_MAP_FORCE_TO
 	  || kind == GOMP_MAP_TO
@@ -401,6 +417,8 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 
       if (kind == GOMP_MAP_RELEASE
 	  || kind == GOMP_MAP_DELETE
+	  || kind == GOMP_MAP_DETACH
+	  || kind == GOMP_MAP_FORCE_DETACH
 	  || kind == GOMP_MAP_FROM
 	  || kind == GOMP_MAP_FORCE_FROM)
 	break;
@@ -433,6 +451,9 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 		{
 		case GOMP_MAP_ALLOC:
 		  acc_present_or_create (hostaddrs[i], sizes[i]);
+		  break;
+		case GOMP_MAP_ATTACH:
+		  acc_attach (hostaddrs[i]);
 		  break;
 		case GOMP_MAP_FORCE_ALLOC:
 		  acc_create (hostaddrs[i], sizes[i]);
@@ -491,6 +512,12 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 		      acc_delete (hostaddrs[i], sizes[i]);
 		  }
 		break;
+	      case GOMP_MAP_DETACH:
+		acc_detach (hostaddrs[i]);
+		break;
+	      case GOMP_MAP_FORCE_DETACH:
+		acc_detach_finalize (hostaddrs[i]);
+		break;
 	      case GOMP_MAP_FROM:
 	      case GOMP_MAP_FORCE_FROM:
 		if (finalize)
@@ -499,8 +526,8 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 		  acc_copyout (hostaddrs[i], sizes[i]);
 		break;
 	      case GOMP_MAP_STRUCT:
-		gomp_exit_data (acc_dev, sizes[i] + 1, &hostaddrs[i],
-				&sizes[i], &kinds[i]);
+		goacc_exit_struct_data (acc_dev, sizes[i], &hostaddrs[i],
+					&sizes[i], &kinds[i]);
 		i += sizes[i];
 		break;
 	      default:

@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 /* Return block containing [H->S), or NULL if not contained.  The device lock
    for DEV must be locked on entry, and remains locked on exit.  */
@@ -732,6 +733,8 @@ gomp_acc_insert_pointer (size_t mapnum, void **hostaddrs, size_t *sizes,
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
 
+  gomp_attach_pointer (acc_dev, (uintptr_t) hostaddrs[0]);
+  
   if (acc_is_present (*hostaddrs, *sizes))
     {
       splay_tree_key n;
@@ -804,11 +807,13 @@ gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
 
   if (finalize)
     {
+      gomp_detach_pointer (acc_dev, (uintptr_t) h, true);
       n->refcount -= n->dynamic_refcount;
       n->dynamic_refcount = 0;
     }
   else if (n->dynamic_refcount)
     {
+      gomp_detach_pointer (acc_dev, (uintptr_t) h, false);
       n->dynamic_refcount--;
       n->refcount--;
     }
@@ -857,4 +862,77 @@ gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
   gomp_mutex_unlock (&acc_dev->lock);
 
   gomp_debug (0, "  %s: mappings restored\n", __FUNCTION__);
+}
+
+
+void
+acc_attach_async (void **hostaddr, int async)
+{
+  struct goacc_thread *thr = goacc_thread ();
+  struct gomp_device_descr *acc_dev = thr->dev;
+  uintptr_t pointer = (uintptr_t) hostaddr;
+  uintptr_t pointee = *(uintptr_t *) pointer;
+
+//  printf ("pointer = %lx, pointee = %lx\n", pointer, pointee);
+
+  //gomp_attach_pointer (acc_dev, pointer);
+
+//  printf ("pointer: %d\n", acc_is_present ((void *) pointer, sizeof (void *)));
+//  printf ("pointee: %d\n", acc_is_present ((void *) pointee, sizeof (void *)));
+  
+  if (acc_is_present ((void *) pointer, sizeof (void *))
+      && acc_is_present ((void *) pointee, sizeof (void *)))
+    {
+//      puts ("found a suitable pointer for attachment");
+//      uintptr_t dpointer, dpointee;
+//      splay_tree_key n, m;
+//
+//      gomp_mutex_lock (&acc_dev->lock);
+//      n = lookup_host (acc_dev, (void *) pointer, sizeof (void *));
+//      m = lookup_host (acc_dev, (void *) pointee, sizeof (void *));
+//      gomp_mutex_unlock (&acc_dev->lock);
+//
+//      dpointer = n->tgt->tgt_start + n->tgt_offset + pointer - n->host_start;
+//      dpointee = m->tgt->tgt_start + m->tgt_offset + pointee - m->host_start;
+//      
+//      printf ("pointer: %lx -> %lx\n", pointer, dpointer);
+//      printf ("pointee: %lx -> %lx\n", pointee, dpointee);
+
+      //struct target_mem_desc *tgt;
+      unsigned short kinds = GOMP_MAP_ATTACH;
+      size_t size = sizeof (void *);
+      
+      gomp_map_vars (acc_dev, 1, (void *) &hostaddr, NULL, &size, &kinds, true,
+		     GOMP_MAP_VARS_OPENACC);
+    }
+}
+
+void
+acc_attach (void **hostaddr)
+{
+  acc_attach_async (hostaddr, GOMP_ASYNC_NOVAL);
+}
+
+void
+acc_detach (void **hostaddr)
+{
+
+}
+
+void
+acc_detach_async (void **hostaddr, int async)
+{
+
+}
+
+void
+acc_detach_finalize (void **hostaddr)
+{
+
+}
+
+void
+acc_detach_async_finalize (void **hostaddr, int async)
+{
+
 }

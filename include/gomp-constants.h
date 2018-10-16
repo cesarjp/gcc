@@ -138,6 +138,9 @@ enum gomp_map_kind
     GOMP_MAP_ATTACH =			(GOMP_MAP_DEEP_COPY | 0),
     /* In OpenACC, detach a pointer to a mapped struct field.  */
     GOMP_MAP_DETACH =			(GOMP_MAP_DEEP_COPY | 1),
+    /* In OpenACC, detach a pointer to a mapped struct field.  */
+    GOMP_MAP_FORCE_DETACH =		(GOMP_MAP_DEEP_COPY
+					 | GOMP_MAP_FLAG_FORCE | 1),
 
     /* Internal to GCC, not used in libgomp.  */
     /* Do not map, but pointer assign a pointer instead.  */

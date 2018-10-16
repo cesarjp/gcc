@@ -84,6 +84,7 @@ print_map_kind (short key)
   print_enum (key, GOMP_MAP_FIRSTPRIVATE_REFERENCE);
   print_enum (key, GOMP_MAP_ATTACH);
   print_enum (key, GOMP_MAP_DETACH);
+  print_enum (key, GOMP_MAP_FORCE_DETACH);
 
   return "UNKNOWN";
 }
@@ -507,8 +508,20 @@ gomp_map_fields_existing (struct target_mem_desc *tgt, splay_tree_key n,
     }
 
   if (acc_dc)
-    return 1;
+    {
+      /* A variable may have been attached using the acc_attach runtime API,
+	 so it may not be present in field_map.  Check if the variable is
+	 present in mem_map.  */
 
+      if ((kind & typemask) == GOMP_MAP_FORCE_PRESENT)
+	{
+	  n2 = splay_tree_lookup (&devicep->mem_map, &cur_node);
+	  return !n2;
+	}
+
+      return 1;
+    }
+  
   /* Why is the lock being manipulated here?  */
   gomp_mutex_unlock (&devicep->lock);
   gomp_fatal ("Trying to map into device [%p..%p) structure element when "
@@ -549,7 +562,7 @@ create_attachment (uintptr_t hostaddr)
 /* Add hostaddr to attach_list if it doesn't exist.  Increment its
    pointer attachment count by one.  */
 
-static int
+size_t
 gomp_attach_pointer (struct gomp_device_descr *devicep, uintptr_t hostaddr)
 {
   gomp_debug (1, "%s: attaching pointer %lx\n", __FUNCTION__, hostaddr);
@@ -567,9 +580,9 @@ gomp_attach_pointer (struct gomp_device_descr *devicep, uintptr_t hostaddr)
 /* Decrement the pointer attachment count of hostaddr, if it exists.
    Remove it from attach_list when the count reaches zero.  */
 
-static void
+void
 gomp_detach_pointer (struct gomp_device_descr *devicep,
-		     uintptr_t hostaddr)
+		     uintptr_t hostaddr, bool finalize)
 {
   gomp_debug (1, "%s: detaching pointer %lx\n", __FUNCTION__, hostaddr);
 
@@ -579,7 +592,7 @@ gomp_detach_pointer (struct gomp_device_descr *devicep,
     {
       n->next->attach--;
 
-      if (n->next->attach == 0)
+      if (n->next->attach == 0 || finalize)
 	{
 	  t = n->next->next;
 	  free (n->next);
@@ -595,7 +608,7 @@ gomp_detach_pointer (struct gomp_device_descr *devicep,
 
 	  if (k == NULL)
 	    return;
-	  
+
 	  uintptr_t dev = k->tgt->tgt_start + k->tgt_offset
 	    + hostaddr - k->host_start;
 	  uintptr_t target = *(uintptr_t *)hostaddr;
@@ -604,7 +617,6 @@ gomp_detach_pointer (struct gomp_device_descr *devicep,
 	}
     }
 }
-
 
 static void
 debug_splay_tree_key (splay_tree_key k)
@@ -824,7 +836,9 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 	  continue;
 	}
       else if ((kind & typemask) == GOMP_MAP_ALWAYS_POINTER
-	       || (kind & typemask) == GOMP_MAP_ATTACH)
+	       || (kind & typemask) == GOMP_MAP_ATTACH
+	       || (kind & typemask) == GOMP_MAP_DETACH
+	       || (kind & typemask) == GOMP_MAP_FORCE_DETACH)
 	{
 	  tgt->list[i].key = NULL;
 	  tgt->list[i].offset = OFFSET_POINTER;
@@ -1100,6 +1114,25 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 		  tgt->list[i].length = (uintptr_t) hostaddrs[i];
 		  continue;
 		}
+	      case GOMP_MAP_DETACH:
+		gomp_detach_pointer (devicep, cur_node.host_start, false);
+		tgt->list[i].offset = OFFSET_ACC_POINTER;
+		tgt->list[i].length = (uintptr_t) hostaddrs[i];
+		continue;
+	      case GOMP_MAP_FORCE_DETACH:
+		gomp_detach_pointer (devicep, cur_node.host_start, true);
+		tgt->list[i].offset = OFFSET_ACC_POINTER;
+		tgt->list[i].length = (uintptr_t) hostaddrs[i];
+		continue;
+	      case GOMP_MAP_FORCE_PRESENT:
+		if (!acc_dc)
+		  break;
+
+		cur_node.host_start = (uintptr_t) hostaddrs[i];
+		cur_node.host_end = cur_node.host_start + sizes[i];
+		n = splay_tree_lookup (mem_map, &cur_node);
+		if (n)
+		  continue;
 	      default:
 		break;
 	      }
@@ -1378,8 +1411,9 @@ gomp_unmap_vars (struct target_mem_desc *tgt, bool do_copyfrom)
     {
       splay_tree_key k = tgt->list[i].key;
 
+      /* TODO: need to support finalized detachments  */
       if (k == NULL && tgt->list[i].offset == OFFSET_ACC_POINTER)
-	gomp_detach_pointer (devicep, tgt->list[i].length);
+	gomp_detach_pointer (devicep, tgt->list[i].length, false);
 
       if (k == NULL)
 	continue;
@@ -2230,6 +2264,7 @@ gomp_exit_data (struct gomp_device_descr *devicep, size_t mapnum,
 	case GOMP_MAP_RELEASE:
 	case GOMP_MAP_ZERO_LEN_ARRAY_SECTION:
 	case GOMP_MAP_DELETE_ZERO_LEN_ARRAY_SECTION:
+	case GOMP_MAP_ACC_STRUCT:
 	  cur_node.host_start = (uintptr_t) hostaddrs[i];
 	  cur_node.host_end = cur_node.host_start + sizes[i];
 	  splay_tree_key k = (kind == GOMP_MAP_DELETE_ZERO_LEN_ARRAY_SECTION
@@ -2264,12 +2299,20 @@ gomp_exit_data (struct gomp_device_descr *devicep, size_t mapnum,
 	      else
 		gomp_unmap_tgt (k->tgt);
 	    }
-
 	  break;
+
+	case GOMP_MAP_DETACH:
+	  gomp_detach_pointer (devicep, (uintptr_t) hostaddrs[i], false);
+	  continue;
+
+	case GOMP_MAP_FORCE_DETACH:
+	  gomp_detach_pointer (devicep, (uintptr_t) hostaddrs[i], true);
+	  continue;
+
 	default:
 	  gomp_mutex_unlock (&devicep->lock);
-	  gomp_fatal ("GOMP_target_enter_exit_data unhandled kind 0x%.2x",
-		      kind);
+	  gomp_fatal ("GOMP_target_enter_exit_data unhandled kind (%s) 0x%.2x",
+		      print_map_kind (kind), kind);
 	}
     }
 
