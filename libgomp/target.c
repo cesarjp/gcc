@@ -843,7 +843,6 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 	}
       else if ((kind & typemask) == GOMP_MAP_ALWAYS_POINTER
 	       || (kind & typemask) == GOMP_MAP_ATTACH
-	       || (kind & typemask) == GOMP_MAP_DETACH
 	       || (kind & typemask) == GOMP_MAP_FORCE_DETACH)
 	{
 	  tgt->list[i].key = NULL;
@@ -1120,16 +1119,6 @@ gomp_map_vars (struct gomp_device_descr *devicep, size_t mapnum,
 		  tgt->list[i].length = (uintptr_t) hostaddrs[i];
 		  continue;
 		}
-	      case GOMP_MAP_DETACH:
-		gomp_detach_pointer (devicep, cur_node.host_start, false);
-		tgt->list[i].offset = OFFSET_ACC_POINTER;
-		tgt->list[i].length = (uintptr_t) hostaddrs[i];
-		continue;
-	      case GOMP_MAP_FORCE_DETACH:
-		gomp_detach_pointer (devicep, cur_node.host_start, true);
-		tgt->list[i].offset = OFFSET_ACC_POINTER;
-		tgt->list[i].length = (uintptr_t) hostaddrs[i];
-		continue;
 	      case GOMP_MAP_FORCE_PRESENT:
 		if (!acc_dc)
 		  break;
