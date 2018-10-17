@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <openacc.h>
 
@@ -22,13 +22,6 @@ main ()
 
 #pragma acc enter data copyin(a[:n]) create(v)
   v.b = a;
-
-  printf ("host: a = %p, &v = %p, &v.b = %p\n", a, &v, &v.b);
-
-#pragma acc parallel present (a[:n])
-  {
-    printf ("device: a = %p, &v = %p, &v.b = %p\n", a, &v, &v.b);
-  }
   
   acc_attach ((void **)&v.b);
   
@@ -45,7 +38,7 @@ main ()
 #pragma acc exit data copyout(a[:n]) copyout (v)
   
   for (i = 0; i < 10; i++)
-    printf ("%d: %d %d %d\n", i, v.a[i], v.b[i], v.c[i]);
+    assert (v.a[i] == v.b[i] && v.b[i] == v.c[i]);
 
   free (v.a);
   free (v.b);

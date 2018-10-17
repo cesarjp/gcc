@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 
 struct dc
@@ -24,13 +24,13 @@ main ()
 #pragma acc parallel loop copy(v.a, v.b[:n])
   for (i = 0; i < n; i++)
     {
-      v.b[i] = v.a + v.d[i];
+      v.b[i] = v.d[i];
     }
 
 #pragma acc exit data delete (v.d[:n])
   
   for (i = 0; i < 10; i++)
-    printf ("%d: %d\n", i, v.b[i]);
+    assert (v.b[i] == v.d[i]);
 
   return 0;
 }

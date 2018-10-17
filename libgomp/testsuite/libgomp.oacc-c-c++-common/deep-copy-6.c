@@ -1,8 +1,8 @@
-
+#include <assert.h>
 #include <stdlib.h>
-#include <stdio.h>
 
-int main(int argc, char* argv[])
+int
+main(int argc, char* argv[])
 {
   struct foo {
     int *a, *b, c, d, *e;
@@ -12,8 +12,6 @@ int main(int argc, char* argv[])
   s.b = malloc (16 * sizeof (int));
   s.e = malloc (16 * sizeof (int)); 
 
-  //printf ("s.a = %p\n", s.a);
-  
   #pragma acc data copy(s) 
   {
     #pragma acc data copy(s.a[0:10]) 
@@ -24,10 +22,8 @@ int main(int argc, char* argv[])
     } 
   }
 
-  //printf ("s.a = %p\n", s.a);
-
   for (int i = 0; i < 10; i++)
-    printf ("%u: %d\n", i, s.a[i]); 
+    assert (s.a[i] == i);
 
   return 0;
 }

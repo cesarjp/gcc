@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 
 struct dc
@@ -33,7 +33,7 @@ main ()
 #pragma acc exit data delete (a[:n])
 
   for (i = 0; i < 10; i++)
-    printf ("%d: %d %d\n", i, v.a[i], v.c[i]);
+    assert (v.a[i] == v.c[i]);
 
   free (v.a);
   free (v.b);

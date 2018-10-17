@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 struct dc
 {
@@ -19,7 +19,7 @@ main ()
     v.b[i] = v.a;
 
   for (i = 0; i < 10; i++)
-    printf ("%d: %d\n", i, v.b[i]);
+    assert (v.b[i] == v.a);
 
   return 0;
 }

@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <openacc.h>
 
@@ -26,7 +26,7 @@ main ()
 #pragma acc exit data copyout(a[:n], b)
   
   for (i = 0; i < 10; i++)
-    printf ("%d: %d %d\n", i, a[i], b[i]);
+    assert (a[i] == b[i]);
 
   free (a);
   
