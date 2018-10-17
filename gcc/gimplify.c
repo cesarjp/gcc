@@ -7961,7 +7961,6 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 		    {
 		      tree l = build_omp_clause (OMP_CLAUSE_LOCATION (c),
 						 OMP_CLAUSE_MAP);
-		      tree lorig = l;
 		      OMP_CLAUSE_SET_MAP_KIND (l, GOMP_MAP_STRUCT);
 		      if (orig_base != base)
 			OMP_CLAUSE_DECL (l) = unshare_expr (orig_base);
@@ -7999,7 +7998,7 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 			      OMP_CLAUSE_CHAIN (c3) = *prev_list_p;
 			      OMP_CLAUSE_CHAIN (c2) = c3;
 			    }
-			  *prev_list_p = lorig;
+			  *prev_list_p = l;
 			  prev_list_p = NULL;
 			}
 		      else
@@ -8040,10 +8039,8 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 			o1 += bits_to_bytes_round_down (bitpos);
 		      sc = &OMP_CLAUSE_CHAIN (*osc);
 		      if (*sc != c
-			  && ((OMP_CLAUSE_MAP_KIND (*sc)
-			       == GOMP_MAP_FIRSTPRIVATE_REFERENCE)
-			      || (OMP_CLAUSE_MAP_KIND (*sc)
-				  == GOMP_MAP_ACC_STRUCT)))
+			  && (OMP_CLAUSE_MAP_KIND (*sc)
+			      == GOMP_MAP_FIRSTPRIVATE_REFERENCE)) 
 			sc = &OMP_CLAUSE_CHAIN (*sc);
 		      for (; *sc != c; sc = &OMP_CLAUSE_CHAIN (*sc))
 			if (ptr && sc == prev_list_p)
@@ -8140,10 +8137,9 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 			  }
 		      if (remove)
 			break;
-		      //if (!(ctx->region_type & ORT_ACC))
-			OMP_CLAUSE_SIZE (*osc)
-			  = size_binop (PLUS_EXPR, OMP_CLAUSE_SIZE (*osc),
-					size_one_node);
+		      OMP_CLAUSE_SIZE (*osc)
+			= size_binop (PLUS_EXPR, OMP_CLAUSE_SIZE (*osc),
+				      size_one_node);
 		      if (ptr)
 			{
 			  tree c2 = build_omp_clause (OMP_CLAUSE_LOCATION (c),
@@ -9140,8 +9136,7 @@ gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
 		 in target block and none of the mapping has always modifier,
 		 remove all the struct element mappings, which immediately
 		 follow the GOMP_MAP_STRUCT map clause.  */
-	      if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_STRUCT
-		  || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ACC_STRUCT)
+	      if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_STRUCT)
 		{
 		  HOST_WIDE_INT cnt = tree_to_shwi (OMP_CLAUSE_SIZE (c));
 		  while (cnt--)
@@ -9149,40 +9144,9 @@ gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
 		      = OMP_CLAUSE_CHAIN (OMP_CLAUSE_CHAIN (c));
 		}
 	    }
-	  else if ((OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_STRUCT)
+	  else if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_STRUCT
 		   && code == OMP_TARGET_EXIT_DATA)
 	    remove = true;
-	  else if ((OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_STRUCT)
-		   && (ctx->region_type & ORT_ACC))
-	    {
-	      /* Insert a GOMP_MAP_ACC_STRUCT data mapping to pass the
-		 size of the complete struct to the runtime.  */
-	      tree nc = build_omp_clause (OMP_CLAUSE_LOCATION (c),
-					  OMP_CLAUSE_MAP);
-	      OMP_CLAUSE_SET_MAP_KIND (nc, GOMP_MAP_ACC_STRUCT);
-	      OMP_CLAUSE_DECL (nc)
-		= create_tmp_var (TREE_TYPE (decl),
-				  get_name (decl));
-	      OMP_CLAUSE_SIZE (nc) = DECL_P (decl)
-		? DECL_SIZE_UNIT (decl)
-		: TYPE_SIZE_UNIT (TREE_TYPE (decl));
-	      if (gimplify_expr (&OMP_CLAUSE_SIZE (nc), pre_p,
-				 NULL, is_gimple_val, fb_rvalue)
-		  == GS_ERROR)
-		{
-		  remove = true;
-		  break;
-		}
-	      omp_add_variable (ctx, OMP_CLAUSE_DECL (nc),
-				GOVD_MAP | GOVD_EXPLICIT |
-				GOVD_SEEN);
-	      OMP_CLAUSE_SIZE (c)
-		= size_binop (PLUS_EXPR, OMP_CLAUSE_SIZE (c),
-			      size_one_node);
-	      OMP_CLAUSE_CHAIN (nc) = OMP_CLAUSE_CHAIN (c);
-	      OMP_CLAUSE_CHAIN (c) = nc;
-	      c = nc;
-	    }
 	  else if (DECL_SIZE (decl)
 		   && TREE_CODE (DECL_SIZE (decl)) != INTEGER_CST
 		   && OMP_CLAUSE_MAP_KIND (c) != GOMP_MAP_POINTER

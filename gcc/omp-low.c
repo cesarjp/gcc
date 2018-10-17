@@ -7560,7 +7560,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	  case GOMP_MAP_FIRSTPRIVATE_POINTER:
 	  case GOMP_MAP_FIRSTPRIVATE_REFERENCE:
 	  case GOMP_MAP_STRUCT:
-	  case GOMP_MAP_ACC_STRUCT:
 	  case GOMP_MAP_ALWAYS_POINTER:
 	    break;
 	  case GOMP_MAP_FORCE_ALLOC:

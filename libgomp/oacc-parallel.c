@@ -333,21 +333,6 @@ GOACC_data_end (void)
   gomp_debug (0, "  %s: mappings restored\n", __FUNCTION__);
 }
 
-static void
-goacc_exit_struct_data (struct gomp_device_descr *devicep, size_t mapnum,
-			void **hostaddrs, size_t *sizes, unsigned short *kinds)
-{
-  size_t i;
-
-  /* First remove the struct fields, then remove the enclosing struct.  
-     The first non-struct data mapping begins at position 2.  */
-
-  for (i = 2; i <= mapnum; i++)
-    gomp_exit_data (devicep, 1, &hostaddrs[i], &sizes[i], &kinds[i]);
-
-  gomp_exit_data (devicep, 1, &hostaddrs[1], &sizes[1], &kinds[1]);
-}
-
 void
 GOACC_enter_exit_data (int device, size_t mapnum,
 		       void **hostaddrs, size_t *sizes, unsigned short *kinds,
@@ -397,12 +382,6 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 
       if (kind == GOMP_MAP_POINTER || kind == GOMP_MAP_TO_PSET)
 	continue;
-
-      if (kind == GOMP_MAP_STRUCT)
-	{
-	  i += 1;  /* Skip this, and the subsequent GOMP_MAP_ACC_STRUCT.  */
-	  continue;
-	}
 
       if (kind == GOMP_MAP_FORCE_ALLOC
 	  || kind == GOMP_MAP_ATTACH
@@ -464,12 +443,6 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 		case GOMP_MAP_FORCE_TO:
 		  acc_copyin (hostaddrs[i], sizes[i]);
 		  break;
-		case GOMP_MAP_STRUCT:
-		  gomp_map_vars (acc_dev, sizes[i] + 1, &hostaddrs[i], NULL,
-				 &sizes[i], &kinds[i], true,
-				 GOMP_MAP_VARS_OPENACC_ENTER_DATA);
-		  i += sizes[i];
-		  break;
 		default:
 		  gomp_fatal (">>>> GOACC_enter_exit_data UNHANDLED kind (%s) 0x%.2x",
 			      print_map_kind (kind), kind);
@@ -524,11 +497,6 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 		  acc_copyout_finalize (hostaddrs[i], sizes[i]);
 		else
 		  acc_copyout (hostaddrs[i], sizes[i]);
-		break;
-	      case GOMP_MAP_STRUCT:
-		goacc_exit_struct_data (acc_dev, sizes[i], &hostaddrs[i],
-					&sizes[i], &kinds[i]);
-		i += sizes[i];
 		break;
 	      default:
 		gomp_fatal (">>>> GOACC_enter_exit_data UNHANDLED kind (%s) 0x%.2x",
