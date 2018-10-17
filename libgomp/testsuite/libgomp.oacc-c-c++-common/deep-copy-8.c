@@ -13,8 +13,8 @@ int
 main ()
 {
   int n = 100, i;
-  struct dc v = { .a = malloc (sizeof (int) * n), .b = NULL,
-		  .c = malloc (sizeof (int) * n)};
+  struct dc v = { .a = (int *) malloc (sizeof (int) * n), .b = NULL,
+		  .c = (int *) malloc (sizeof (int) * n)};
   int *a = (int *) malloc (sizeof (int) * n);
   
   for (i = 0; i < n; i++)

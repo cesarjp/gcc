@@ -13,7 +13,6 @@ main ()
   int n = 100, i;
   struct dc v = { .a = 3, .b = (int *) malloc (sizeof (int) * n) };
 
-#pragma omp target teams distribute parallel for map(tofrom:v.a, v.b[:n])
 #pragma acc parallel loop copy(v.a, v.b[:n])
   for (i = 0; i < n; i++)
     v.b[i] = v.a;
