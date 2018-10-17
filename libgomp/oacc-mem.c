@@ -876,6 +876,9 @@ acc_attach_async (void **hostaddr, int async)
   if (async != GOMP_ASYNC_NOVAL)
     acc_wait (async);
 
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return;
+  
   if (acc_is_present ((void *) pointer, sizeof (void *))
       && acc_is_present ((void *) pointee, sizeof (void *)))
     {
@@ -903,6 +906,9 @@ goacc_detach_internal (void *hostaddr, int async, unsigned short kind)
 
   if (async != GOMP_ASYNC_NOVAL)
     acc_wait (async);
+
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return;
 
   if (acc_is_present ((void *) pointer, sizeof (void *))
       && acc_is_present ((void *) pointee, sizeof (void *)))
