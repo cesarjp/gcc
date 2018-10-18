@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 /* Return block containing [H->S), or NULL if not contained.  The device lock
    for DEV must be locked on entry, and remains locked on exit.  */
@@ -789,6 +790,8 @@ gomp_acc_insert_pointer (size_t mapnum, void **hostaddrs, size_t *sizes,
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
 
+  gomp_attach_pointer (acc_dev, (uintptr_t) hostaddrs[0]);
+  
   if (acc_is_present (*hostaddrs, *sizes))
     {
       splay_tree_key n;
@@ -836,7 +839,8 @@ gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
   splay_tree_key n;
   struct target_mem_desc *t;
   int minrefs = (mapnum == 1) ? 2 : 3;
-
+  goacc_aq aq = get_goacc_asyncqueue (async);
+  
   if (!acc_is_present (h, s))
     return;
 
@@ -862,11 +866,13 @@ gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
 
   if (finalize)
     {
+      gomp_detach_pointer (acc_dev, aq, (uintptr_t) h, true);
       n->refcount -= n->dynamic_refcount;
       n->dynamic_refcount = 0;
     }
   else if (n->dynamic_refcount)
     {
+      gomp_detach_pointer (acc_dev, aq, (uintptr_t) h, false);
       n->dynamic_refcount--;
       n->refcount--;
     }
@@ -918,4 +924,81 @@ gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
   gomp_mutex_unlock (&acc_dev->lock);
 
   gomp_debug (0, "  %s: mappings restored\n", __FUNCTION__);
+}
+
+
+void
+acc_attach_async (void **hostaddr, int async)
+{
+  struct goacc_thread *thr = goacc_thread ();
+  struct gomp_device_descr *acc_dev = thr->dev;
+  uintptr_t pointer = (uintptr_t) hostaddr;
+  uintptr_t pointee = *(uintptr_t *) pointer;
+  goacc_aq aq = get_goacc_asyncqueue (async);  
+
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return;
+  
+  if (acc_is_present ((void *) pointer, sizeof (void *))
+      && acc_is_present ((void *) pointee, sizeof (void *)))
+    {
+      unsigned short kinds = GOMP_MAP_ATTACH;
+      size_t size = sizeof (void *);
+      
+      gomp_map_vars_async (acc_dev, aq, 1, (void *) &hostaddr, NULL, &size,
+			   &kinds, true, GOMP_MAP_VARS_OPENACC);
+    }
+}
+
+void
+acc_attach (void **hostaddr)
+{
+  acc_attach_async (hostaddr, GOMP_ASYNC_SYNC);
+}
+
+static void
+goacc_detach_internal (void *hostaddr, int async, unsigned short kind)
+{
+  struct goacc_thread *thr = goacc_thread ();
+  struct gomp_device_descr *acc_dev = thr->dev;
+  uintptr_t pointer = (uintptr_t) hostaddr;
+  uintptr_t pointee = *(uintptr_t *) pointer;
+  
+  if (async != GOMP_ASYNC_NOVAL)
+    acc_wait (async);
+
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return;
+
+  if (acc_is_present ((void *) pointer, sizeof (void *))
+      && acc_is_present ((void *) pointee, sizeof (void *)))
+    {
+      size_t size = sizeof (void *);
+
+      gomp_exit_data (acc_dev, 1, &hostaddr, &size, &kind);
+    }
+}
+
+void
+acc_detach (void **hostaddr)
+{
+  goacc_detach_internal (hostaddr, GOMP_ASYNC_SYNC, GOMP_MAP_DETACH);
+}
+
+void
+acc_detach_async (void **hostaddr, int async)
+{
+  goacc_detach_internal (hostaddr, async, GOMP_MAP_DETACH);
+}
+
+void
+acc_detach_finalize (void **hostaddr)
+{
+  goacc_detach_internal (hostaddr, GOMP_ASYNC_SYNC, GOMP_MAP_FORCE_DETACH);
+}
+
+void
+acc_detach_async_finalize (void **hostaddr, int async)
+{
+  goacc_detach_internal (hostaddr, async, GOMP_MAP_FORCE_DETACH);
 }

@@ -4558,7 +4558,7 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 	t = TREE_OPERAND (t, 0);
       ret = t;
       if (TREE_CODE (t) == COMPONENT_REF
-	  && ort == C_ORT_OMP
+
 	  && (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TO
 	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FROM)
@@ -6141,8 +6141,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	handle_field_decl:
 	  if (!remove
 	      && TREE_CODE (t) == FIELD_DECL
-	      && t == OMP_CLAUSE_DECL (c)
-	      && ort != C_ORT_ACC)
+	      && t == OMP_CLAUSE_DECL (c))
 	    {
 	      OMP_CLAUSE_DECL (c)
 		= omp_privatize_field (t, (OMP_CLAUSE_CODE (c)
@@ -6728,7 +6727,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      OMP_CLAUSE_DECL (c) = t;
 	    }
 	  if (TREE_CODE (t) == COMPONENT_REF
-	      && (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+	      && ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+		  || ort == C_ORT_ACC)
 	      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE__CACHE_)
 	    {
 	      if (type_dependent_expression_p (t))
@@ -6793,7 +6793,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		     omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	      remove = true;
 	    }
-	  else if (ort != C_ORT_ACC && t == current_class_ptr)
+	  else if (t == current_class_ptr)
 	    {
 	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
 		     " clauses");

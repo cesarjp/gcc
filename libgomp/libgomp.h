@@ -842,6 +842,13 @@ struct target_mem_desc {
    artificial pointer to "omp declare target link" object.  */
 #define REFCOUNT_LINK (~(uintptr_t) 1)
 
+/* Special offset values.  */
+#define OFFSET_INLINED (~(uintptr_t) 0)
+#define OFFSET_POINTER (~(uintptr_t) 1)
+#define OFFSET_STRUCT (~(uintptr_t) 2)
+#define OFFSET_ACC_POINTER (~(uintptr_t) 3)
+#define OFFSET_ACC_STRUCT (~(uintptr_t) 4)
+
 struct splay_tree_key_s {
   /* Address of the host object.  */
   uintptr_t host_start;
@@ -857,6 +864,13 @@ struct splay_tree_key_s {
   uintptr_t dynamic_refcount;
   /* Pointer to the original mapping of "omp declare target link" object.  */
   splay_tree_key link_key;
+};
+
+/* Node for the linked list of OpenACC pointer attachments.  */
+struct dc_attach_node {
+  struct dc_attach_node *next;
+  uintptr_t host_start;
+  size_t attach;
 };
 
 /* The comparison function.  */
@@ -973,6 +987,12 @@ struct gomp_device_descr
   /* Splay tree containing information about mapped memory regions.  */
   struct splay_tree_s mem_map;
 
+  /* Splay tree for the structure fields.  */
+  struct splay_tree_s field_map;
+
+  /* Linked list for all fo the OpenACC pointer attachments.  */
+  struct dc_attach_node attach_list;
+
   /* Mutex for the mutable data.  */
   gomp_mutex_t lock;
 
@@ -993,7 +1013,8 @@ enum gomp_map_vars_kind
   GOMP_MAP_VARS_OPENACC,
   GOMP_MAP_VARS_TARGET,
   GOMP_MAP_VARS_DATA,
-  GOMP_MAP_VARS_ENTER_DATA
+  GOMP_MAP_VARS_ENTER_DATA,
+  GOMP_MAP_VARS_OPENACC_ENTER_DATA
 };
 
 extern void gomp_acc_insert_pointer (size_t, void **, size_t *, void *, int);
@@ -1007,7 +1028,14 @@ extern void gomp_copy_host2dev (struct gomp_device_descr *,
 extern void gomp_copy_dev2host (struct gomp_device_descr *,
 				struct goacc_asyncqueue *, void *, const void *,
 				size_t);
+extern const char *print_map_kind (short);
+extern uintptr_t gomp_map_val (struct target_mem_desc *, void **, size_t);
+extern size_t gomp_attach_pointer (struct gomp_device_descr *, uintptr_t);
+extern void gomp_detach_pointer (struct gomp_device_descr *,
+				 struct goacc_asyncqueue *aq, uintptr_t, bool);
 
+extern void gomp_exit_data (struct gomp_device_descr *, size_t, void **,
+			    size_t *, unsigned short *);
 extern struct target_mem_desc *gomp_map_vars (struct gomp_device_descr *,
 					      size_t, void **, void **,
 					      size_t *, void *, bool,

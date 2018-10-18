@@ -12605,7 +12605,6 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 	  return error_mark_node;
 	}
       if (TREE_CODE (t) == COMPONENT_REF
-	  && ort == C_ORT_OMP
 	  && (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TO
 	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FROM))
@@ -13799,7 +13798,6 @@ c_finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      break;
 	    }
 	  if (TREE_CODE (t) == COMPONENT_REF
-	      && (ort & C_ORT_OMP)
 	      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE__CACHE_)
 	    {
 	      if (DECL_BIT_FIELD (TREE_OPERAND (t, 1)))
