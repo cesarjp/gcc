@@ -92,16 +92,22 @@ main (int argc, char **argv)
       abort ();
     }
 
-  fprintf (stderr, "CheCKpOInT\n");
-  if (acc_async_test (1) != 0)
+  if (acc_async_test (0) != 0)
     {
       fprintf (stderr, "asynchronous operation not running\n");
       abort ();
     }
 
+  /* Test unseen async number.  */
+  if (acc_async_test (1) != 1)
+    {
+      fprintf (stderr, "acc_async_test failed on unseen number\n");
+      abort ();
+    }
+
   sleep ((int) (dtime / 1000.0f) + 1);
 
-  if (acc_async_test (1) != 1)
+  if (acc_async_test (0) != 1)
     {
       fprintf (stderr, "found asynchronous operation still running\n");
       abort ();
@@ -116,7 +122,3 @@ main (int argc, char **argv)
 
   return 0;
 }
-
-/* { dg-output "CheCKpOInT(\n|\r\n|\r).*" } */
-/* { dg-output "unknown async \[0-9\]+" } */
-/* { dg-shouldfail "" } */

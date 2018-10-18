@@ -111,7 +111,7 @@ main (int argc, char **argv)
 
   start_timer (0);
 
-  acc_wait (1);
+  acc_wait (0);
 
   atime = stop_timer (0);
 
@@ -132,7 +132,3 @@ main (int argc, char **argv)
 
   return 0;
 }
-
-/* { dg-output "CheCKpOInT(\n|\r\n|\r).*" } */
-/* { dg-output "unknown async \[0-9\]+" } */
-/* { dg-shouldfail "" } */
