@@ -194,10 +194,14 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
 
 	case GOMP_LAUNCH_WAIT:
 	  {
-	    unsigned num_waits = GOMP_LAUNCH_OP (tag);
+	    /* Be careful to cast the op field as a signed 16-bit, and
+	       sign-extend to full integer.  */
+	    int num_waits = ((signed short) GOMP_LAUNCH_OP (tag));
 
-	    if (num_waits)
+	    if (num_waits > 0)
 	      goacc_wait (async, num_waits, &ap);
+	    else if (num_waits == acc_async_noval)
+	      acc_wait_all_async (async);
 	    break;
 	  }
 
@@ -351,7 +355,7 @@ GOACC_enter_exit_data (int device, size_t mapnum,
       || host_fallback)
     return;
 
-  if (num_waits)
+  if (num_waits > 0)
     {
       va_list ap;
 
@@ -359,6 +363,8 @@ GOACC_enter_exit_data (int device, size_t mapnum,
       goacc_wait (async, num_waits, &ap);
       va_end (ap);
     }
+  else if (num_waits == acc_async_noval)
+    acc_wait_all_async (async);
 
   /* Determine whether "finalize" semantics apply to all mappings of this
      OpenACC directive.  */
@@ -542,7 +548,7 @@ GOACC_update (int device, size_t mapnum,
       || host_fallback)
     return;
 
-  if (num_waits)
+  if (num_waits > 0)
     {
       va_list ap;
 
@@ -550,6 +556,8 @@ GOACC_update (int device, size_t mapnum,
       goacc_wait (async, num_waits, &ap);
       va_end (ap);
     }
+  else if (num_waits == acc_async_noval)
+    acc_wait_all_async (async);
 
   acc_dev->openacc.async_set_async_func (async);
 
