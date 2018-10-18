@@ -212,8 +212,6 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
     }
   va_end (ap);
   
-  acc_dev->openacc.async_set_async_func (async);
-
   if (!(acc_dev->capabilities & GOMP_OFFLOAD_CAP_NATIVE_EXEC))
     {
       k.host_start = (uintptr_t) fn;
@@ -230,43 +228,28 @@ GOACC_parallel_keyed (int device, void (*fn) (void *),
   else
     tgt_fn = (void (*)) fn;
 
-  tgt = gomp_map_vars (acc_dev, mapnum, hostaddrs, NULL, sizes, kinds, true,
-		       GOMP_MAP_VARS_OPENACC);
+  goacc_aq aq = get_goacc_asyncqueue (async);
+
+  tgt = gomp_map_vars_async (acc_dev, aq, mapnum, hostaddrs, NULL, sizes, kinds,
+			     true, GOMP_MAP_VARS_OPENACC);
 
   devaddrs = gomp_alloca (sizeof (void *) * mapnum);
   for (i = 0; i < mapnum; i++)
     devaddrs[i] = (void *) (tgt->list[i].key->tgt->tgt_start
 			    + tgt->list[i].key->tgt_offset);
-
-  acc_dev->openacc.exec_func (tgt_fn, mapnum, hostaddrs, devaddrs,
-			      async, dims, tgt);
-
-  /* If running synchronously, unmap immediately.  */
-  bool copyfrom = true;
-  if (async_synchronous_p (async))
-    gomp_unmap_vars (tgt, true);
+  if (aq == NULL)
+    {
+      acc_dev->openacc.exec_func (tgt_fn, mapnum, hostaddrs, devaddrs,
+				  dims, tgt);
+      /* If running synchronously, unmap immediately.  */
+      gomp_unmap_vars (tgt, true);
+    }
   else
     {
-      bool async_unmap = false;
-      for (size_t i = 0; i < tgt->list_count; i++)
-	{
-	  splay_tree_key k = tgt->list[i].key;
-	  if (k && k->refcount == 1)
-	    {
-	      async_unmap = true;
-	      break;
-	    }
-	}
-      if (async_unmap)
-	tgt->device_descr->openacc.register_async_cleanup_func (tgt, async);
-      else
-	{
-	  copyfrom = false;
-	  gomp_unmap_vars (tgt, copyfrom);
-	}
+      acc_dev->openacc.async.exec_func (tgt_fn, mapnum, hostaddrs, devaddrs,
+					dims, tgt, aq);
+      goacc_async_copyout_unmap_vars (tgt, aq);
     }
-
-  acc_dev->openacc.async_set_async_func (acc_async_sync);
 }
 
 /* Legacy entry point, only provide host execution.  */
@@ -377,8 +360,6 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 	finalize = true;
     }
 
-  acc_dev->openacc.async_set_async_func (async);
-
   /* Determine if this is an "acc enter data".  */
   for (i = 0; i < mapnum; ++i)
     {
@@ -450,7 +431,7 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 	  else
 	    {
 	      gomp_acc_insert_pointer (pointer, &hostaddrs[i],
-				       &sizes[i], &kinds[i]);
+				       &sizes[i], &kinds[i], async);
 	      /* Increment 'i' by two because OpenACC requires fortran
 		 arrays to be contiguous, so each PSET is associated with
 		 one of MAP_FORCE_ALLOC/MAP_FORCE_PRESET/MAP_FORCE_TO, and
@@ -475,17 +456,17 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 		if (acc_is_present (hostaddrs[i], sizes[i]))
 		  {
 		    if (finalize)
-		      acc_delete_finalize (hostaddrs[i], sizes[i]);
+		      acc_delete_finalize_async (hostaddrs[i], sizes[i], async);
 		    else
-		      acc_delete (hostaddrs[i], sizes[i]);
+		      acc_delete_async (hostaddrs[i], sizes[i], async);
 		  }
 		break;
 	      case GOMP_MAP_FROM:
 	      case GOMP_MAP_FORCE_FROM:
 		if (finalize)
-		  acc_copyout_finalize (hostaddrs[i], sizes[i]);
+		  acc_copyout_finalize_async (hostaddrs[i], sizes[i], async);
 		else
-		  acc_copyout (hostaddrs[i], sizes[i]);
+		  acc_copyout_async (hostaddrs[i], sizes[i], async);
 		break;
 	      default:
 		gomp_fatal (">>>> GOACC_enter_exit_data UNHANDLED kind 0x%.2x",
@@ -503,8 +484,6 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 	    i += pointer - 1;
 	  }
       }
-
-  acc_dev->openacc.async_set_async_func (acc_async_sync);
 }
 
 static void
@@ -517,17 +496,22 @@ goacc_wait (int async, int num_waits, va_list *ap)
     {
       int qid = va_arg (*ap, int);
       
-      if (acc_async_test (qid))
+      goacc_aq aq = get_goacc_asyncqueue (qid);
+      if (acc_dev->openacc.async.test_func (aq))
 	continue;
-
       if (async == acc_async_sync)
-	acc_wait (qid);
+	acc_dev->openacc.async.synchronize_func (aq);
       else if (qid == async)
-	;/* If we're waiting on the same asynchronous queue as we're
-	    launching on, the queue itself will order work as
-	    required, so there's no need to wait explicitly.  */
+	/* If we're waiting on the same asynchronous queue as we're
+	   launching on, the queue itself will order work as
+	   required, so there's no need to wait explicitly.  */
+	;
       else
-	acc_dev->openacc.async_wait_async_func (qid, async);
+	{
+	  goacc_aq aq2 = get_goacc_asyncqueue (async);
+	  acc_dev->openacc.async.synchronize_func (aq);
+	  acc_dev->openacc.async.serialize_func (aq, aq2);
+	}
     }
 }
 
@@ -558,8 +542,6 @@ GOACC_update (int device, size_t mapnum,
     }
   else if (num_waits == acc_async_noval)
     acc_wait_all_async (async);
-
-  acc_dev->openacc.async_set_async_func (async);
 
   bool update_device = false;
   for (i = 0; i < mapnum; ++i)
@@ -600,7 +582,7 @@ GOACC_update (int device, size_t mapnum,
 	  /* Fallthru  */
 	case GOMP_MAP_FORCE_TO:
 	  update_device = true;
-	  acc_update_device (hostaddrs[i], sizes[i]);
+	  acc_update_device_async (hostaddrs[i], sizes[i], async);
 	  break;
 
 	case GOMP_MAP_FROM:
@@ -612,7 +594,7 @@ GOACC_update (int device, size_t mapnum,
 	  /* Fallthru  */
 	case GOMP_MAP_FORCE_FROM:
 	  update_device = false;
-	  acc_update_self (hostaddrs[i], sizes[i]);
+	  acc_update_self_async (hostaddrs[i], sizes[i], async);
 	  break;
 
 	default:
@@ -620,8 +602,6 @@ GOACC_update (int device, size_t mapnum,
 	  break;
 	}
     }
-
-  acc_dev->openacc.async_set_async_func (acc_async_sync);
 }
 
 void
@@ -638,7 +618,7 @@ GOACC_wait (int async, int num_waits, ...)
   else if (async == acc_async_sync)
     acc_wait_all ();
   else if (async == acc_async_noval)
-    goacc_thread ()->dev->openacc.async_wait_all_async_func (acc_async_noval);
+    acc_wait_all_async (async);
 }
 
 int
