@@ -963,26 +963,20 @@ goacc_detach_internal (void *hostaddr, int async, unsigned short kind)
   struct gomp_device_descr *acc_dev = thr->dev;
   uintptr_t pointer = (uintptr_t) hostaddr;
   uintptr_t pointee = *(uintptr_t *) pointer;
-  
-  if (async != GOMP_ASYNC_NOVAL)
-    acc_wait (async);
+  struct goacc_asyncqueue *aq = get_goacc_asyncqueue (async);
 
   if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
     return;
 
   if (acc_is_present ((void *) pointer, sizeof (void *))
       && acc_is_present ((void *) pointee, sizeof (void *)))
-    {
-      size_t size = sizeof (void *);
-
-      gomp_exit_data (acc_dev, 1, &hostaddr, &size, &kind);
-    }
+    gomp_detach_pointer (acc_dev, aq, pointer, kind == GOMP_MAP_FORCE_DETACH);
 }
 
 void
 acc_detach (void **hostaddr)
 {
-  goacc_detach_internal (hostaddr, GOMP_ASYNC_SYNC, GOMP_MAP_DETACH);
+  goacc_detach_internal (hostaddr, acc_async_noval, GOMP_MAP_DETACH);
 }
 
 void
@@ -994,7 +988,7 @@ acc_detach_async (void **hostaddr, int async)
 void
 acc_detach_finalize (void **hostaddr)
 {
-  goacc_detach_internal (hostaddr, GOMP_ASYNC_SYNC, GOMP_MAP_FORCE_DETACH);
+  goacc_detach_internal (hostaddr, acc_async_noval, GOMP_MAP_FORCE_DETACH);
 }
 
 void
