@@ -11692,9 +11692,12 @@ c_parser_omp_variable_list (c_parser *parser,
 	    case OMP_CLAUSE_MAP:
 	    case OMP_CLAUSE_FROM:
 	    case OMP_CLAUSE_TO:
-	      while (c_parser_next_token_is (parser, CPP_DOT))
+	      while (c_parser_next_token_is (parser, CPP_DOT)
+		     || c_parser_next_token_is (parser, CPP_DEREF))
 		{
 		  location_t op_loc = c_parser_peek_token (parser)->location;
+		  if (c_parser_next_token_is (parser, CPP_DEREF))
+		    t = build_simple_mem_ref (t);
 		  c_parser_consume_token (parser);
 		  if (!c_parser_next_token_is (parser, CPP_NAME))
 		    {
