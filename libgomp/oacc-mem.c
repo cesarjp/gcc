@@ -509,6 +509,7 @@ present_create_copy (unsigned f, void *h, size_t s, int async)
 				 &kinds, true, GOMP_MAP_VARS_OPENACC);
       /* Initialize dynamic refcount.  */
       tgt->list[0].key->dynamic_refcount = 1;
+      tgt->list[0].key->attach_count = NULL;
 
       gomp_mutex_lock (&acc_dev->lock);
 
@@ -626,6 +627,7 @@ delete_copyout (unsigned f, void *h, size_t s, int async, const char *libfnname)
     {
       n->refcount = 0;
       n->dynamic_refcount = 0;
+      n->attach_count = NULL;
     }
   if (n->refcount < n->dynamic_refcount)
     {
@@ -790,7 +792,7 @@ gomp_acc_insert_pointer (size_t mapnum, void **hostaddrs, size_t *sizes,
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
 
-  gomp_attach_pointer (acc_dev, (uintptr_t) hostaddrs[0]);
+  //gomp_attach_pointer (acc_dev, (uintptr_t) hostaddrs[0]);
   
   if (acc_is_present (*hostaddrs, *sizes))
     {
@@ -823,6 +825,7 @@ gomp_acc_insert_pointer (size_t mapnum, void **hostaddrs, size_t *sizes,
 
   /* Initialize dynamic refcount.  */
   tgt->list[0].key->dynamic_refcount = 1;
+  tgt->list[0].key->attach_count = NULL;
 
   gomp_mutex_lock (&acc_dev->lock);
   tgt->prev = acc_dev->openacc.data_environ;
@@ -839,7 +842,7 @@ gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
   splay_tree_key n;
   struct target_mem_desc *t;
   int minrefs = (mapnum == 1) ? 2 : 3;
-  goacc_aq aq = get_goacc_asyncqueue (async);
+  //goacc_aq aq = get_goacc_asyncqueue (async);
   
   if (!acc_is_present (h, s))
     return;
@@ -866,13 +869,13 @@ gomp_acc_remove_pointer (void *h, size_t s, bool force_copyfrom, int async,
 
   if (finalize)
     {
-      gomp_detach_pointer (acc_dev, aq, (uintptr_t) h, true);
+      //gomp_detach_pointer (acc_dev, aq, (uintptr_t) h, true);
       n->refcount -= n->dynamic_refcount;
       n->dynamic_refcount = 0;
     }
   else if (n->dynamic_refcount)
     {
-      gomp_detach_pointer (acc_dev, aq, (uintptr_t) h, false);
+      //gomp_detach_pointer (acc_dev, aq, (uintptr_t) h, false);
       n->dynamic_refcount--;
       n->refcount--;
     }
@@ -970,7 +973,8 @@ goacc_detach_internal (void *hostaddr, int async, unsigned short kind)
 
   if (acc_is_present ((void *) pointer, sizeof (void *))
       && acc_is_present ((void *) pointee, sizeof (void *)))
-    gomp_detach_pointer (acc_dev, aq, pointer, kind == GOMP_MAP_FORCE_DETACH);
+    gomp_detach_pointer (acc_dev, &acc_dev->mem_map, pointer,
+			 kind == GOMP_MAP_FORCE_DETACH, NULL, aq);
 }
 
 void

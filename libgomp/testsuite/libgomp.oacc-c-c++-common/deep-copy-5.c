@@ -49,8 +49,6 @@ destroy (struct node *head)
       acc_detach ((void **) &head->next);
       struct node * n = head->next;
       head->next = n->next;
-      acc_detach ((void **) &head->next);
-
       acc_delete (n, sizeof (struct node));
       if (head->next)
 	acc_attach((void **) &head->next);

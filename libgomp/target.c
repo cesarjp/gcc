@@ -39,6 +39,7 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 
 #ifdef PLUGIN_SUPPORT
 #include <dlfcn.h>
@@ -403,6 +404,7 @@ gomp_map_vars_existing (struct gomp_device_descr *devicep,
   tgt_var->key = oldn;
   tgt_var->copy_from = GOMP_MAP_COPY_FROM_P (kind);
   tgt_var->always_copy_from = GOMP_MAP_ALWAYS_FROM_P (kind);
+  tgt_var->do_detach = false;
   tgt_var->offset = newn->host_start - oldn->host_start;
   tgt_var->length = newn->host_end - newn->host_start;
 
@@ -534,14 +536,12 @@ gomp_map_fields_existing (struct target_mem_desc *tgt,
 	      "other mapped elements from the same structure weren't mapped "
 	      "together with it", (void *) cur_node.host_start,
 	      (void *) cur_node.host_end);
-
-  return;
 }
 
 /* Helper function to find a node inside attach_list.  It returns the
    address to the previous node pointing to it.  */
 
-static struct dc_attach_node *
+/*static struct dc_attach_node *
 find_attachment (struct gomp_device_descr *devicep, uintptr_t hostaddr)
 {
   struct dc_attach_node *n = &devicep->attach_list;
@@ -550,11 +550,11 @@ find_attachment (struct gomp_device_descr *devicep, uintptr_t hostaddr)
     n = n->next;
 
   return n;
-}
+}*/
 
 /* Helper function to create a new attach_list node.  */
 
-static struct dc_attach_node *
+/*static struct dc_attach_node *
 create_attachment (uintptr_t hostaddr)
 {
   struct dc_attach_node *n =(struct dc_attach_node *) gomp_malloc (sizeof *n);
@@ -563,12 +563,12 @@ create_attachment (uintptr_t hostaddr)
   n->next = NULL;
 
   return n;
-}
+}*/
 
 /* Add hostaddr to attach_list if it doesn't exist.  Increment its
    pointer attachment count by one.  */
 
-size_t
+/*size_t
 gomp_attach_pointer (struct gomp_device_descr *devicep, uintptr_t hostaddr)
 {
   gomp_debug (1, "%s: attaching pointer %lx\n", __FUNCTION__, hostaddr);
@@ -581,11 +581,128 @@ gomp_attach_pointer (struct gomp_device_descr *devicep, uintptr_t hostaddr)
     n->next->attach++;
 
   return n->next->attach;
+}*/
+
+void
+gomp_attach_pointer (struct gomp_device_descr *devicep, splay_tree mem_map,
+		     uintptr_t attach_to, struct gomp_coalesce_buf *cbufp,
+		     struct goacc_asyncqueue *aq)
+{
+  struct splay_tree_key_s s;
+  splay_tree_key n;
+  size_t size, idx;
+
+  s.host_start = attach_to;
+  s.host_end = s.host_start + sizeof (void *);
+  n = splay_tree_lookup (mem_map, &s);
+
+  if (n == NULL)
+    {
+      gomp_mutex_unlock (&devicep->lock);
+      gomp_fatal ("enclosing struct not mapped for attach");
+    }
+
+  size = (n->host_end - n->host_start + sizeof (void *) - 1) / sizeof (void *);
+  /* We might have a pointer in a packed struct: however we cannot have more
+     than one such pointer in each pointer-sized portion of the struct, so
+     this is safe.  */
+  idx = (attach_to - n->host_start) / sizeof (void *);
+
+  if (!n->attach_count)
+    n->attach_count = gomp_malloc_cleared (sizeof (*n->attach_count * size));
+
+  if (n->attach_count[idx] < USHRT_MAX)
+    n->attach_count[idx]++;
+  else
+    gomp_fatal ("attach count overflow");
+
+  if (n->attach_count[idx] == 1)
+    {
+      uintptr_t devptr = n->tgt->tgt_start + n->tgt_offset + attach_to
+			 - n->host_start;
+      uintptr_t target = (uintptr_t) *(void **) attach_to;
+      splay_tree_key tn;
+      uintptr_t data;
+
+      s.host_start = target;
+      s.host_end = target + 1;
+      tn = splay_tree_lookup (mem_map, &s);
+
+      if (!tn)
+        {
+	  gomp_mutex_unlock (&devicep->lock);
+	  gomp_fatal ("pointer target not mapped for attach");
+	}
+
+      data = tn->tgt->tgt_start + tn->tgt_offset + target - tn->host_start;
+
+      gomp_debug (1,
+		  "%s: attaching host %p, target %p (struct base %p) to %p\n",
+		  __FUNCTION__, (void *) attach_to, (void *) devptr,
+		  (void *) (n->tgt->tgt_start + n->tgt_offset), (void *) data);
+
+      gomp_copy_host2dev (devicep, aq, (void *) devptr, (void *) &data,
+			  sizeof (void *), cbufp);
+    }
+  else
+    gomp_debug (1, "%s: attach count for %p -> %u\n", __FUNCTION__,
+		(void *) attach_to, n->attach_count[idx]);
+}
+
+void
+gomp_detach_pointer (struct gomp_device_descr *devicep, splay_tree mem_map,
+		     uintptr_t detach_from, bool finalize,
+		     struct gomp_coalesce_buf *cbufp,
+		     struct goacc_asyncqueue *aq)
+{
+  struct splay_tree_key_s s;
+  splay_tree_key n;
+  size_t idx;
+
+  s.host_start = detach_from;
+  s.host_end = s.host_start + sizeof (void *);
+  n = splay_tree_lookup (mem_map, &s);
+
+  if (n == NULL)
+    {
+      gomp_mutex_unlock (&devicep->lock);
+      gomp_fatal ("enclosing struct not mapped for detach");
+    }
+
+  idx = (detach_from - n->host_start) / sizeof (void *);
+
+  if (!n->attach_count)
+    gomp_fatal ("no attachment counters for struct");
+
+  if (n->attach_count[idx] == 0)
+    gomp_fatal ("attach count underflow");
+  else
+    n->attach_count[idx]--;
+
+  if (n->attach_count[idx] == 0)
+    {
+      uintptr_t devptr = n->tgt->tgt_start + n->tgt_offset + detach_from
+			 - n->host_start;
+      uintptr_t target = (uintptr_t) *(void **) detach_from;
+
+      gomp_debug (1,
+		  "%s: detaching host %p, target %p (struct base %p) to %p\n",
+		  __FUNCTION__, (void *) detach_from, (void *) devptr,
+		  (void *) (n->tgt->tgt_start + n->tgt_offset),
+		  (void *) target);
+
+      gomp_copy_host2dev (devicep, aq, (void *) devptr, (void *) &target,
+			  sizeof (void *), cbufp);
+    }
+  else
+    gomp_debug (1, "%s: attach count for %p -> %u\n", __FUNCTION__,
+		(void *) detach_from, n->attach_count[idx]);
 }
 
 /* Decrement the pointer attachment count of hostaddr, if it exists.
    Remove it from attach_list when the count reaches zero.  */
 
+#if 0
 void
 gomp_detach_pointer (struct gomp_device_descr *devicep,
 		     struct goacc_asyncqueue *aq, uintptr_t hostaddr,
@@ -624,6 +741,7 @@ gomp_detach_pointer (struct gomp_device_descr *devicep,
 	}
     }
 }
+#endif
 
 static void
 debug_splay_tree_key (splay_tree_key k)
@@ -641,21 +759,30 @@ gomp_map_val (struct target_mem_desc *tgt, void **hostaddrs, size_t i)
     return tgt->list[i].key->tgt->tgt_start
 	   + tgt->list[i].key->tgt_offset
 	   + tgt->list[i].offset;
-  if (tgt->list[i].offset == OFFSET_INLINED)
-    return (uintptr_t) hostaddrs[i];
-  if (tgt->list[i].offset == OFFSET_POINTER
-      || tgt->list[i].offset == OFFSET_ACC_POINTER)
-    return 0;
-  if (tgt->list[i].offset == OFFSET_STRUCT)
-    return tgt->list[i + 1].key->tgt->tgt_start
-	   + tgt->list[i + 1].key->tgt_offset
-	   + tgt->list[i + 1].offset
-	   + (uintptr_t) hostaddrs[i]
-	   - (uintptr_t) hostaddrs[i + 1];
-  if (tgt->list[i].offset == OFFSET_ACC_STRUCT)
-    return tgt->list[i + 1].key->tgt->tgt_start
-	   + tgt->list[i + 1].key->tgt_offset;
-  return tgt->tgt_start + tgt->list[i].offset;
+
+  switch (tgt->list[i].offset)
+    {
+    case OFFSET_INLINED:
+      return (uintptr_t) hostaddrs[i];
+
+    case OFFSET_POINTER:
+    case OFFSET_ACC_POINTER:
+      return 0;
+
+    case OFFSET_STRUCT:
+      return tgt->list[i + 1].key->tgt->tgt_start
+	     + tgt->list[i + 1].key->tgt_offset
+	     + tgt->list[i + 1].offset
+	     + (uintptr_t) hostaddrs[i]
+	     - (uintptr_t) hostaddrs[i + 1];
+
+    /*case OFFSET_ACC_STRUCT:
+      return tgt->list[i + 1].key->tgt->tgt_start
+	     + tgt->list[i + 1].key->tgt_offset;*/
+
+    default:
+      return tgt->tgt_start + tgt->list[i].offset;
+    }
 }
 
 attribute_hidden struct target_mem_desc *
@@ -687,8 +814,8 @@ gomp_map_vars_async (struct gomp_device_descr *devicep,
   tgt->refcount = pragma_kind == GOMP_MAP_VARS_ENTER_DATA ? 0 : 1;
   tgt->device_descr = devicep;
   struct gomp_coalesce_buf cbuf, *cbufp = NULL;
-  bool openacc = (pragma_kind == GOMP_MAP_VARS_OPENACC
-		  || pragma_kind == GOMP_MAP_VARS_OPENACC_ENTER_DATA);
+  /*bool openacc = (pragma_kind == GOMP_MAP_VARS_OPENACC
+		  || pragma_kind == GOMP_MAP_VARS_OPENACC_ENTER_DATA);*/
 
   if (mapnum == 0)
     {
@@ -936,7 +1063,7 @@ gomp_map_vars_async (struct gomp_device_descr *devicep,
       if (not_found_cnt)
 	tgt->array = gomp_malloc (not_found_cnt * sizeof (*tgt->array));
       splay_tree_node array = tgt->array;
-      size_t j, field_tgt_offset = 0, field_tgt_clear = ~(size_t) 0, attach = 0;
+      size_t j, field_tgt_offset = 0, field_tgt_clear = ~(size_t) 0/*, attach = 0*/;
       uintptr_t field_tgt_base = 0;
 
       for (i = 0; i < mapnum; i++)
@@ -1005,14 +1132,15 @@ gomp_map_vars_async (struct gomp_device_descr *devicep,
 		  }
 		/* OpenACC must maintain attachment counters, which are stored
 		   in the field map dynamic_refcount.  */
-		if (openacc)
-		  attach = gomp_attach_pointer (devicep, cur_node.host_start);
+		/* if (openacc)
+		   attach = gomp_attach_pointer (devicep, cur_node.host_start);*/
 		if ((get_kind (short_mapkind, kinds, i - 1) & typemask)
 		    != GOMP_MAP_ALWAYS_POINTER)
 		  cur_node.tgt_offset = gomp_map_val (tgt, hostaddrs, i - 1);
 		if (cur_node.tgt_offset)
 		  cur_node.tgt_offset -= sizes[i];
-		if (!openacc || (openacc && attach == 1))
+		//if (!openacc || (openacc && attach == 1))
+		if (false)
 		  gomp_copy_host2dev (devicep, aq,
 				    (void *) (n->tgt->tgt_start
 					      + n->tgt_offset
@@ -1022,14 +1150,15 @@ gomp_map_vars_async (struct gomp_device_descr *devicep,
 				    sizeof (void *), cbufp);
 		cur_node.tgt_offset = n->tgt->tgt_start + n->tgt_offset
 				      + cur_node.host_start - n->host_start;
-		if (openacc)
+		/*if (openacc)
 		  {
 		    tgt->list[i].offset = OFFSET_ACC_POINTER;
 		    tgt->list[i].length = (uintptr_t) hostaddrs[i];
-		  }
+		  }*/
 		continue;
 	      case GOMP_MAP_ATTACH:
 		{
+/*
 		  attach = gomp_attach_pointer (devicep,
 					       (uintptr_t) hostaddrs[i]);
 		  uintptr_t target = *(uintptr_t *) hostaddrs[i];
@@ -1051,7 +1180,7 @@ gomp_map_vars_async (struct gomp_device_descr *devicep,
 		      cur_node.host_end = target + sizeof (void *);
 		      m = splay_tree_lookup (mem_map, &cur_node);
 
-		      /* OpenACC allows attach targets to be unmapped.  */
+		      // OpenACC allows attach targets to be unmapped.
 		      if (m != NULL)
 			{
 			  uintptr_t field = n->tgt->tgt_start + n->tgt_offset
@@ -1066,6 +1195,12 @@ gomp_map_vars_async (struct gomp_device_descr *devicep,
 		    }
 		  tgt->list[i].offset = OFFSET_ACC_POINTER;
 		  tgt->list[i].length = (uintptr_t) hostaddrs[i];
+*/
+		  gomp_attach_pointer (devicep, mem_map,
+				       (uintptr_t) hostaddrs[i], cbufp, aq);
+		  tgt->list[i].offset = OFFSET_ACC_POINTER;
+		  tgt->list[i].length = (uintptr_t) hostaddrs[i];
+		  tgt->list[i].do_detach = true;
 		  continue;
 		}
 	      default:
@@ -1114,10 +1249,12 @@ gomp_map_vars_async (struct gomp_device_descr *devicep,
 		tgt->list[i].copy_from = GOMP_MAP_COPY_FROM_P (kind & typemask);
 		tgt->list[i].always_copy_from
 		  = GOMP_MAP_ALWAYS_FROM_P (kind & typemask);
+		tgt->list[i].do_detach = false;
 		tgt->list[i].offset = 0;
 		tgt->list[i].length = k->host_end - k->host_start;
 		k->refcount = 1;
 		k->dynamic_refcount = 0;
+		k->attach_count = NULL;
 		tgt->refcount++;
 		array->left = NULL;
 		array->right = NULL;
@@ -1171,6 +1308,7 @@ gomp_map_vars_async (struct gomp_device_descr *devicep,
 			  tgt->list[j].key = k;
 			  tgt->list[j].copy_from = false;
 			  tgt->list[j].always_copy_from = false;
+			  tgt->list[j].do_detach = false;
 			  if (k->refcount != REFCOUNT_INFINITY)
 			    k->refcount++;
 			  gomp_map_pointer (tgt, aq,
@@ -1255,7 +1393,7 @@ gomp_map_vars_async (struct gomp_device_descr *devicep,
      tgt is not needed.  Otherwise tgt will be freed by gomp_unmap_vars or
      gomp_exit_data.  */
   if ((pragma_kind == GOMP_MAP_VARS_ENTER_DATA
-       || pragma_kind == GOMP_MAP_VARS_OPENACC_ENTER_DATA)
+       /*|| pragma_kind == GOMP_MAP_VARS_OPENACC_ENTER_DATA*/)
       && tgt->refcount == 0)
     {
       free (tgt);
@@ -1331,8 +1469,11 @@ gomp_unmap_vars_async (struct target_mem_desc *tgt, bool do_copyfrom,
       splay_tree_key k = tgt->list[i].key;
 
       /* TODO: need to support finalized detachments  */
-      if (k == NULL && tgt->list[i].offset == OFFSET_ACC_POINTER)
-	gomp_detach_pointer (devicep, aq, tgt->list[i].length, false);
+      if (k == NULL
+	  && tgt->list[i].do_detach
+	  && tgt->list[i].offset == OFFSET_ACC_POINTER)
+	gomp_detach_pointer (devicep, &devicep->mem_map, tgt->list[i].length,
+			     false, NULL, aq);
 
       if (k == NULL)
 	continue;
@@ -2981,8 +3122,8 @@ gomp_target_init (void)
 		/* current_device.capabilities has already been set.  */
 		current_device.type = current_device.get_type_func ();
 		current_device.mem_map.root = NULL;
-		current_device.field_map.root = NULL;
-		current_device.attach_list.next = NULL;
+		/*current_device.field_map.root = NULL;
+		current_device.attach_list.next = NULL;*/
 		current_device.state = GOMP_DEVICE_UNINITIALIZED;
 		current_device.openacc.data_environ = NULL;
 		for (i = 0; i < new_num_devices; i++)

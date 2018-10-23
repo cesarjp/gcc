@@ -258,8 +258,6 @@ static struct gomp_device_descr host_dispatch =
     .run_func = host_run,
 
     .mem_map = { NULL },
-    .field_map = { NULL },
-    .attach_list.next = NULL,
     /* .lock initilized in goacc_host_init.  */
     .state = GOMP_DEVICE_UNINITIALIZED,
 

@@ -51,7 +51,6 @@ destroy (struct node *head)
 #pragma acc exit data detach(head->next)
       struct node * n = head->next;
       head->next = n->next;
-#pragma acc exit data detach(n->next)
 #pragma acc exit data delete (n)
       if (head->next)
 	{

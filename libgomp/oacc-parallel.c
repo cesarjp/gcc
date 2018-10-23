@@ -51,7 +51,7 @@ find_pointer (int pos, size_t mapnum, unsigned short *kinds)
 
   if (kind == GOMP_MAP_TO_PSET)
     return 3;
-  else if (kind == GOMP_MAP_POINTER || kind == GOMP_MAP_ALWAYS_POINTER)
+  else if (kind == GOMP_MAP_POINTER /*|| kind == GOMP_MAP_ALWAYS_POINTER*/)
     return 2;
 
   return 0;
@@ -459,9 +459,9 @@ GOACC_enter_exit_data (int device, size_t mapnum,
 	  {
 	    switch (kind)
 	      {
-	      case GOMP_MAP_ALWAYS_POINTER:
-		/* Nothing to do here.  */
-		break;
+	      //case GOMP_MAP_ALWAYS_POINTER:
+	      //  /* Nothing to do here.  */
+	      //break;
 	      case GOMP_MAP_RELEASE:
 	      case GOMP_MAP_DELETE:
 		if (acc_is_present (hostaddrs[i], sizes[i]))
