@@ -5139,7 +5139,7 @@ nvptx_expand_cond_uni (tree exp, rtx target, machine_mode mode, int ignore)
 {
   if (ignore)
     return target;
-  
+
   rtx src = expand_expr (CALL_EXPR_ARG (exp, 0),
 			 NULL_RTX, mode, EXPAND_NORMAL);
 
@@ -5657,7 +5657,7 @@ nvptx_reduction_update (location_t loc, gimple_stmt_iterator *gsi,
 
    The code we generate looks like:
       unsigned old_shift = DIM_SIZE(VECTOR);
-      do 
+      do
 	{
 	  shift = PHI (old_shift, new_shift);
 	  var = PHI (old_var, new_var);
@@ -5699,7 +5699,7 @@ nvptx_vector_reduction (location_t loc, gimple_stmt_iterator *gsi,
   tree var = make_ssa_name (var_type);
   tree other_var = make_ssa_name (var_type);
   tree new_var = make_ssa_name (var_type);
-  
+
   /* Build and insert the loop body.  */
   gimple_seq loop_seq = NULL;
 
@@ -5723,7 +5723,7 @@ nvptx_vector_reduction (location_t loc, gimple_stmt_iterator *gsi,
   gcond *cond = gimple_build_cond (LE_EXPR, cond_var, integer_one_node,
 				   NULL_TREE, NULL_TREE);
   gimple_seq_add_stmt (&loop_seq, cond);
-  
+
   gsi_insert_seq_before (gsi, loop_seq, GSI_SAME_STMT);
 
   /* Split the block just after the loop stmts.  */
