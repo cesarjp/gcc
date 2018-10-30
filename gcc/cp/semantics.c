@@ -6160,8 +6160,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    t = OMP_CLAUSE_DECL (c);
 	check_dup_generic_t:
 	  if (t == current_class_ptr
-	      && (ort != C_ORT_OMP_DECLARE_SIMD
-		  || ort != C_ORT_ACC
+	      && ((ort != C_ORT_OMP_DECLARE_SIMD && ort != C_ORT_ACC)
 		  || (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_LINEAR
 		      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_UNIFORM)))
 	    {
