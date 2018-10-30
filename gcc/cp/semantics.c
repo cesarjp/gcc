@@ -5896,7 +5896,7 @@ cp_oacc_check_attachments (tree c)
 {
   if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
     return false;
-  
+
   /* OpenACC attach / detach clauses must be pointers.  */
   if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ATTACH
       || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_DETACH)
@@ -6161,6 +6161,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	check_dup_generic_t:
 	  if (t == current_class_ptr
 	      && (ort != C_ORT_OMP_DECLARE_SIMD
+		  || ort != C_ORT_ACC
 		  || (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_LINEAR
 		      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_UNIFORM)))
 	    {
@@ -6275,7 +6276,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    omp_note_field_privatization (t, OMP_CLAUSE_DECL (c));
 	  else
 	    t = OMP_CLAUSE_DECL (c);
-	  if (t == current_class_ptr)
+	  if (ort != C_ORT_ACC && t == current_class_ptr)
 	    {
 	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
 		     " clauses");
@@ -6724,7 +6725,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		error ("%qE is not a variable in %<depend%> clause", t);
 	      remove = true;
 	    }
-	  else if (t == current_class_ptr)
+	  else if (ort != C_ORT_ACC && t == current_class_ptr)
 	    {
 	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
 		     " clauses");
@@ -6877,7 +6878,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		     omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	      remove = true;
 	    }
-	  else if (t == current_class_ptr)
+	  else if (ort != C_ORT_ACC && t == current_class_ptr)
 	    {
 	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
 		     " clauses");
